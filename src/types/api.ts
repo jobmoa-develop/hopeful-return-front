@@ -4,15 +4,3 @@ export interface ApiResponse<T> {
   data: T | null;
   error: string | null;
 }
-
-export interface TokenResponse {
-  accessToken: string;
-  refreshToken: string;
-  tokenType: string;
-}
-
-export interface MemberResponse {
-  id: number;
-  email: string;
-  name: string;
-}
