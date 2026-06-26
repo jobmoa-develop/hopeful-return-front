@@ -1,0 +1,27 @@
+name: 화면(페이지) 개발
+description: 화면 단위 작업. 페이지 담당을 명확히 해 겹침을 방지한다.
+title: "[page] "
+labels: ["type:feature", "area:page"]
+body:
+  - type: input
+    id: route
+    attributes:
+      label: 화면 경로
+      description: "예: /login, /signup"
+    validations:
+      required: true
+  - type: input
+    id: design
+    attributes:
+      label: 와이어프레임/디자인 링크
+  - type: textarea
+    id: api
+    attributes:
+      label: 의존 API
+      description: 백엔드 어떤 엔드포인트에 의존하는지
+  - type: input
+    id: owner
+    attributes:
+      label: 담당자
+    validations:
+      required: true

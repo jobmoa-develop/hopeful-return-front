@@ -1,0 +1,30 @@
+name: 기능 개발
+description: 새 기능/작업 등록 (착수 전 담당자·area 라벨 지정 필수)
+title: "[feature] "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 목적/배경
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: 완료 조건 (DoD)
+    validations:
+      required: true
+  - type: input
+    id: area
+    attributes:
+      label: 관련 area
+      description: "예: page, component, api, layout (라벨도 함께 지정)"
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: 담당자
+    validations:
+      required: true

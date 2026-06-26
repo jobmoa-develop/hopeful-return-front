@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 일반 논의/질문
+    url: https://github.com/jobmoa-develop
+    about: 버그/기능이 아닌 일반 논의는 팀 채널을 이용하세요.
