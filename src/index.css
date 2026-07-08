@@ -1480,6 +1480,78 @@ table.data tbody tr:hover {
     display: none !important
 }
 
+/* login */
+.login-page {
+    min-height: 100vh;
+    width: 100%;
+    display: grid;
+    place-items: center;
+    padding: 26px;
+    background: var(--bg)
+}
+
+.login-panel {
+    width: min(420px, 100%);
+    padding: 28px;
+    margin-bottom: 0
+}
+
+.login-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px
+}
+
+.login-brand .mark {
+    width: 42px;
+    height: 42px;
+    flex: none;
+    border-radius: 10px;
+    background: linear-gradient(150deg, #2c5a86, #1b3a5b);
+    display: grid;
+    place-items: center
+}
+
+.login-brand .mark svg {
+    width: 24px;
+    height: 24px
+}
+
+.login-brand h1 {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -.02em;
+    color: var(--ink);
+    line-height: 1.2
+}
+
+.login-form {
+    display: grid;
+    gap: 14px
+}
+
+.login-error {
+    color: var(--danger);
+    background: var(--danger-bg);
+    border: 1px solid #f3c5bf;
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 12.5px;
+    font-weight: 600
+}
+
+.login-submit {
+    justify-content: center;
+    width: 100%;
+    margin-top: 4px
+}
+
+.login-submit:disabled {
+    opacity: .65;
+    cursor: not-allowed
+}
+
 /* modal */
 .modal-overlay {
     position: fixed;
