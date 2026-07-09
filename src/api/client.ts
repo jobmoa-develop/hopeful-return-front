@@ -1,29 +1,127 @@
 import axios from 'axios';
+import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { tokenStore } from '../auth/token';
+import { notifyAccessTokenChanged, notifySessionCleared } from '../auth/sessionEvents';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3434';
 
+type RefreshResponse = {
+  success: boolean;
+  data: {
+    accessToken: string;
+    tokenType: string;
+    expiresIn: number;
+  };
+};
+
+type RetriableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+};
+
 export const apiClient = axios.create({
   baseURL,
-  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// 요청 인터셉터: access token 자동 첨부 (인증 도메인 확정 시 활용)
+const refreshClient = axios.create({
+  baseURL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+let refreshPromise: Promise<string> | null = null;
+
+function isAuthRequest(
+  config: InternalAxiosRequestConfig | undefined,
+  path: string,
+): boolean {
+  return Boolean(config?.url?.includes(path));
+}
+
+function clearSessionAndRedirect(): void {
+  tokenStore.clear();
+  notifySessionCleared();
+
+  if (window.location.pathname !== '/login') {
+    window.location.replace('/login');
+  }
+}
+
+function requestNewAccessToken(): Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = refreshClient
+      .post<RefreshResponse>('/api/auth/refresh')
+      .then((response) => {
+        const nextAccessToken = response.data.data.accessToken;
+
+        tokenStore.setAccessToken(nextAccessToken);
+        notifyAccessTokenChanged(nextAccessToken);
+
+        return nextAccessToken;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+}
+
 apiClient.interceptors.request.use((config) => {
+  if (isAuthRequest(config, '/api/auth/refresh')) {
+    delete config.headers.Authorization;
+    return config;
+  }
+
   const token = tokenStore.getAccessToken();
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
-// 응답 인터셉터: 401 시 토큰 정리 (리다이렉트는 인증 화면 도입 후 추가)
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      tokenStore.clear();
+  async (error: AxiosError) => {
+    const originalRequest = error.config as RetriableRequestConfig | undefined;
+
+    if (error.response?.status !== 401) {
+      return Promise.reject(error);
     }
-    return Promise.reject(error);
+
+    if (!originalRequest) {
+      clearSessionAndRedirect();
+      return Promise.reject(error);
+    }
+
+    if (
+      originalRequest._retry ||
+      isAuthRequest(originalRequest, '/api/auth/login') ||
+      isAuthRequest(originalRequest, '/api/auth/refresh')
+    ) {
+      clearSessionAndRedirect();
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      const nextAccessToken = await requestNewAccessToken();
+
+      originalRequest.headers = originalRequest.headers ?? {};
+      originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
+
+      return apiClient(originalRequest);
+    } catch (refreshError) {
+      clearSessionAndRedirect();
+      return Promise.reject(refreshError);
+    }
   },
 );
