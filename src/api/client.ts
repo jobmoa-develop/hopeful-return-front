@@ -21,18 +21,25 @@ type RetriableRequestConfig = InternalAxiosRequestConfig & {
 export const apiClient = axios.create({
   baseURL,
   withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 const refreshClient = axios.create({
   baseURL,
   withCredentials: true,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 let refreshPromise: Promise<string> | null = null;
 
-function isAuthRequest(config: InternalAxiosRequestConfig | undefined, path: string): boolean {
+function isAuthRequest(
+  config: InternalAxiosRequestConfig | undefined,
+  path: string,
+): boolean {
   return Boolean(config?.url?.includes(path));
 }
 
@@ -51,8 +58,10 @@ function requestNewAccessToken(): Promise<string> {
       .post<RefreshResponse>('/api/auth/refresh')
       .then((response) => {
         const nextAccessToken = response.data.data.accessToken;
+
         tokenStore.setAccessToken(nextAccessToken);
         notifyAccessTokenChanged(nextAccessToken);
+
         return nextAccessToken;
       })
       .finally(() => {
@@ -70,9 +79,11 @@ apiClient.interceptors.request.use((config) => {
   }
 
   const token = tokenStore.getAccessToken();
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
@@ -81,17 +92,20 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as RetriableRequestConfig | undefined;
 
+    if (error.response?.status !== 401) {
+      return Promise.reject(error);
+    }
+
+    if (!originalRequest) {
+      clearSessionAndRedirect();
+      return Promise.reject(error);
+    }
+
     if (
-      error.response?.status !== 401 ||
-      !originalRequest ||
+      originalRequest._retry ||
       isAuthRequest(originalRequest, '/api/auth/login') ||
       isAuthRequest(originalRequest, '/api/auth/refresh')
     ) {
-      return Promise.reject(error);
-    }
-
-    // 이미 refresh 후에도 또 401이면 세션 종료
-    if (originalRequest._retry) {
       clearSessionAndRedirect();
       return Promise.reject(error);
     }
@@ -100,18 +114,10 @@ apiClient.interceptors.response.use(
 
     try {
       const nextAccessToken = await requestNewAccessToken();
-      originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
-      return apiClient(originalRequest);
-    } catch (refreshError) {
-      clearSessionAndRedirect();
-      return Promise.reject(refreshError);
-    }
 
-    originalRequest._retry = true;
-
-    try {
-      const nextAccessToken = await requestNewAccessToken();
+      originalRequest.headers = originalRequest.headers ?? {};
       originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
+
       return apiClient(originalRequest);
     } catch (refreshError) {
       clearSessionAndRedirect();
