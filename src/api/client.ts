@@ -84,11 +84,27 @@ apiClient.interceptors.response.use(
     if (
       error.response?.status !== 401 ||
       !originalRequest ||
-      originalRequest._retry ||
       isAuthRequest(originalRequest, '/api/auth/login') ||
       isAuthRequest(originalRequest, '/api/auth/refresh')
     ) {
       return Promise.reject(error);
+    }
+
+    // 이미 refresh 후에도 또 401이면 세션 종료
+    if (originalRequest._retry) {
+      clearSessionAndRedirect();
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      const nextAccessToken = await requestNewAccessToken();
+      originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
+      return apiClient(originalRequest);
+    } catch (refreshError) {
+      clearSessionAndRedirect();
+      return Promise.reject(refreshError);
     }
 
     originalRequest._retry = true;

@@ -31,13 +31,18 @@ const ALL_ROLES: AppRole[] = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERA
 export const ROLE_MENU_RULES: Record<string, AppRole[]> = {
   dashboard: ALL_ROLES,
   participants: ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR'],
-  rounds: ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR'],
+  rounds: ALL_ROLES,
   assign: ['ADMIN', 'REGIONAL_MANAGER', 'OPERATOR'],
   consulting: ['ADMIN', 'OPERATOR', 'COUNSELOR'],
   attendance: ['ADMIN', 'OPERATOR', 'STAFF'],
   followUp: ['ADMIN', 'COUNSELOR'],
   userManagement: ['ADMIN'],
 };
+
+// TODO:
+// 지역/회차 기반 데이터 권한은
+// 추후에 백엔드 Scope 기반 인가 구현 후
+// region / rounds 값을 사용하도록 변경 예정. 지금은 사용하지 않는다. 일단 뼈대코드만 작성한것.
 
 const ROLE_PERMISSIONS: Record<AppRole, Omit<RoleConfig, 'nm' | 'role' | 'menu'>> = {
   ADMIN: {

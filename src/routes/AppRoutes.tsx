@@ -50,15 +50,23 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
+
+
         <Route
           path="/rounds"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR']}>
+            <ProtectedRoute>
               <RoundsPage />
             </ProtectedRoute>
           }
         />
-        <Route path="/rounds/:courseId" element={<RoundDetailPage />} />
+        <Route path="/rounds/:courseId" element={
+          <ProtectedRoute>
+            <RoundDetailPage />
+          </ProtectedRoute>
+        } />
+
+
         <Route
           path="/assign"
           element={

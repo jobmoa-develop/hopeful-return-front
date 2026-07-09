@@ -214,7 +214,13 @@ export default function RoundDetailPage() {
     );
   }
 
-  const capacityPercent = course.capacity ? Math.min(100, Math.round(((participants.length || 0) / course.capacity) * 100)) : 0;
+  const capacityPercent =
+    course.capacity
+      ? Math.min(
+        100,
+        Math.round((course.currentParticipants / course.capacity) * 100)
+      )
+      : 0;
   const minPercent = course.capacity ? Math.min(100, Math.round((course.minimumCapacity / course.capacity) * 100)) : 0;
 
   return (
@@ -342,14 +348,14 @@ export default function RoundDetailPage() {
         <div className="card">
           <div className="card-h">
             <span className="section-title">모집 인원</span>
-            <span className={`chip ${participants.length >= course.minimumCapacity ? 'ok' : 'warn'}`}>
-              {participants.length >= course.minimumCapacity ? '최소 정원 충족' : '모집 보강 필요'}
+            <span className={`chip ${course.currentParticipants >= course.minimumCapacity ? 'ok' : 'warn'}`}>
+              {course.currentParticipants >= course.minimumCapacity ? '최소 정원 충족' : '모집 보강 필요'}
             </span>
           </div>
           <div className="card-b">
             <div className="capacity">
               <div className="big tnum">
-                {participants.length}
+                {course.currentParticipants}
                 <small> / {course.capacity}명</small>
               </div>
               <div style={{ flex: 1 }}>
@@ -358,12 +364,20 @@ export default function RoundDetailPage() {
                   <div className="thr" style={{ left: `${minPercent}%` }}></div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
-                  <span>조회된 참여자 {participants.length}명</span>
+                  <span>현재 참여자 {course.currentParticipants}명</span>
                   <span style={{ color: 'var(--danger)' }}>최소 정원 {course.minimumCapacity}명</span>
                 </div>
               </div>
             </div>
-            <button className="btn" type="button" onClick={loadParticipants} disabled={isParticipantsLoading}>
+            <button
+              className="btn"
+              type="button"
+              onClick={async () => {
+                await loadCourse();
+                await loadParticipants();
+              }}
+              disabled={isParticipantsLoading || isLoading}
+            >
               참여자 새로고침
             </button>
           </div>

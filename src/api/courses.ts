@@ -32,6 +32,7 @@ export type CourseDetail = CourseSummary & {
   status: CourseStatus;
   capacity: number;
   minimumCapacity: number;
+  currentParticipants: number;
   location: string;
   planSubmitDate: string;
 };
