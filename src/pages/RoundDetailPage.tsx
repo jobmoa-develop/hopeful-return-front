@@ -11,6 +11,8 @@ import {
   updateCourseStatus,
 } from '../api/courses';
 import type { CourseDetail, CourseParticipant, CourseStaff, CourseUpdateRequest } from '../api/courses';
+import { getRegions } from '../api/regions';
+import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
@@ -43,6 +45,73 @@ function getErrorMessage(error: unknown) {
   return '요청 처리 중 오류가 발생했습니다.';
 }
 
+// 입력 컨트롤은 문자열로 다루고, 제출 시 빈 값은 "미변경"으로 간주해 payload에서 제외한다.
+type EditFormState = {
+  regionId: string;
+  courseNumber: string;
+  localCourseNumber: string;
+  courseName: string;
+  recruitStart: string;
+  recruitEnd: string;
+  day1Date: string;
+  day2Date: string;
+  day3Date: string;
+  day4Date: string;
+  day5Date: string;
+  educationStartTime: string;
+  educationEndTime: string;
+  capacity: string;
+  minimumCapacity: string;
+  location: string;
+  planSubmitDate: string;
+};
+
+const EMPTY_EDIT_FORM: EditFormState = {
+  regionId: '',
+  courseNumber: '',
+  localCourseNumber: '',
+  courseName: '',
+  recruitStart: '',
+  recruitEnd: '',
+  day1Date: '',
+  day2Date: '',
+  day3Date: '',
+  day4Date: '',
+  day5Date: '',
+  educationStartTime: '',
+  educationEndTime: '',
+  capacity: '',
+  minimumCapacity: '',
+  location: '',
+  planSubmitDate: '',
+};
+
+const NUMERIC_EDIT_FIELDS: Array<keyof EditFormState> = ['regionId', 'courseNumber', 'localCourseNumber', 'capacity', 'minimumCapacity'];
+
+// 백엔드 LocalTime이 "HH:mm:ss"로 내려와도 <input type="time">이 기대하는 "HH:mm"으로 맞춰준다.
+function normalizeTimeInput(value?: string | null): string {
+  if (!value) return '';
+  return value.length >= 5 ? value.slice(0, 5) : value;
+}
+
+// 빈 값(미입력)은 "수정하지 않음"으로 간주해 payload에서 제외 -> 기존 값이 덮어써지지 않도록 함
+function buildUpdatePayload(form: EditFormState): CourseUpdateRequest {
+  const payload: CourseUpdateRequest = {};
+  (Object.keys(form) as Array<keyof EditFormState>).forEach((key) => {
+    const raw = form[key];
+    if (raw === '' || raw === undefined) return;
+
+    if (NUMERIC_EDIT_FIELDS.includes(key)) {
+      const numeric = Number(raw);
+      if (Number.isNaN(numeric)) return;
+      (payload as Record<string, unknown>)[key] = numeric;
+    } else {
+      (payload as Record<string, unknown>)[key] = raw;
+    }
+  });
+  return payload;
+}
+
 export default function RoundDetailPage() {
   const { courseId: courseIdParam, no } = useParams<{ courseId?: string; no?: string }>();
   const courseId = Number(courseIdParam ?? no);
@@ -58,12 +127,10 @@ export default function RoundDetailPage() {
   const [isParticipantsLoading, setIsParticipantsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState<CourseUpdateRequest>({
-    courseName: '',
-    capacity: 0,
-    minimumCapacity: 0,
-    location: '',
-  });
+  const [editForm, setEditForm] = useState<EditFormState>(EMPTY_EDIT_FORM);
+  const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const [regionsLoading, setRegionsLoading] = useState(false);
+  const [expandedParentId, setExpandedParentId] = useState<number | null>(null);
   const [statusForm, setStatusForm] = useState('OPEN');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -80,10 +147,24 @@ export default function RoundDetailPage() {
       const { data: response } = await getCourse(courseId);
       setCourse(response.data);
       setEditForm({
-        courseName: response.data.courseName,
-        capacity: response.data.capacity,
-        minimumCapacity: response.data.minimumCapacity,
-        location: response.data.location,
+        ...EMPTY_EDIT_FORM,
+        regionId: String(response.data.regionId ?? ''),
+        courseNumber: String(response.data.courseNumber ?? ''),
+        localCourseNumber: String(response.data.localCourseNumber ?? ''),
+        courseName: response.data.courseName ?? '',
+        recruitStart: response.data.recruitStart ?? '',
+        recruitEnd: response.data.recruitEnd ?? '',
+        day1Date: response.data.day1Date ?? '',
+        day2Date: response.data.day2Date ?? '',
+        day3Date: response.data.day3Date ?? '',
+        day4Date: response.data.day4Date ?? '',
+        day5Date: response.data.day5Date ?? '',
+        educationStartTime: normalizeTimeInput(response.data.educationStartTime),
+        educationEndTime: normalizeTimeInput(response.data.educationEndTime),
+        capacity: String(response.data.capacity ?? ''),
+        minimumCapacity: String(response.data.minimumCapacity ?? ''),
+        location: response.data.location ?? '',
+        planSubmitDate: response.data.planSubmitDate ?? '',
       });
       setStatusForm(response.data.status);
     } catch (error) {
@@ -133,6 +214,46 @@ export default function RoundDetailPage() {
     void loadParticipants();
   }, [courseId]);
 
+  useEffect(() => {
+    let active = true;
+    setRegionsLoading(true);
+    getRegions()
+      .then(({ data: response }) => {
+        if (active) setRegions(response.data ?? []);
+      })
+      .catch(() => {
+        if (active) setRegions([]);
+      })
+      .finally(() => {
+        if (active) setRegionsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const level1Regions = regions.filter((r) => r.level === 'LEVEL1');
+  const childrenOf = (parentId: number) => regions.filter((r) => r.parentRegionId === parentId);
+  const selectedRegion = regions.find((r) => String(r.regionId) === editForm.regionId);
+  const selectedRegionParentName = selectedRegion?.parentRegionId
+    ? regions.find((r) => r.regionId === selectedRegion.parentRegionId)?.regionName ?? null
+    : null;
+
+  const updateEditForm = (key: keyof EditFormState, value: string) => {
+    setEditForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSelectEditRegion = (regionId: number) => {
+    setEditForm((prev) => ({ ...prev, regionId: String(regionId) }));
+  };
+
+  useEffect(() => {
+    if (selectedRegion?.parentRegionId) {
+      setExpandedParentId(selectedRegion.parentRegionId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editForm.regionId, regions]);
+
   const handleUpdate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!course) return;
@@ -140,7 +261,7 @@ export default function RoundDetailPage() {
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      await updateCourse(course.courseId, editForm);
+      await updateCourse(course.courseId, buildUpdatePayload(editForm));
       setIsEditOpen(false);
       await loadCourse();
     } catch (error) {
@@ -288,29 +409,112 @@ export default function RoundDetailPage() {
           </div>
           <form className="card-b form-grid" onSubmit={handleUpdate}>
             <div className="field full">
-              <label>강좌명</label>
-              <input value={editForm.courseName} onChange={(event) => setEditForm((prev) => ({ ...prev, courseName: event.target.value }))} />
+              <label>지역</label>
+              {regionsLoading ? (
+                <span className="muted" style={{ fontSize: '12.5px' }}>지역 목록 불러오는 중...</span>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    {level1Regions.map((region) => (
+                      <button
+                        key={region.regionId}
+                        type="button"
+                        className={`chip ${expandedParentId === region.regionId ? 'info' : 'neutral'}`}
+                        style={{ cursor: 'pointer', border: 'none' }}
+                        onClick={() => setExpandedParentId(region.regionId)}
+                      >
+                        {region.regionName}
+                      </button>
+                    ))}
+                  </div>
+                  {expandedParentId !== null && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {childrenOf(expandedParentId).map((child) => (
+                        <button
+                          key={child.regionId}
+                          type="button"
+                          className={`chip ${editForm.regionId === String(child.regionId) ? 'ok' : 'neutral'}`}
+                          style={{ cursor: 'pointer', border: 'none' }}
+                          onClick={() => handleSelectEditRegion(child.regionId)}
+                        >
+                          {child.regionName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="muted" style={{ fontSize: '12px', marginTop: '8px' }}>
+                    {selectedRegion
+                      ? `선택됨: ${selectedRegionParentName ? `${selectedRegionParentName} · ` : ''}${selectedRegion.regionName}`
+                      : '변경하지 않으려면 그대로 두세요.'}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="field">
+              <label>전체회차 번호</label>
+              <input type="number" value={editForm.courseNumber} onChange={(event) => updateEditForm('courseNumber', event.target.value)} />
             </div>
             <div className="field">
+              <label>지역회차 번호</label>
+              <input type="number" value={editForm.localCourseNumber} onChange={(event) => updateEditForm('localCourseNumber', event.target.value)} />
+            </div>
+
+            <div className="field full">
+              <label>강좌명</label>
+              <input value={editForm.courseName} onChange={(event) => updateEditForm('courseName', event.target.value)} />
+            </div>
+
+            <div className="field">
+              <label>모집 시작일</label>
+              <input type="date" value={editForm.recruitStart} onChange={(event) => updateEditForm('recruitStart', event.target.value)} />
+            </div>
+            <div className="field">
+              <label>모집 종료일</label>
+              <input type="date" value={editForm.recruitEnd} onChange={(event) => updateEditForm('recruitEnd', event.target.value)} />
+            </div>
+
+            {([
+              ['day1Date', '1일차 교육일'],
+              ['day2Date', '2일차 교육일'],
+              ['day3Date', '3일차 교육일'],
+              ['day4Date', '4일차 교육일'],
+              ['day5Date', '5일차 교육일'],
+            ] as const).map(([key, label]) => (
+              <div className="field" key={key}>
+                <label>{label}</label>
+                <input type="date" value={editForm[key]} onChange={(event) => updateEditForm(key, event.target.value)} />
+              </div>
+            ))}
+
+            <div className="field">
+              <label>교육 시작시간</label>
+              <input type="time" value={editForm.educationStartTime} onChange={(event) => updateEditForm('educationStartTime', event.target.value)} />
+            </div>
+            <div className="field">
+              <label>교육 종료시간</label>
+              <input type="time" value={editForm.educationEndTime} onChange={(event) => updateEditForm('educationEndTime', event.target.value)} />
+            </div>
+
+            <div className="field">
               <label>정원</label>
-              <input
-                type="number"
-                value={editForm.capacity}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, capacity: Number(event.target.value) }))}
-              />
+              <input type="number" value={editForm.capacity} onChange={(event) => updateEditForm('capacity', event.target.value)} />
             </div>
             <div className="field">
               <label>최소 정원</label>
-              <input
-                type="number"
-                value={editForm.minimumCapacity}
-                onChange={(event) => setEditForm((prev) => ({ ...prev, minimumCapacity: Number(event.target.value) }))}
-              />
+              <input type="number" value={editForm.minimumCapacity} onChange={(event) => updateEditForm('minimumCapacity', event.target.value)} />
+            </div>
+            <div className="field">
+              <label>수행계획서 제출일</label>
+              <input type="date" value={editForm.planSubmitDate} onChange={(event) => updateEditForm('planSubmitDate', event.target.value)} />
             </div>
             <div className="field full">
               <label>교육장</label>
-              <input value={editForm.location} onChange={(event) => setEditForm((prev) => ({ ...prev, location: event.target.value }))} />
+              <input value={editForm.location} onChange={(event) => updateEditForm('location', event.target.value)} />
             </div>
+
+            <p className="note" style={{ margin: '4px 0 0' }}>※ 값을 비워두면 해당 항목은 수정되지 않고 기존 값이 유지됩니다.</p>
+
             <div className="field full" style={{ alignItems: 'flex-end' }}>
               <button className="btn primary" type="submit" disabled={isSubmitting}>
                 {isSubmitting ? '저장 중...' : '저장'}
@@ -331,12 +535,30 @@ export default function RoundDetailPage() {
               <span className="v tnum">{course.courseId}</span>
             </div>
             <div className="kv">
-              <span className="k">지역 ID</span>
-              <span className="v tnum">{course.regionId}</span>
+              <span className="k">지역</span>
+              <span className="v tnum">{course.regionName} ({course.regionId})</span>
             </div>
             <div className="kv">
-              <span className="k">회차</span>
-              <span className="v tnum">{course.courseNumber}기</span>
+              <span className="k">전체회차 / 지역회차</span>
+              <span className="v tnum">{course.courseNumber}기 / {course.localCourseNumber}회차</span>
+            </div>
+            <div className="kv">
+              <span className="k">모집 기간</span>
+              <span className="v tnum">{course.recruitStart ?? '-'} ~ {course.recruitEnd ?? '-'}</span>
+            </div>
+            <div className="kv">
+              <span className="k">교육 일정</span>
+              <span className="v tnum">
+                {[course.day1Date, course.day2Date, course.day3Date, course.day4Date, course.day5Date]
+                  .filter(Boolean)
+                  .join(', ') || '-'}
+              </span>
+            </div>
+            <div className="kv">
+              <span className="k">교육 시간</span>
+              <span className="v tnum">
+                {course.educationStartTime ?? '-'} ~ {course.educationEndTime ?? '-'}
+              </span>
             </div>
             <div className="kv">
               <span className="k">수행계획서 제출일</span>

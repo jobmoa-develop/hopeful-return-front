@@ -7,6 +7,7 @@ export type CourseSummary = {
   regionId?: number;
   regionName?: string;
   courseNumber?: number;
+  localCourseNumber?: number;
   courseName?: string;
   status?: CourseStatus;
   capacity?: number;
@@ -20,6 +21,8 @@ export type CourseSummary = {
   day3Date?: string;
   day4Date?: string;
   day5Date?: string;
+  educationStartTime?: string;
+  educationEndTime?: string;
   currentParticipants?: number;
 };
 
@@ -28,6 +31,7 @@ export type CourseDetail = CourseSummary & {
   regionId: number;
   regionName: string;
   courseNumber: number;
+  localCourseNumber: number;
   courseName: string;
   status: CourseStatus;
   capacity: number;
@@ -39,6 +43,7 @@ export type CourseDetail = CourseSummary & {
 
 export type CourseListParams = {
   regionId?: number;
+  parentRegionId?: number;
   status?: string;
   keyword?: string;
   page?: number;
@@ -62,6 +67,7 @@ export type ApiResponse<T> = {
 export type CourseCreateRequest = {
   regionId: number;
   courseNumber: number;
+  localCourseNumber: number;
   courseName: string;
   recruitStart: string;
   recruitEnd: string;
@@ -79,10 +85,23 @@ export type CourseCreateRequest = {
 };
 
 export type CourseUpdateRequest = {
-  courseName: string;
-  capacity: number;
-  minimumCapacity: number;
-  location: string;
+  regionId?: number;
+  courseNumber?: number;
+  localCourseNumber?: number;
+  courseName?: string;
+  recruitStart?: string;
+  recruitEnd?: string;
+  day1Date?: string;
+  day2Date?: string;
+  day3Date?: string;
+  day4Date?: string;
+  day5Date?: string;
+  educationStartTime?: string;
+  educationEndTime?: string;
+  capacity?: number;
+  minimumCapacity?: number;
+  location?: string;
+  planSubmitDate?: string;
 };
 
 export type CourseStatusRequest = {
@@ -122,7 +141,7 @@ export function createCourse(payload: CourseCreateRequest) {
 }
 
 export function updateCourse(courseId: number, payload: CourseUpdateRequest) {
-  return apiClient.put<ApiResponse<{ courseId: number; updated: boolean }>>(`/api/courses/${courseId}`, payload);
+  return apiClient.put<ApiResponse<{ courseId: number; localCourseNumber: number; updated: boolean }>>(`/api/courses/${courseId}`, payload);
 }
 
 export function deleteCourse(courseId: number) {
