@@ -1939,3 +1939,57 @@ table.data tbody tr:hover {
         grid-template-columns: 1fr
     }
 }
+
+/* assign redesign — 년도/회차 select + 일괄 적용 + 날짜별 표 */
+.assign-bulk-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px
+}
+
+.assign-bulk-item label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted-2);
+    margin-bottom: 5px
+}
+
+.assign-select {
+    padding: 5px 8px;
+    font-size: 12.5px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--ink);
+    outline: none;
+    cursor: pointer;
+    min-width: 0;
+    width: 100%
+}
+
+.assign-select:disabled {
+    background: #f0f2f5;
+    cursor: not-allowed
+}
+
+.assign-table td {
+    text-align: center;
+    padding: 6px 8px
+}
+
+.assign-table .nm-col {
+    text-align: left;
+    min-width: 96px
+}
+
+.assign-counselor-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px
+}
+
+.btn.tiny {
+    padding: 2px 7px;
+    font-size: 11px
+}

@@ -7,6 +7,7 @@ export type CourseSummary = {
   regionId?: number;
   regionName?: string;
   courseNumber?: number;
+  localCourseNumber?: number;
   courseName?: string;
   status?: CourseStatus;
   capacity?: number;
@@ -28,6 +29,7 @@ export type CourseDetail = CourseSummary & {
   regionId: number;
   regionName: string;
   courseNumber: number;
+  localCourseNumber: number;
   courseName: string;
   status: CourseStatus;
   capacity: number;
