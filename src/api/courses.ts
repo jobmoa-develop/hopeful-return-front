@@ -10,6 +10,7 @@ export type CourseSummary = {
   localCourseNumber?: number;
   courseName?: string;
   status?: CourseStatus;
+  year?: number;
   capacity?: number;
   minimumCapacity?: number;
   location?: string;
