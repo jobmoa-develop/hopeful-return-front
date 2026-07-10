@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosHeaders } from 'axios';
 import type { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { tokenStore } from '../auth/token';
 import { notifyAccessTokenChanged, notifySessionCleared } from '../auth/sessionEvents';
@@ -115,7 +115,9 @@ apiClient.interceptors.response.use(
     try {
       const nextAccessToken = await requestNewAccessToken();
 
-      originalRequest.headers = originalRequest.headers ?? {};
+      originalRequest.headers =
+        originalRequest.headers ?? new AxiosHeaders();
+
       originalRequest.headers.Authorization = `Bearer ${nextAccessToken}`;
 
       return apiClient(originalRequest);

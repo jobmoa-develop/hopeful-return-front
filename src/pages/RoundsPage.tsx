@@ -4,13 +4,16 @@ import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import { createCourse, getCourses } from '../api/courses';
 import type { CourseCreateRequest, CourseStatus, CourseSummary } from '../api/courses';
+import { getRegions } from '../api/regions';
+import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
 const EMPTY_FORM: CourseCreateRequest = {
-  regionId: 3,
+  regionId: 0,
   courseNumber: 1,
+  localCourseNumber: 1,
   courseName: '',
   recruitStart: '',
   recruitEnd: '',
@@ -60,6 +63,7 @@ export default function RoundsPage() {
   const { roleConfig } = useRole();
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [regionId, setRegionId] = useState('');
+  const [filterParentRegionId, setFilterParentRegionId] = useState('');
   const [status, setStatus] = useState('');
   const [keyword, setKeyword] = useState('');
   const [page, setPage] = useState(0);
@@ -71,6 +75,9 @@ export default function RoundsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [form, setForm] = useState<CourseCreateRequest>(EMPTY_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const [regionsLoading, setRegionsLoading] = useState(false);
+  const [expandedParentId, setExpandedParentId] = useState<number | null>(null);
 
   const canCreate = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(roleConfig.role);
 
@@ -80,6 +87,8 @@ export default function RoundsPage() {
     try {
       const { data: response } = await getCourses({
         regionId: regionId ? Number(regionId) : undefined,
+        // 하위지역까지 선택했으면 regionId가 우선 적용되므로, 상위지역만 선택("전체")된 경우에만 parentRegionId 전달
+        parentRegionId: !regionId && filterParentRegionId ? Number(filterParentRegionId) : undefined,
         status: status || undefined,
         keyword: keyword || undefined,
         page,
@@ -100,6 +109,36 @@ export default function RoundsPage() {
     void loadCourses();
   }, [page, size]);
 
+  useEffect(() => {
+    let active = true;
+    setRegionsLoading(true);
+    getRegions()
+      .then(({ data: response }) => {
+        if (active) setRegions(response.data ?? []);
+      })
+      .catch(() => {
+        if (active) setRegions([]);
+      })
+      .finally(() => {
+        if (active) setRegionsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const level1Regions = useMemo(() => regions.filter((r) => r.level === 'LEVEL1'), [regions]);
+  const childrenOf = (parentId: number) => regions.filter((r) => r.parentRegionId === parentId);
+  const selectedRegion = useMemo(() => regions.find((r) => r.regionId === form.regionId), [regions, form.regionId]);
+  const selectedRegionParentName = useMemo(() => {
+    if (!selectedRegion?.parentRegionId) return null;
+    return regions.find((r) => r.regionId === selectedRegion.parentRegionId)?.regionName ?? null;
+  }, [regions, selectedRegion]);
+
+  const handleSelectRegion = (nextRegionId: number) => {
+    setForm((prev) => ({ ...prev, regionId: nextRegionId }));
+  };
+
   const handleSearch = () => {
     if (page === 0) {
       void loadCourses();
@@ -109,7 +148,7 @@ export default function RoundsPage() {
   };
 
   const updateForm = (key: keyof CourseCreateRequest, value: string) => {
-    const numericKeys: Array<keyof CourseCreateRequest> = ['regionId', 'courseNumber', 'capacity', 'minimumCapacity'];
+    const numericKeys: Array<keyof CourseCreateRequest> = ['regionId', 'courseNumber', 'localCourseNumber', 'capacity', 'minimumCapacity'];
     setForm((prev) => ({
       ...prev,
       [key]: numericKeys.includes(key) ? Number(value) : value,
@@ -118,6 +157,12 @@ export default function RoundsPage() {
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!form.regionId) {
+      setErrorMessage('지역을 선택해주세요.');
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
     try {
@@ -143,14 +188,38 @@ export default function RoundsPage() {
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flex: 1, flexWrap: 'wrap' }}>
           <div className="select">
-            <span className="ico">지역 ID</span>
-            <input
+            <span className="ico">상위지역</span>
+            <select
+              value={filterParentRegionId}
+              onChange={(event) => {
+                setFilterParentRegionId(event.target.value);
+                setRegionId('');
+              }}
+              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="">전체</option>
+              {level1Regions.map((region) => (
+                <option key={region.regionId} value={region.regionId}>
+                  {region.regionName}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="select">
+            <span className="ico">지역</span>
+            <select
               value={regionId}
               onChange={(event) => setRegionId(event.target.value)}
-              inputMode="numeric"
-              placeholder="전체"
-              style={{ border: 'none', background: 'transparent', outline: 'none', width: '72px' }}
-            />
+              disabled={!filterParentRegionId}
+              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: filterParentRegionId ? 'pointer' : 'not-allowed' }}
+            >
+              <option value="">전체</option>
+              {childrenOf(Number(filterParentRegionId)).map((child) => (
+                <option key={child.regionId} value={child.regionId}>
+                  {child.regionName}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="select">
             <span className="ico">상태</span>
@@ -200,13 +269,63 @@ export default function RoundsPage() {
             <span className="section-title">새 회차등록</span>
           </div>
           <form className="card-b form-grid" onSubmit={handleCreate}>
-            <div className="field">
-              <label>지역 ID</label>
-              <input type="number" value={form.regionId} onChange={(event) => updateForm('regionId', event.target.value)} required />
+            <div className="field full">
+              <label>지역</label>
+              {regionsLoading ? (
+                <span className="muted" style={{ fontSize: '12.5px' }}>지역 목록 불러오는 중...</span>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    {level1Regions.map((region) => (
+                      <button
+                        key={region.regionId}
+                        type="button"
+                        className={`chip ${expandedParentId === region.regionId ? 'info' : 'neutral'}`}
+                        style={{ cursor: 'pointer', border: 'none' }}
+                        onClick={() => setExpandedParentId(region.regionId)}
+                      >
+                        {region.regionName}
+                      </button>
+                    ))}
+                    {level1Regions.length === 0 && (
+                      <span className="muted" style={{ fontSize: '12px' }}>등록된 지역이 없습니다.</span>
+                    )}
+                  </div>
+
+                  {expandedParentId !== null && (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {childrenOf(expandedParentId).map((child) => (
+                        <button
+                          key={child.regionId}
+                          type="button"
+                          className={`chip ${form.regionId === child.regionId ? 'ok' : 'neutral'}`}
+                          style={{ cursor: 'pointer', border: 'none' }}
+                          onClick={() => handleSelectRegion(child.regionId)}
+                        >
+                          {child.regionName}
+                        </button>
+                      ))}
+                      {childrenOf(expandedParentId).length === 0 && (
+                        <span className="muted" style={{ fontSize: '12px' }}>하위 지역이 없습니다.</span>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="muted" style={{ fontSize: '12px', marginTop: '8px' }}>
+                    {selectedRegion
+                      ? `선택됨: ${selectedRegionParentName ? `${selectedRegionParentName} · ` : ''}${selectedRegion.regionName}`
+                      : '상위 지역을 클릭한 뒤 하위 지역을 선택해주세요.'}
+                  </div>
+                </>
+              )}
             </div>
             <div className="field">
-              <label>회차 번호</label>
+              <label>전체회차 번호</label>
               <input type="number" value={form.courseNumber} onChange={(event) => updateForm('courseNumber', event.target.value)} required />
+            </div>
+            <div className="field">
+              <label>지역회차 번호</label>
+              <input type="number" value={form.localCourseNumber} onChange={(event) => updateForm('localCourseNumber', event.target.value)} required />
             </div>
             <div className="field full">
               <label>강좌명</label>
@@ -272,7 +391,8 @@ export default function RoundsPage() {
               <tr>
                 <th>강좌명</th>
                 <th>지역</th>
-                <th>회차</th>
+                <th>전체회차</th>
+                <th>지역회차</th>
                 <th>정원</th>
                 <th>교육장</th>
                 <th>상태</th>
@@ -290,6 +410,7 @@ export default function RoundsPage() {
                   <td className="pname">{course.courseName ?? `강좌 #${course.courseId}`}</td>
                   <td>{course.regionName ?? course.regionId ?? '-'}</td>
                   <td className="tnum">{course.courseNumber ? `${course.courseNumber}기` : '-'}</td>
+                  <td className="tnum">{course.localCourseNumber ? `${course.localCourseNumber}회차` : '-'}</td>
                   <td className="tnum">
                     {course.currentParticipants ?? 0}
                     <span className="muted"> / {course.capacity ?? '-'}</span>
@@ -303,7 +424,7 @@ export default function RoundsPage() {
               ))}
               {!isLoading && courses.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
                     등록된 강좌가 없습니다.
                   </td>
                 </tr>
