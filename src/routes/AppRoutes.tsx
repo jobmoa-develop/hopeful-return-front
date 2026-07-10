@@ -11,6 +11,7 @@ import AttendancePage from '../pages/AttendancePage';
 import LoginPage from '../pages/LoginPage';
 import { useAuth } from '../context/AuthContext';
 import ProtectedRoute from './ProtectedRoute';
+import CourseCalendarPage from '../pages/CourseCalendarPage';
 
 function LoginRoute() {
   const { isAuthenticated } = useAuth();
@@ -88,6 +89,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR', 'STAFF']}>
               <AttendancePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/calendar"
+          element={
+            <ProtectedRoute>
+              <CourseCalendarPage />
             </ProtectedRoute>
           }
         />

@@ -1939,3 +1939,84 @@ table.data tbody tr:hover {
         grid-template-columns: 1fr
     }
 }
+
+
+
+
+
+
+
+
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line);
+}
+
+.cal-weekday {
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+    background: var(--bg);
+}
+
+.cal-cell {
+    min-height: 96px;
+    padding: 6px;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cal-cell-muted {
+    background: var(--bg);
+    color: var(--muted-2);
+}
+
+.cal-cell-today {
+    background: #eef4ff;
+}
+
+.cal-date {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.cal-events {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.cal-event {
+    font-size: 10.5px;
+    padding: 2px 5px;
+    border-radius: 5px;
+    background: #e6edf7;
+    color: var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cal-event-start {
+    background: #dcf3e6;
+}
+
+.cal-event-end {
+    background: #fde3e3;
+}
+
+.cal-event-more {
+    font-size: 10px;
+    color: var(--muted);
+}

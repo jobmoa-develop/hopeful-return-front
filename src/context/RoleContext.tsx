@@ -30,6 +30,7 @@ const ALL_ROLES: AppRole[] = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERA
 
 export const ROLE_MENU_RULES: Record<string, AppRole[]> = {
   dashboard: ALL_ROLES,
+  calendar: ALL_ROLES,
   participants: ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR'],
   rounds: ALL_ROLES,
   assign: ['ADMIN', 'REGIONAL_MANAGER', 'OPERATOR'],

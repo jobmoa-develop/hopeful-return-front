@@ -10,6 +10,7 @@ const PAGE_META = [
   { match: (path: string) => path.startsWith('/participants/'), crumb: '운영 · 참여자', title: '참여자 상세' },
   { match: (path: string) => path === '/rounds', crumb: '운영', title: '회차 · 일정' },
   { match: (path: string) => path.startsWith('/rounds/'), crumb: '운영 · 회차', title: '회차 상세' },
+  { match: (path: string) => path === '/calendar', crumb: '운영', title: '강의 일정' },
   { match: (path: string) => path === '/assign', crumb: '단계 관리', title: '인력 배정' },
   { match: (path: string) => path === '/consulting', crumb: '단계 관리', title: '사전상담' },
   { match: (path: string) => path === '/attendance', crumb: '단계 관리', title: '출결 · 현장' },
@@ -34,13 +35,14 @@ export default function Layout() {
     if (view === 'dashboard' && path === '/') return true;
     if (view === 'participants' && path.startsWith('/participants')) return true;
     if (view === 'rounds' && path.startsWith('/rounds')) return true;
+    if (view === 'calendar' && path === '/calendar') return true;
     if (view === 'assign' && path === '/assign') return true;
     if (view === 'consulting' && path === '/consulting') return true;
     if (view === 'attendance' && path === '/attendance') return true;
     return false;
   };
 
-  const showOperationGroup = ['dashboard', 'participants', 'rounds'].some((menu) => roleConfig.menu.includes(menu));
+  const showOperationGroup = ['dashboard', 'participants', 'rounds', 'calendar'].some((menu) => roleConfig.menu.includes(menu));
   const showStepGroup = ['assign', 'consulting', 'attendance'].some((menu) => roleConfig.menu.includes(menu));
   const showAdminGroup = ['followUp', 'userManagement'].some((menu) => roleConfig.menu.includes(menu));
   const userInitial = roleConfig.nm.charAt(0) || roleConfig.role.charAt(0);
@@ -94,6 +96,11 @@ export default function Layout() {
           {roleConfig.menu.includes('rounds') && (
             <Link to="/rounds" className={`nav-item ${isNavActive('rounds') ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
               <span className="ic">📅</span>회차 · 일정
+            </Link>
+          )}
+          {roleConfig.menu.includes('calendar') && (
+            <Link to="/calendar" className={`nav-item ${isNavActive('calendar') ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
+              <span className="ic">🗓️</span>강의 일정
             </Link>
           )}
 
