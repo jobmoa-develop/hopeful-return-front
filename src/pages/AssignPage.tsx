@@ -10,7 +10,13 @@ import {
   getCourseDailyStaffCandidates,
   saveCourseDailyStaff,
 } from '../api/courseDailyStaff';
-import type { CourseDailyStaffItem, StaffCandidate } from '../api/courseDailyStaff';
+import type {
+  AssignConflict,
+  CandidateBusy,
+  CourseDailyStaffItem,
+  SessionTypeValue,
+  StaffCandidate,
+} from '../api/courseDailyStaff';
 
 // 배정 그리드: { rowKey: { dateISO: userId } }
 type Grid = Record<string, Record<string, number | undefined>>;
@@ -18,10 +24,33 @@ type Grid = Record<string, Record<string, number | undefined>>;
 // select 옵션의 최소 형태(후보/기존 선택 공통)
 type StaffOption = { userId: number; name: string };
 
+// 일괄 적용 시 그리드에 채울 셀 1건(충돌이면 conflict 에 타 회차 배정 정보)
+type BulkFill = {
+  rowKey: string;
+  dateISO: string;
+  userId: number;
+  conflict?: CandidateBusy;
+};
+
 const ASSIGN_EDIT_ROLES = ['ADMIN', 'REGIONAL_MANAGER', 'OPERATOR'];
+const PM_ROLE = 'PROJECT_MANAGER';
 
 // 상담사 행 키: counselor-0, counselor-1 ...
 const counselorRowKey = (idx: number) => `counselor-${idx}`;
+
+// 시간대 겹침: FULL 은 모든 세션과, 그 외에는 동일 세션일 때만 겹친다.
+const sessionsOverlap = (a: SessionTypeValue, b: SessionTypeValue) =>
+  a === 'FULL' || b === 'FULL' || a === b;
+
+// 후보가 해당 날짜·세션에 타 회차 배정(busy)으로 겹치는지 → 겹치는 busy 반환
+const busyConflictOf = (
+  candidate: StaffCandidate | undefined,
+  dateISO: string,
+  session: SessionTypeValue,
+): CandidateBusy | undefined =>
+  candidate?.busy?.find(
+    (b) => b.scheduleDate === dateISO && sessionsOverlap(session, b.sessionType),
+  );
 
 function getErrorMessage(error: unknown) {
   if (isAxiosError<{ error?: string; message?: string }>(error)) {
@@ -89,13 +118,25 @@ export default function AssignPage() {
 
   const [counselorCount, setCounselorCount] = useState(1);
   const [grid, setGrid] = useState<Grid>({});
+  // 일괄 적용 선택값: 단일 역할(role.key→userId) + 상담사 다중(인덱스별 userId)
   const [bulk, setBulk] = useState<Record<string, number | ''>>({});
+  const [bulkCounselors, setBulkCounselors] = useState<(number | '')[]>(['']);
   const [hasExistingAssignments, setHasExistingAssignments] = useState(false);
+
+  // 일괄 적용 중복 경고 모달 / 저장 중복 확인 모달
+  const [bulkConflict, setBulkConflict] = useState<BulkFill[] | null>(null);
+  const [saveConflict, setSaveConflict] = useState<AssignConflict[] | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [saveMessage, setSaveMessage] = useState('');
+
+  // PM 후보(박문순) — PM 은 이 인력으로 전 날짜 고정, 편집 불가
+  const pmCandidate = useMemo(
+    () => candidates.find((c) => c.staffRoles.includes(PM_ROLE)),
+    [candidates],
+  );
 
   const years = useMemo(() => {
     const set = new Set<number>();
@@ -159,11 +200,9 @@ export default function AssignPage() {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      // 기존 배정(조회 권한만 필요)
       const assignRes = await getCourseDailyStaff(courseId);
       const assignments = assignRes.data.data.assignments ?? [];
 
-      // 후보(편집 권한 필요 — 조회 전용 사용자는 403 → 후보만 비움)
       let candidateList: StaffCandidate[] = [];
       try {
         candidateList = (await getCourseDailyStaffCandidates(courseId)).data.data.candidates ?? [];
@@ -183,6 +222,9 @@ export default function AssignPage() {
       setGrid(nextGrid);
       setCounselorCount(nextCount);
       setBulk({});
+      setBulkCounselors(Array.from({ length: nextCount }, () => '' as const));
+      setBulkConflict(null);
+      setSaveConflict(null);
       setHasExistingAssignments(assignments.length > 0);
     } catch (error) {
       resetBoard();
@@ -197,7 +239,10 @@ export default function AssignPage() {
   const resetBoard = () => {
     setGrid({});
     setBulk({});
+    setBulkCounselors(['']);
     setCounselorCount(1);
+    setBulkConflict(null);
+    setSaveConflict(null);
     setHasExistingAssignments(false);
   };
 
@@ -228,27 +273,14 @@ export default function AssignPage() {
     );
   };
 
-  // 일괄 적용: 선택된 모든 역할을 각 행의 전체 날짜에 한 번에 채운다(불가일은 건너뜀).
-  const applyAllBulk = () => {
-    setGrid((prev) => {
-      const next = { ...prev };
-      ASSIGN_ROLES.forEach((role) => {
-        const userId = bulk[role.key];
-        if (!userId) return;
-        const rowKey = role.multi ? counselorRowKey(0) : role.key;
-        const row = { ...next[rowKey] };
-        dates.forEach((d) => {
-          if (isCandidateAvailable(userId, role, d)) row[d] = userId;
-        });
-        next[rowKey] = row;
-      });
-      return next;
-    });
+  // 상담사 추가/삭제 — counselorCount 를 일괄/일자별이 공유하므로 양쪽이 함께 늘고 준다.
+  const addCounselor = () => {
+    setCounselorCount((n) => n + 1);
+    setBulkCounselors((b) => [...b, '']);
   };
-
-  const addCounselor = () => setCounselorCount((n) => n + 1);
   const removeCounselor = (idx: number) => {
     setCounselorCount((n) => Math.max(1, n - 1));
+    setBulkCounselors((b) => (b.length > 1 ? b.slice(0, -1) : b));
     setGrid((prev) => {
       const next = { ...prev };
       delete next[counselorRowKey(idx)];
@@ -256,12 +288,58 @@ export default function AssignPage() {
     });
   };
 
-  // 셀 옵션: 해당 역할·날짜 후보(불가일 제외). 이미 선택된 직원이 후보에서 빠졌다면 유지 표시.
+  // 일괄 적용 대상 셀 계산(역할별 선택 인력 × 전 날짜, 불가일 제외). PM 은 고정이라 제외.
+  const computeBulkFills = (): BulkFill[] => {
+    const fills: BulkFill[] = [];
+    const pushFor = (rowKey: string, userId: number, role: AssignRole) => {
+      const c = candidates.find((x) => x.userId === userId);
+      dates.forEach((d) => {
+        if (!isCandidateAvailable(userId, role, d)) return;
+        fills.push({ rowKey, dateISO: d, userId, conflict: busyConflictOf(c, d, role.session) });
+      });
+    };
+    ASSIGN_ROLES.forEach((role) => {
+      if (role.staffRole === PM_ROLE) return;
+      if (role.multi) {
+        bulkCounselors.forEach((uid, i) => {
+          if (uid) pushFor(counselorRowKey(i), uid, role);
+        });
+      } else {
+        const uid = bulk[role.key];
+        if (uid) pushFor(role.key, uid, role);
+      }
+    });
+    return fills;
+  };
+
+  const applyFills = (fills: BulkFill[], includeConflicts: boolean) => {
+    setGrid((prev) => {
+      const next = { ...prev };
+      fills.forEach((f) => {
+        if (!includeConflicts && f.conflict) return;
+        next[f.rowKey] = { ...next[f.rowKey], [f.dateISO]: f.userId };
+      });
+      return next;
+    });
+  };
+
+  // 일괄 적용: 중복(타 회차 배정)이 있으면 경고 모달, 없으면 즉시 적용.
+  const onApplyBulk = () => {
+    const fills = computeBulkFills();
+    if (fills.some((f) => f.conflict)) {
+      setBulkConflict(fills);
+    } else {
+      applyFills(fills, true);
+    }
+  };
+
+  // 셀 옵션: 해당 역할·날짜 후보(불가일 + 타 회차 중복 제외). PM 은 박문순 고정.
   const cellOptions = (
     role: AssignRole,
     dateISO: string,
     selectedId: number | undefined,
   ): StaffOption[] => {
+    const isPm = role.staffRole === PM_ROLE;
     const options: StaffOption[] = candidates
       .filter(
         (c) =>
@@ -270,7 +348,8 @@ export default function AssignPage() {
             (a) =>
               a.scheduleDate === dateISO &&
               (a.sessionType === 'FULL' || a.sessionType === role.session),
-          ),
+          ) &&
+          (isPm || !busyConflictOf(c, dateISO, role.session)),
       )
       .map((c) => ({ userId: c.userId, name: c.name }));
     if (selectedId && !options.some((o) => o.userId === selectedId)) {
@@ -279,7 +358,7 @@ export default function AssignPage() {
     return options;
   };
 
-  // 일괄 적용 후보(역할 전체, 날짜 무관)
+  // 일괄 적용 후보(역할 전체, 날짜 무관). PM 은 별도 고정 처리.
   const bulkOptions = (role: AssignRole): StaffOption[] =>
     candidates
       .filter((c) => c.staffRoles.includes(role.staffRole))
@@ -287,6 +366,16 @@ export default function AssignPage() {
 
   const buildEntries = () =>
     ASSIGN_ROLES.flatMap((role) => {
+      // PM 은 박문순 고정 — grid 와 무관하게 전 교육일에 생성
+      if (role.staffRole === PM_ROLE) {
+        if (!pmCandidate) return [];
+        return dates.map((d) => ({
+          scheduleDate: d,
+          staffRole: role.staffRole,
+          sessionType: role.session,
+          userId: pmCandidate.userId,
+        }));
+      }
       const rowKeys = role.multi
         ? Array.from({ length: counselorCount }, (_, i) => counselorRowKey(i))
         : [role.key];
@@ -303,7 +392,7 @@ export default function AssignPage() {
       );
     });
 
-  const handleSave = async () => {
+  const doSave = async (confirmConflicts: boolean) => {
     if (!selectedCourse || !selectedCourseId) return;
     const wasEditing = hasExistingAssignments;
     const entries = buildEntries();
@@ -314,15 +403,25 @@ export default function AssignPage() {
       const { data: response } = await saveCourseDailyStaff({
         courseId: selectedCourseId,
         entries,
+        confirmConflicts,
       });
+      setSaveConflict(null);
       await loadCourseAssignment(selectedCourseId);
       setSaveMessage(`${wasEditing ? '수정' : '저장'} 완료: ${response.data.saved}건`);
     } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 409) {
+        const conflicts = (error.response.data?.data as AssignConflict[]) ?? [];
+        setSaveConflict(conflicts);
+        return;
+      }
       setErrorMessage(getErrorMessage(error));
     } finally {
       setIsSaving(false);
     }
   };
+
+  const handleSave = () => void doSave(false);
+  const confirmSaveMove = () => void doSave(true);
 
   // 표에 렌더할 행 목록(상담사는 counselorCount 만큼 확장)
   const rowDefs = ASSIGN_ROLES.flatMap((role) =>
@@ -337,6 +436,7 @@ export default function AssignPage() {
   );
 
   const controlsDisabled = !canEdit || isLoading || isSaving;
+  const pmLabel = pmCandidate?.name ?? '박문순';
 
   return (
     <section className="view active" id="view-assign">
@@ -405,37 +505,78 @@ export default function AssignPage() {
             <div className="card-h">
               <b>일괄 적용</b>
               <span className="muted" style={{ fontSize: '12px' }}>
-                역할별 직원을 선택해 전체 날짜에 한 번에 적용 (불가일은 자동 제외)
+                역할별 직원을 선택해 전체 날짜에 한 번에 적용 (불가일·타 회차 중복은 확인 후 처리)
               </span>
             </div>
             <div className="card-b">
               <div className="assign-bulk-grid">
-                {ASSIGN_ROLES.map((role) => (
-                  <div className="assign-bulk-item" key={role.key}>
-                    <label>{role.label}</label>
-                    <select
-                      className="assign-select"
-                      value={bulk[role.key] ?? ''}
-                      disabled={controlsDisabled}
-                      onChange={(e) =>
-                        setBulk((prev) => ({
-                          ...prev,
-                          [role.key]: e.target.value ? Number(e.target.value) : '',
-                        }))
-                      }
-                    >
-                      <option value="">— 선택 —</option>
-                      {bulkOptions(role).map((s) => (
-                        <option key={s.userId} value={s.userId}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
+                {ASSIGN_ROLES.map((role) => {
+                  // PM 은 박문순 고정(편집 불가)
+                  if (role.staffRole === PM_ROLE) {
+                    return (
+                      <div className="assign-bulk-item" key={role.key}>
+                        <label>{role.label}</label>
+                        <select className="assign-select" value={pmCandidate?.userId ?? ''} disabled>
+                          <option value={pmCandidate?.userId ?? ''}>{pmLabel} (고정)</option>
+                        </select>
+                      </div>
+                    );
+                  }
+                  // 상담사: counselorCount 만큼 다중 셀렉트(일자별과 수 공유)
+                  if (role.multi) {
+                    return Array.from({ length: counselorCount }, (_, i) => (
+                      <div className="assign-bulk-item" key={`${role.key}-${i}`}>
+                        <label>{counselorCount > 1 ? `${role.label} ${i + 1}` : role.label}</label>
+                        <select
+                          className="assign-select"
+                          value={bulkCounselors[i] ?? ''}
+                          disabled={controlsDisabled}
+                          onChange={(e) =>
+                            setBulkCounselors((prev) => {
+                              const next = [...prev];
+                              next[i] = e.target.value ? Number(e.target.value) : '';
+                              return next;
+                            })
+                          }
+                        >
+                          <option value="">— 선택 —</option>
+                          {bulkOptions(role).map((s) => (
+                            <option key={s.userId} value={s.userId}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ));
+                  }
+                  // 단일 역할
+                  return (
+                    <div className="assign-bulk-item" key={role.key}>
+                      <label>{role.label}</label>
+                      <select
+                        className="assign-select"
+                        value={bulk[role.key] ?? ''}
+                        disabled={controlsDisabled}
+                        onChange={(e) =>
+                          setBulk((prev) => ({
+                            ...prev,
+                            [role.key]: e.target.value ? Number(e.target.value) : '',
+                          }))
+                        }
+                      >
+                        <option value="">— 선택 —</option>
+                        {bulkOptions(role).map((s) => (
+                          <option key={s.userId} value={s.userId}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                <button className="btn primary" disabled={controlsDisabled} onClick={applyAllBulk}>
+                <button className="btn primary" disabled={controlsDisabled} onClick={onApplyBulk}>
                   일괄 적용
                 </button>
               </div>
@@ -456,51 +597,64 @@ export default function AssignPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rowDefs.map(({ role, rowKey, label, counselorIdx }) => (
-                      <tr key={rowKey}>
-                        <td className="nm-col">
-                          <div className="pname">{label}</div>
-                          {role.multi && counselorIdx === counselorCount - 1 && canEdit && (
-                            <div className="assign-counselor-actions">
-                              <button className="btn tiny" disabled={isSaving} onClick={addCounselor}>
-                                + 상담사
-                              </button>
-                              {counselorCount > 1 && (
-                                <button
-                                  className="btn tiny"
-                                  disabled={isSaving}
-                                  onClick={() => removeCounselor(counselorIdx)}
-                                >
-                                  − 삭제
+                    {rowDefs.map(({ role, rowKey, label, counselorIdx }) => {
+                      const isPm = role.staffRole === PM_ROLE;
+                      return (
+                        <tr key={rowKey}>
+                          <td className="nm-col">
+                            <div className="pname">{label}</div>
+                            {role.multi && counselorIdx === counselorCount - 1 && canEdit && (
+                              <div className="assign-counselor-actions">
+                                <button className="btn tiny" disabled={isSaving} onClick={addCounselor}>
+                                  + 상담사
                                 </button>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                        {dates.map((d) => {
-                          const selectedId = grid[rowKey]?.[d];
-                          return (
-                            <td key={d}>
-                              <select
-                                className="assign-select"
-                                value={selectedId ?? ''}
-                                disabled={controlsDisabled}
-                                onChange={(e) =>
-                                  setCell(rowKey, d, e.target.value ? Number(e.target.value) : undefined)
-                                }
-                              >
-                                <option value="">—</option>
-                                {cellOptions(role, d, selectedId).map((s) => (
-                                  <option key={s.userId} value={s.userId}>
-                                    {s.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                                {counselorCount > 1 && (
+                                  <button
+                                    className="btn tiny"
+                                    disabled={isSaving}
+                                    onClick={() => removeCounselor(counselorIdx)}
+                                  >
+                                    − 삭제
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          {dates.map((d) => {
+                            const selectedId = grid[rowKey]?.[d];
+                            // PM 셀은 박문순 고정(편집 불가)
+                            if (isPm) {
+                              return (
+                                <td key={d}>
+                                  <select className="assign-select" value={pmCandidate?.userId ?? ''} disabled>
+                                    <option value={pmCandidate?.userId ?? ''}>{pmLabel}</option>
+                                  </select>
+                                </td>
+                              );
+                            }
+                            return (
+                              <td key={d}>
+                                <select
+                                  className="assign-select"
+                                  value={selectedId ?? ''}
+                                  disabled={controlsDisabled}
+                                  onChange={(e) =>
+                                    setCell(rowKey, d, e.target.value ? Number(e.target.value) : undefined)
+                                  }
+                                >
+                                  <option value="">—</option>
+                                  {cellOptions(role, d, selectedId).map((s) => (
+                                    <option key={s.userId} value={s.userId}>
+                                      {s.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -517,7 +671,7 @@ export default function AssignPage() {
                   {saveMessage}
                 </span>
               )}
-              <button className="btn primary" disabled={controlsDisabled} onClick={() => void handleSave()}>
+              <button className="btn primary" disabled={controlsDisabled} onClick={handleSave}>
                 {isSaving
                   ? hasExistingAssignments
                     ? '수정 중…'
@@ -531,10 +685,120 @@ export default function AssignPage() {
         </>
       )}
 
+      {/* 일괄 적용 중복 경고 모달 */}
+      {bulkConflict && (
+        <ConflictModal
+          title="타 회차 중복 배정 경고"
+          description="아래 날짜의 인력이 폐강되지 않은 다른 회차에 이미 배정되어 있습니다."
+          rows={bulkConflict
+            .filter((f) => f.conflict)
+            .map((f) => ({
+              date: f.dateISO,
+              name: nameById[f.userId] ?? `#${f.userId}`,
+              detail: `${f.conflict!.courseName} · ${f.conflict!.staffRole}`,
+            }))}
+          actions={[
+            {
+              label: '중복 포함 적용',
+              primary: true,
+              onClick: () => {
+                applyFills(bulkConflict, true);
+                setBulkConflict(null);
+              },
+            },
+            {
+              label: '중복 일자만 제외',
+              onClick: () => {
+                applyFills(bulkConflict, false);
+                setBulkConflict(null);
+              },
+            },
+            { label: '취소', onClick: () => setBulkConflict(null) },
+          ]}
+        />
+      )}
+
+      {/* 저장 시 중복 최종 확인 모달 */}
+      {saveConflict && (
+        <ConflictModal
+          title="저장 중복 확인"
+          description="아래 배정이 다른 회차와 중복됩니다. 현재 회차로 이동하여 저장하시겠습니까?"
+          rows={saveConflict.map((c) => ({
+            date: c.scheduleDate,
+            name: c.name,
+            detail: `${c.courseName} · ${c.staffRole}`,
+          }))}
+          actions={[
+            { label: '현재 회차로 이동 저장', primary: true, onClick: () => { setSaveConflict(null); confirmSaveMove(); } },
+            { label: '취소', onClick: () => setSaveConflict(null) },
+          ]}
+        />
+      )}
+
       <p className="note">
-        ※ 셀 선택지는 해당 날짜에 근무 가능한 직원만 표시됩니다 (캘린더에서 불가로 지정한 날짜 제외).
-        상담사는 1명 이상 등록할 수 있습니다.
+        ※ 셀 선택지는 해당 날짜에 근무 가능하고 다른 회차에 중복되지 않는 직원만 표시됩니다.
+        상담사는 1명 이상 등록할 수 있으며 일괄 적용과 수가 연동됩니다. PM은 {pmLabel}으로 고정됩니다.
       </p>
     </section>
+  );
+}
+
+type ConflictRow = { date: string; name: string; detail: string };
+type ConflictAction = { label: string; onClick: () => void; primary?: boolean };
+
+function ConflictModal({
+  title,
+  description,
+  rows,
+  actions,
+}: {
+  title: string;
+  description: string;
+  rows: ConflictRow[];
+  actions: ConflictAction[];
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+      }}
+    >
+      <div className="card" style={{ maxWidth: '520px', width: '92%', maxHeight: '80vh', overflow: 'auto', padding: '18px 20px' }}>
+        <h3 style={{ margin: '0 0 6px' }}>{title}</h3>
+        <p className="muted" style={{ fontSize: '13px', marginTop: 0 }}>{description}</p>
+        <div className="tbl-wrap" style={{ margin: '8px 0 14px' }}>
+          <table className="att-table">
+            <thead>
+              <tr>
+                <th>날짜</th>
+                <th>인력</th>
+                <th>기존 배정(회차 · 역할)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={`${r.date}-${r.name}-${i}`}>
+                  <td>{formatDateCol(r.date)}</td>
+                  <td>{r.name}</td>
+                  <td>{r.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          {actions.map((a) => (
+            <button
+              key={a.label}
+              className={a.primary ? 'btn primary' : 'btn'}
+              onClick={a.onClick}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

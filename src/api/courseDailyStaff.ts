@@ -38,6 +38,19 @@ export type CourseDailyStaffEntry = {
 export type SaveCourseDailyStaffPayload = {
   courseId: number;
   entries: CourseDailyStaffEntry[];
+  // 타 회차 중복 배정을 확인하고 진행할지(기본 false). false + 충돌 시 409 로 충돌 목록 반환.
+  confirmConflicts?: boolean;
+};
+
+// 저장 시 타 폐강되지 않은 회차와 겹친 충돌 항목(409 ASSIGN_CONFLICT 응답 data)
+export type AssignConflict = {
+  userId: number;
+  name: string;
+  scheduleDate: string;
+  sessionType: SessionTypeValue;
+  courseId: number;
+  courseName: string;
+  staffRole: StaffRoleValue;
 };
 
 // GET /api/course-daily-staffs/candidates?courseId — 역할별·날짜별 가용 후보 직원
@@ -46,11 +59,21 @@ export type CandidateAvailability = {
   sessionType: SessionTypeValue;
 };
 
+// 다른 폐강되지 않은 회차에 이미 배정된 슬롯(중복 방지·경고용)
+export type CandidateBusy = {
+  scheduleDate: string;
+  sessionType: SessionTypeValue;
+  courseId: number;
+  courseName: string;
+  staffRole: StaffRoleValue;
+};
+
 export type StaffCandidate = {
   userId: number;
   name: string;
   staffRoles: StaffRoleValue[];
   availability: CandidateAvailability[];
+  busy?: CandidateBusy[];
 };
 
 export type CourseDailyStaffCandidates = {
