@@ -14,8 +14,11 @@ import type { CourseDetail, CourseParticipant, CourseStaff, CourseUpdateRequest 
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
+import { getUserRoles, buildUserRoleMap } from '../api/userRoles';
+import { roleNameLabel } from '../api/userRoles'; // ROLE_NAME_LABELS 매핑만 재사용
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+
 
 function statusLabel(status?: string) {
   const labels: Record<string, string> = {
@@ -119,6 +122,7 @@ export default function RoundDetailPage() {
   const { roleConfig } = useRole();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [staffs, setStaffs] = useState<CourseStaff[]>([]);
+  const [staffRoleMap, setStaffRoleMap] = useState<Map<number, string>>(new Map()); // ← 여기로 이동
   const [participants, setParticipants] = useState<CourseParticipant[]>([]);
   const [participantKeyword, setParticipantKeyword] = useState('');
   const [participantStatus, setParticipantStatus] = useState('');
@@ -176,8 +180,7 @@ export default function RoundDetailPage() {
   };
 
   const loadStaffs = async () => {
-    if (!Number.isFinite(courseId)) return;
-
+    if (!courseId) return;
     setIsStaffsLoading(true);
     try {
       const { data: response } = await getCourseStaffs(courseId);
@@ -618,15 +621,19 @@ export default function RoundDetailPage() {
             <div className="muted">등록된 담당자가 없습니다.</div>
           ) : (
             <div className="detail-grid" style={{ gap: '0 28px' }}>
-              {staffs.map((staff, index) => (
-                <div className="assignee" key={staff.staffId ?? staff.courseParticipantId ?? index}>
-                  <div className="ra">{(staff.role ?? '담당').slice(0, 2)}</div>
-                  <div>
-                    <div className="rr">{staff.role ?? staff.status ?? '담당자'}</div>
-                    <div className="rnm">{staff.name ?? staff.staffName ?? `담당자 #${staff.staffId ?? staff.courseParticipantId ?? index + 1}`}</div>
+              {staffs.map((staff, index) => {
+                const roleLabel = staff.staffRole ? roleNameLabel(staff.staffRole) : '담당자';
+
+                return (
+                  <div className="assignee" key={staff.courseStaffId ?? staff.userId ?? index}>
+                    <div className="ra">{roleLabel.slice(0, 2)}</div>
+                    <div>
+                      <div className="rr">{roleLabel}</div>
+                      <div className="rnm">{staff.name ?? `담당자 #${staff.userId ?? index + 1}`}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
