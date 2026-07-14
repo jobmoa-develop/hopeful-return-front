@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
 // 이 역할들은 본인이 담당자로 배정된 회차만 목록에 노출
-const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER'];
+const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
 
 const EMPTY_FORM: CourseCreateRequest = {
   regionId: 0,

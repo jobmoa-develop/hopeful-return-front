@@ -8,7 +8,7 @@ const DAY_KEYS = ['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 // 이 역할들은 본인이 담당자로 배정된 강좌만 캘린더에 노출
-const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER'];
+const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
 
 // 지역명 -> 고정 색상 팔레트 매핑용
 const REGION_COLOR_PALETTE = [
