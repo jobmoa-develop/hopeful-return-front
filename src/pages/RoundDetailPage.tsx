@@ -14,7 +14,6 @@ import type { CourseDetail, CourseParticipant, CourseStaff, CourseUpdateRequest 
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
-import { getUserRoles, buildUserRoleMap } from '../api/userRoles';
 import { roleNameLabel } from '../api/userRoles'; // ROLE_NAME_LABELS 매핑만 재사용
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
@@ -122,7 +121,6 @@ export default function RoundDetailPage() {
   const { roleConfig } = useRole();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [staffs, setStaffs] = useState<CourseStaff[]>([]);
-  const [staffRoleMap, setStaffRoleMap] = useState<Map<number, string>>(new Map()); // ← 여기로 이동
   const [participants, setParticipants] = useState<CourseParticipant[]>([]);
   const [participantKeyword, setParticipantKeyword] = useState('');
   const [participantStatus, setParticipantStatus] = useState('');
