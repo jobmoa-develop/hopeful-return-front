@@ -38,20 +38,23 @@ export default function AppRoutes() {
         <Route
           path="/participants"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR']}>
+            <ProtectedRoute
+              allowedRoles={['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR']}
+            >
               <ParticipantsPage />
             </ProtectedRoute>
           }
         />
         <Route
-          path="/participants/:phone"
+          path="/participants/:courseParticipantId"
           element={
-            <ProtectedRoute allowedRoles={['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR']}>
+            <ProtectedRoute
+              allowedRoles={['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR']}
+            >
               <ParticipantDetailPage />
             </ProtectedRoute>
           }
         />
-
 
         <Route
           path="/rounds"
@@ -61,12 +64,14 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        <Route path="/rounds/:courseId" element={
-          <ProtectedRoute>
-            <RoundDetailPage />
-          </ProtectedRoute>
-        } />
-
+        <Route
+          path="/rounds/:courseId"
+          element={
+            <ProtectedRoute>
+              <RoundDetailPage />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/assign"

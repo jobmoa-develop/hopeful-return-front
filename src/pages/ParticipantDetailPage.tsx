@@ -1,146 +1,315 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRole } from '../context/RoleContext';
-import { useData } from '../context/DataContext';
-import { ParticipantModal, AttendanceModal, ConsultingModal, CompletionModal, MemoModal } from '../components/Modal';
+import {
+  COUNSELING_TYPE_LABELS,
+  CP_STATUS_CHIP,
+  CP_STATUS_LABELS,
+  changeCourseParticipantStatus,
+  getCourseParticipant,
+  increaseContactAttempt,
+} from '../api/courseParticipants';
+import type {
+  CounselingType,
+  CounselorSummary,
+  CourseParticipantDetail,
+  CourseParticipantStatus,
+} from '../api/courseParticipants';
+import { getAttendances, ATTENDANCE_STATUS_LABELS } from '../api/attendances';
+import type { AttendanceListItem, AttendanceStatus } from '../api/attendances';
+import { getParticipantMemos } from '../api/participantMemos';
+import type { ParticipantMemoItem } from '../api/participantMemos';
+import {
+  CounselorEditModal,
+  CounselingSessionModal,
+  ParticipantMemoModal,
+} from '../components/ParticipantModals';
+import { apiErrorMessage } from '../api/apiError';
+
+const TOTAL_COURSE_DAYS = 5;
+
+type StepState = 'done' | 'current' | 'idle';
+
+// "YYYY-MM-DDTHH:mm:ss" → "MM-DD HH:mm"
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '';
+  return `${value.slice(5, 10)} ${value.slice(11, 16)}`;
+}
+
+function slotOf(
+  counselors: CounselorSummary[],
+  type: CounselingType,
+): CounselorSummary | undefined {
+  return counselors.find((c) => c.status === type);
+}
 
 export default function ParticipantDetailPage() {
-  const { phone } = useParams<{ phone: string }>();
+  const { courseParticipantId } = useParams<{ courseParticipantId: string }>();
+  const cpId = Number(courseParticipantId);
   const navigate = useNavigate();
-  const { roleConfig, pidLabel } = useRole();
-  const { participants, memos } = useData();
+  const { roleConfig } = useRole();
 
-  const [activeModal, setActiveModal] = useState<'participant' | 'attend' | 'consult' | 'complete' | 'memo' | null>(null);
+  const [detail, setDetail] = useState<CourseParticipantDetail | null>(null);
+  const [attendances, setAttendances] = useState<AttendanceListItem[]>([]);
+  const [memos, setMemos] = useState<ParticipantMemoItem[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [activeModal, setActiveModal] = useState<'counselor' | 'session' | 'memo' | null>(null);
+  const [sessionType, setSessionType] = useState<CounselingType>('PRE_SESSION');
 
-  const p = participants.find(x => x.phone === phone);
+  const fetchAll = useCallback(() => {
+    if (!Number.isFinite(cpId)) {
+      setError('잘못된 참여자 상세 경로입니다.');
+      return;
+    }
+    setError(null);
+    getCourseParticipant(cpId)
+      .then((res) => setDetail(res.data.data))
+      .catch((err) => setError(apiErrorMessage(err, '참여자 정보를 불러오지 못했습니다.')));
+    getAttendances({ courseParticipantId: cpId, size: 100 })
+      .then((res) => setAttendances(res.data.data?.content ?? []))
+      .catch(() => setAttendances([]));
+    getParticipantMemos(cpId)
+      .then((res) => setMemos(res.data.data?.content ?? []))
+      .catch(() => setMemos([]));
+  }, [cpId]);
 
-  if (!p) {
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const attendedDays = useMemo(
+    () => attendances.filter((a) => a.status === 'ATTEND' || a.status === 'LATE').length,
+    [attendances],
+  );
+
+  const journey = useMemo(() => {
+    if (!detail) return null;
+    const status = detail.status as CourseParticipantStatus;
+    const pre = slotOf(detail.counselors, 'PRE_SESSION')?.completed ?? false;
+    const post1 = slotOf(detail.counselors, 'POST_SESSION_1')?.completed ?? false;
+    const post2 = slotOf(detail.counselors, 'POST_SESSION_2')?.completed ?? false;
+    const isSelected = status !== 'APPLIED' && status !== 'CANCELED';
+    const isCompleted = status === 'COMPLETED';
+
+    const selection: StepState = isSelected ? 'done' : status === 'APPLIED' ? 'current' : 'idle';
+    const preStep: StepState = pre ? 'done' : isSelected ? 'current' : 'idle';
+    const education: StepState =
+      isCompleted || status === 'INCOMPLETE' ? 'done' : attendedDays > 0 ? 'current' : 'idle';
+    const completion: StepState = isCompleted ? 'done' : attendedDays > 0 ? 'current' : 'idle';
+    const post1Step: StepState = post1 ? 'done' : isCompleted ? 'current' : 'idle';
+    const post2Step: StepState = post2 ? 'done' : post1 ? 'current' : 'idle';
+
+    return { selection, preStep, education, completion, post1Step, post2Step };
+  }, [detail, attendedDays]);
+
+  const handleStatusChange = async (next: string) => {
+    if (!detail || next === detail.status) return;
+    const label = CP_STATUS_LABELS[next as CourseParticipantStatus] ?? next;
+    if (!window.confirm(`진행상태를 '${label}'(으)로 변경할까요?`)) return;
+    try {
+      await changeCourseParticipantStatus(cpId, next);
+      fetchAll();
+    } catch (err) {
+      alert(apiErrorMessage(err, '진행상태 변경에 실패했습니다.'));
+    }
+  };
+
+  const handleContactAttempt = async () => {
+    try {
+      await increaseContactAttempt(cpId);
+      fetchAll();
+    } catch (err) {
+      alert(apiErrorMessage(err, '연락 시도 기록에 실패했습니다.'));
+    }
+  };
+
+  const openSession = (type: CounselingType) => {
+    setSessionType(type);
+    setActiveModal('session');
+  };
+
+  if (error) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
-        <button className="back" onClick={() => navigate('/participants')}>← 참여자 목록</button>
-        <h2>참여자를 찾을 수 없습니다.</h2>
+        <button className="back" onClick={() => navigate('/participants')}>
+          ← 참여자 목록
+        </button>
+        <h2>{error}</h2>
       </div>
     );
   }
 
-  // Helper logic for Journey Rail classes
-  const getStepStatus = (step: string): 'done' | 'current' | 'idle' => {
-    const status = p.st[0];
-    // Custom check for selection / pre-consultation state transitions
-    if (step === "접수") return 'done';
-    if (step === "선정") {
-      if (status === "접수" || status === "미선정") return 'idle';
-      if (status === "선정") return 'current';
-      return 'done';
-    }
-    if (step === "사전상담") {
-      if (["접수", "선정", "미선정"].includes(status)) return 'idle';
-      if (status === "사전상담완료") return 'done';
-      if (p.preConsultDate) return 'done';
-      return 'idle';
-    }
-    if (step === "현장교육") {
-      if (["교육중"].includes(status)) return 'current';
-      if (["수료", "미수료", "사후관리", "종료"].includes(status)) return 'done';
-      return 'idle';
-    }
-    if (step === "수료") {
-      if (["수료"].includes(status)) return 'current';
-      if (["사후관리", "종료"].includes(status)) return 'done';
-      return 'idle';
-    }
-    if (step === "사후관리") {
-      if (["사후관리"].includes(status)) return 'current';
-      if (["종료"].includes(status)) return 'done';
-      return 'idle';
-    }
-    return 'idle';
-  };
+  if (!detail || !journey) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
+        불러오는 중…
+      </div>
+    );
+  }
 
-  const getAttDayClass = (day: string) => {
-    if (day === '출석') return 'ok';
-    if (['지각', '외출', '조퇴'].includes(day)) return 'warn';
-    if (day === '결석') return 'danger';
-    return '';
-  };
+  const status = detail.status as CourseParticipantStatus;
+  const statusChip = CP_STATUS_CHIP[status] ?? 'neutral';
+  const statusLabel = CP_STATUS_LABELS[status] ?? detail.status;
+  const canChangeStatus = roleConfig.can.editP === 1;
+  const preSlot = slotOf(detail.counselors, 'PRE_SESSION');
+  const post1Slot = slotOf(detail.counselors, 'POST_SESSION_1');
+  const post2Slot = slotOf(detail.counselors, 'POST_SESSION_2');
+  const roundText = [
+    detail.regionName,
+    detail.localCourseNumber != null ? `${detail.localCourseNumber}회차` : detail.courseName,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
-  const completedDays = p.attendanceDays.filter(d => d !== 'none').length;
+  const attendanceByDay = new Map<number, AttendanceListItem>();
+  for (const a of attendances) {
+    if (a.dayNo != null) attendanceByDay.set(a.dayNo, a);
+  }
+  const leaves = attendances.flatMap((a) => a.leaves.map((l) => ({ dayNo: a.dayNo, ...l })));
 
   return (
     <section className="view active" id="view-participant-detail">
-      <button className="back" onClick={() => navigate('/participants')}>← 참여자 목록</button>
-      
+      <button className="back" onClick={() => navigate('/participants')}>
+        ← 참여자 목록
+      </button>
+
       <div className="detail-head">
-        <div className="pa" id="d-avatar">{p.nm.charAt(0)}</div>
+        <div className="pa" id="d-avatar">
+          {detail.participantName.charAt(0)}
+        </div>
         <div>
-          <div className="pn" id="d-name">{p.nm}</div>
+          <div className="pn" id="d-name">
+            {detail.participantName}
+          </div>
           <div className="pm">
-            <span><b id="d-region">{p.reg}</b> · <b id="d-round">{p.rd}</b></span>
-            <span>참여자ID <b id="d-pid">{pidLabel(p)}</b></span>
-            <span>출생연도 <b>{p.birthYear}</b></span>
-            <span>유입 <b>{p.inflow}</b></span>
+            <span>
+              <b id="d-region">{roundText || '—'}</b>
+            </span>
+            <span>
+              참여자ID <b id="d-pid">{detail.matchKey ?? '—'}</b>
+            </span>
+            <span>
+              출생연도 <b>{detail.birthYear ?? '—'}</b>
+            </span>
+            <span>
+              연락처 <b>{detail.phone ?? '—'}</b>
+            </span>
+            <span>
+              유입 <b>{detail.inflowType ?? '—'}</b>
+            </span>
           </div>
         </div>
         <div className="actions">
-          {roleConfig.can.attend === 1 && (
-            <button className="btn" id="btn-attend" onClick={() => setActiveModal('attend')}>출결 입력</button>
+          {canChangeStatus && (
+            <div className="select" title="진행상태 변경">
+              <span className="ico">진행상태</span>
+              <select
+                value={status}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontWeight: 'inherit',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {Object.entries(CP_STATUS_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
           {roleConfig.can.consult === 1 && (
-            <button className="btn" id="btn-consult" onClick={() => setActiveModal('consult')}>상담 입력</button>
+            <button className="btn" id="btn-consult" onClick={() => navigate('/consulting')}>
+              상담 관리
+            </button>
           )}
-          {roleConfig.can.complete === 1 && (
-            <button className="btn" id="btn-complete" onClick={() => setActiveModal('complete')}>수료·수당</button>
-          )}
-          {roleConfig.can.editP === 1 && (
-            <button className="btn primary" id="btn-edit-participant" onClick={() => setActiveModal('participant')}>정보 수정</button>
+          {canChangeStatus && (
+            <button
+              className="btn primary"
+              id="btn-edit-counselor"
+              onClick={() => setActiveModal('counselor')}
+            >
+              상담사 변경
+            </button>
           )}
         </div>
       </div>
 
-      {/* Journey Rail */}
+      {/* Journey Rail — 데이터(상담 완료·출결·진행상태) 파생 표시 */}
       <div className="journey">
         <div className="jh">
           <span className="eyebrow">참여자 여정</span>
-          <span className={`chip ${p.st[1]}`} id="d-status">{p.st[0]}</span>
+          <span className={`chip ${statusChip}`} id="d-status">
+            {statusLabel}
+          </span>
         </div>
         <div className="rail">
-          <div className={`step ${getStepStatus("접수")}`}>
-            <div className="node">{getStepStatus("접수") === 'done' ? '✓' : ''}</div>
+          <div className="step done">
+            <div className="node">✓</div>
             <div className="sl">접수</div>
-            <div className="sd">{p.receptionDate ? p.receptionDate.slice(5) : '05-12'}</div>
+            <div className="sd">{detail.receptionDate?.slice(5) ?? '—'}</div>
           </div>
-          <div className={`step ${getStepStatus("선정")}`}>
-            <div className="node">{getStepStatus("선정") === 'done' ? '✓' : (getStepStatus("선정") === 'current' ? <i></i> : '')}</div>
+          <div className={`step ${journey.selection}`}>
+            <div className="node">
+              {journey.selection === 'done' ? '✓' : journey.selection === 'current' ? <i></i> : ''}
+            </div>
             <div className="sl">선정</div>
             <div className="sd">소진공 선정</div>
           </div>
-          <div className={`step ${getStepStatus("사전상담")}`}>
-            <div className="node">{getStepStatus("사전상담") === 'done' ? '✓' : ''}</div>
+          <div className={`step ${journey.preStep}`}>
+            <div className="node">
+              {journey.preStep === 'done' ? '✓' : journey.preStep === 'current' ? <i></i> : ''}
+            </div>
             <div className="sl">사전상담</div>
             <div className="sd">
-              {p.preConsultDate ? `대면 · ${p.preConsultDate.slice(5)}` : '대면 1회'}
+              {preSlot?.endedAt ? `대면 · ${preSlot.endedAt.slice(5, 10)}` : '대면 1회'}
             </div>
           </div>
-          <div className={`step ${getStepStatus("현장교육")}`}>
+          <div className={`step ${journey.education}`}>
             <div className="node">
-              {getStepStatus("현장교육") === 'done' ? '✓' : (getStepStatus("현장교육") === 'current' ? <i></i> : '')}
+              {journey.education === 'done' ? '✓' : journey.education === 'current' ? <i></i> : ''}
             </div>
             <div className="sl">현장교육</div>
-            <div className="sd">{completedDays}일차 / 5일</div>
+            <div className="sd">
+              {attendedDays}일차 / {TOTAL_COURSE_DAYS}일
+            </div>
           </div>
-          <div className={`step ${getStepStatus("수료")}`}>
+          <div className={`step ${journey.completion}`}>
             <div className="node">
-              {getStepStatus("수료") === 'done' ? '✓' : (getStepStatus("수료") === 'current' ? <i></i> : '')}
+              {journey.completion === 'done' ? (
+                '✓'
+              ) : journey.completion === 'current' ? (
+                <i></i>
+              ) : (
+                ''
+              )}
             </div>
             <div className="sl">수료</div>
-            <div className="sd">{p.su[0] === '수료' ? '수료 완료' : '예정 06-27'}</div>
-          </div>
-          <div className={`step ${getStepStatus("사후관리")}`}>
-            <div className="node">
-              {getStepStatus("사후관리") === 'done' ? '✓' : (getStepStatus("사후관리") === 'current' ? <i></i> : '')}
+            <div className="sd">
+              {detail.completionDate
+                ? detail.completionDate.slice(5)
+                : status === 'INCOMPLETE'
+                  ? '미수료'
+                  : '예정'}
             </div>
-            <div className="sl">사후관리</div>
-            <div className="sd">대면2·비대면6</div>
+          </div>
+          <div className={`step ${journey.post1Step}`}>
+            <div className="node">
+              {journey.post1Step === 'done' ? '✓' : journey.post1Step === 'current' ? <i></i> : ''}
+            </div>
+            <div className="sl">사후상담 1차</div>
+            <div className="sd">{post1Slot?.endedAt ? post1Slot.endedAt.slice(5, 10) : '대면'}</div>
+          </div>
+          <div className={`step ${journey.post2Step}`}>
+            <div className="node">
+              {journey.post2Step === 'done' ? '✓' : journey.post2Step === 'current' ? <i></i> : ''}
+            </div>
+            <div className="sl">사후상담 2차</div>
+            <div className="sd">{post2Slot?.endedAt ? post2Slot.endedAt.slice(5, 10) : '대면'}</div>
           </div>
         </div>
       </div>
@@ -148,43 +317,87 @@ export default function ParticipantDetailPage() {
       <div className="detail-grid">
         <div className="grid" style={{ gap: '18px' }}>
           <div className="card">
-            <div className="card-h"><span className="section-title">유입 · 자격</span></div>
+            <div className="card-h">
+              <span className="section-title">유입 · 자격</span>
+            </div>
             <div className="card-b">
-              <div className="kv"><span className="k">유입 경로</span><span className="v">{p.inflow}</span></div>
-              <div className="kv"><span className="k">접수일 / 신청일</span><span className="v">{(p.receptionDate || '05-12').slice(5)} / {(p.applyDate || '05-15').slice(5)}</span></div>
+              <div className="kv">
+                <span className="k">유입 경로</span>
+                <span className="v">{detail.inflowType ?? '—'}</span>
+              </div>
+              <div className="kv">
+                <span className="k">접수일 / 신청일</span>
+                <span className="v">
+                  {detail.receptionDate ?? '—'} / {detail.applyDate ?? '—'}
+                </span>
+              </div>
               <div className="kv">
                 <span className="k">기초교육 수료</span>
                 <span className="v">
-                  <span className={`chip ${p.basicEducation === 'Y' ? 'ok' : 'warn'}`}>
-                    {p.basicEducation === 'Y' ? '확인 완료' : (p.basicEducation === '확인필요' ? '확인 필요' : '미수료')}
+                  <span className={`chip ${detail.basicEducation === 'Y' ? 'ok' : 'warn'}`}>
+                    {detail.basicEducation === 'Y'
+                      ? '확인 완료'
+                      : (detail.basicEducation ?? '확인 필요')}
                   </span>
                 </span>
               </div>
               <div className="kv">
-                <span className="k">안내문자 발송</span>
-                <span className="v">{p.smsSent ? '✓ 선정 후 발송' : '발송 전'}</span>
+                <span className="k">연락 시도</span>
+                <span className="v">
+                  {detail.contactAttempt ?? 0}회
+                  {roleConfig.can.consult === 1 && (
+                    <button
+                      className="btn"
+                      style={{ marginLeft: '8px', padding: '3px 8px', fontSize: '11px' }}
+                      onClick={handleContactAttempt}
+                    >
+                      +1 기록
+                    </button>
+                  )}
+                </span>
               </div>
             </div>
           </div>
           <div className="card">
-            <div className="card-h"><span className="section-title">사전상담 (대면)</span></div>
+            <div className="card-h">
+              <span className="section-title">사전상담 (대면)</span>
+              {roleConfig.can.consult === 1 && (
+                <button
+                  className="btn"
+                  style={{ marginLeft: 'auto', padding: '5px 11px', fontSize: '12px' }}
+                  onClick={() => openSession('PRE_SESSION')}
+                >
+                  기록
+                </button>
+              )}
+            </div>
             <div className="card-b">
-              <div className="kv"><span className="k">담당 상담사</span><span className="v">{p.counselorName} <span className="muted" style={{ fontWeight: 500 }}>(사후 디폴트·변경가능)</span></span></div>
               <div className="kv">
-                <span className="k">사전상담 일시</span>
+                <span className="k">담당 상담사</span>
+                <span className="v">{preSlot?.counselorName ?? '배정 전'}</span>
+              </div>
+              <div className="kv">
+                <span className="k">상담 일시</span>
                 <span className="v">
-                  {p.preConsultDate ? `대면 1회 · ${p.preConsultDate.slice(5)} ${p.preConsultTime || ''}` : '미일정'}
+                  {preSlot?.startedAt
+                    ? `${formatDateTime(preSlot.startedAt)}${preSlot.endedAt ? ` ~ ${formatDateTime(preSlot.endedAt).slice(-5)}` : ''}`
+                    : '미일정'}
                 </span>
               </div>
               <div className="kv">
-                <span className="k">상담일지</span>
+                <span className="k">완료 여부</span>
                 <span className="v">
-                  <span className={`chip ${p.preConsultDocWritten ? 'ok' : 'neutral'}`}>
-                    {p.preConsultDocWritten ? '작성 완료' : '—'}
+                  <span className={`chip ${preSlot?.completed ? 'ok' : 'neutral'}`}>
+                    {preSlot?.completed ? '완료' : '미완료'}
                   </span>
                 </span>
               </div>
-              <div className="kv"><span className="k">연락 시도</span><span className="v">{p.contactAttempts || (p.sang[0] === '완료' ? '1회 (성공)' : '0회')}</span></div>
+              {preSlot?.memo && (
+                <div className="kv">
+                  <span className="k">상담 메모</span>
+                  <span className="v">{preSlot.memo}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -193,56 +406,68 @@ export default function ParticipantDetailPage() {
           <div className="card">
             <div className="card-h">
               <span className="section-title">출결 현황 (일자별)</span>
-              {p.attendanceDetails && <span className="chip warn">{p.attendanceDetails.split(' ')[0]} {p.attendanceDetails.split(' ')[1]}</span>}
             </div>
             <div className="card-b">
               <div className="att-grid">
-                {p.attendanceDays.map((d, index) => (
-                  <div className={`att-day ${getAttDayClass(d)}`} key={index}>
-                    <div className="d">{index + 1}일</div>
-                    <div className="s">{d === 'none' ? '—' : d}</div>
-                  </div>
-                ))}
+                {Array.from({ length: TOTAL_COURSE_DAYS }, (_, i) => i + 1).map((day) => {
+                  const record = attendanceByDay.get(day);
+                  const label = record?.status
+                    ? (ATTENDANCE_STATUS_LABELS[record.status as AttendanceStatus] ?? record.status)
+                    : '—';
+                  const cls =
+                    record?.status === 'ATTEND'
+                      ? 'ok'
+                      : record?.status === 'LATE'
+                        ? 'warn'
+                        : record?.status === 'ABSENT'
+                          ? 'danger'
+                          : '';
+                  return (
+                    <div className={`att-day ${cls}`} key={day}>
+                      <div className="d">{day}일</div>
+                      <div className="s">{label}</div>
+                    </div>
+                  );
+                })}
               </div>
-              {p.attendanceDetails && (
-                <div className="kv" style={{ marginTop: '10px' }}>
-                  <span className="k">외출·조퇴 시간 기록</span>
-                  <span className="v">{p.attendanceDetails}</span>
+              {leaves.length > 0 && (
+                <div style={{ marginTop: '10px' }}>
+                  {leaves.map((l) => (
+                    <div className="kv" key={l.attendanceLeaveId}>
+                      <span className="k">{l.dayNo != null ? `${l.dayNo}일차 ` : ''}외출·조퇴</span>
+                      <span className="v">
+                        {(l.leaveTime ?? '').slice(0, 5)}
+                        {l.returnTime ? ` ~ ${l.returnTime.slice(0, 5)}` : ''}
+                        {l.reason ? ` (${l.reason})` : ''}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
               <p className="muted" style={{ fontSize: '11.5px', marginTop: '6px' }}>
-                · 외출·조퇴는 시간 기록 · 수료 기준(전 시간 이수) 충족 가능
+                · 지각도 출석으로 집계 · 외출·조퇴는 시간 기록으로 관리
               </p>
             </div>
           </div>
-          
+
           <div className="card">
-            <div className="card-h"><span className="section-title">수료 · 수당</span></div>
+            <div className="card-h">
+              <span className="section-title">수료</span>
+            </div>
             <div className="card-b">
               <div className="kv">
                 <span className="k">수료 여부</span>
                 <span className="v">
-                  {p.su[0] !== '—' ? <span className={`chip ${p.su[1]}`}>{p.su[0]}</span> : <span className="muted">진행 상태로 확인 ({p.st[0]})</span>}
+                  <span className={`chip ${statusChip}`}>{statusLabel}</span>
                 </span>
               </div>
-              {p.st[0] === '미수료' && (
-                <div className="kv">
-                  <span className="k">미수료 사유</span>
-                  <span className="v" style={{ color: 'var(--danger)' }}>교육시간 미충족</span>
-                </div>
-              )}
               <div className="kv">
-                <span className="k">수당 지급 여부</span>
-                <span className="v">
-                  {p.allowancePaid ? <span className="chip ok">지급 완료</span> : <span className="chip neutral">미지급 (수료 대기)</span>}
-                </span>
+                <span className="k">수료일</span>
+                <span className="v">{detail.completionDate ?? '—'}</span>
               </div>
-              {p.allowancePaid && (
-                <>
-                  <div className="kv"><span className="k">수당 지급일</span><span className="v">{p.allowanceDate || '2026-06-25'}</span></div>
-                  <div className="kv"><span className="k">지급 금액 / 은행</span><span className="v">{p.allowanceAmount?.toLocaleString() || '250,000'}원 {p.allowanceRemark ? `(${p.allowanceRemark})` : ''}</span></div>
-                </>
-              )}
+              <p className="muted" style={{ fontSize: '11.5px', marginTop: '6px' }}>
+                · 수료/미수료 처리는 상단 진행상태 변경으로 반영됩니다.
+              </p>
             </div>
           </div>
         </div>
@@ -250,60 +475,57 @@ export default function ParticipantDetailPage() {
 
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="card-h">
-          <span className="section-title">사후상담 (대면 2회) · 사후관리 (비대면 6개월)</span>
-          <span className="chip neutral">{['사후관리', '종료'].includes(p.st[0]) ? '진행 중' : '수료 후 시작'}</span>
+          <span className="section-title">사후상담 (대면 2회)</span>
+          {roleConfig.can.consult === 1 && (
+            <button
+              className="btn"
+              style={{ marginLeft: 'auto', padding: '5px 11px', fontSize: '12px' }}
+              onClick={() =>
+                openSession(post1Slot?.completed ? 'POST_SESSION_2' : 'POST_SESSION_1')
+              }
+            >
+              기록
+            </button>
+          )}
         </div>
         <div className="card-b">
-          <div className="detail-grid" style={{ gap: '18px', marginBottom: '16px' }}>
-            <div>
-              <div className="eyebrow" style={{ marginBottom: '8px' }}>사후상담 · 대면 2회 (담당 상담사)</div>
-              <div className="kv">
-                <span className="k">사후상담 1차</span>
-                <span className="v">
-                  {p.post1ConsultDate ? `${p.post1Counselor} · ${p.post1ConsultDate} ${p.post1ConsultTime || ''}` : <span className="muted">예정</span>}
-                </span>
+          <div className="detail-grid" style={{ gap: '18px' }}>
+            {(
+              [
+                ['POST_SESSION_1', post1Slot],
+                ['POST_SESSION_2', post2Slot],
+              ] as const
+            ).map(([type, slot]) => (
+              <div key={type}>
+                <div className="eyebrow" style={{ marginBottom: '8px' }}>
+                  {COUNSELING_TYPE_LABELS[type]}
+                </div>
+                <div className="kv">
+                  <span className="k">담당 상담사</span>
+                  <span className="v">{slot?.counselorName ?? '배정 전'}</span>
+                </div>
+                <div className="kv">
+                  <span className="k">상담 일시</span>
+                  <span className="v">
+                    {slot?.startedAt ? formatDateTime(slot.startedAt) : '예정'}
+                  </span>
+                </div>
+                <div className="kv">
+                  <span className="k">완료 여부</span>
+                  <span className="v">
+                    <span className={`chip ${slot?.completed ? 'ok' : 'neutral'}`}>
+                      {slot?.completed ? '완료' : '—'}
+                    </span>
+                  </span>
+                </div>
+                {slot?.memo && (
+                  <div className="kv">
+                    <span className="k">상담 메모</span>
+                    <span className="v">{slot.memo}</span>
+                  </div>
+                )}
               </div>
-              <div className="kv">
-                <span className="k">사후상담 2차</span>
-                <span className="v">
-                  {p.post2ConsultDate ? `${p.post2Counselor} · ${p.post2ConsultDate} ${p.post2ConsultTime || ''}` : <span className="muted">예정</span>}
-                </span>
-              </div>
-            </div>
-            <div>
-              <div className="eyebrow" style={{ marginBottom: '8px' }}>사후관리 · 비대면 문자·유선 (월 1회)</div>
-              <div className="months">
-                {[1, 2, 3, 4, 5, 6].map(m => {
-                  const isDone = ['사후관리', '종료'].includes(p.st[0]) && m === 1; // Month 1 check for follow-up mock
-                  return (
-                    <div className="mo" key={m}>
-                      <div className={`mc ${isDone ? 'done' : 'idle'}`}>{isDone ? '✓' : '—'}</div>
-                      <div className="ml">{m}월</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <div className="detail-grid" style={{ gap: '14px' }}>
-            <div className="kv">
-              <span className="k">국취 연계</span>
-              <span className="v">
-                {p.guk[0] !== '—' ? <span className={`chip ${p.guk[1]}`}>{p.guk[0]}</span> : <span className="muted">미신청</span>}
-              </span>
-            </div>
-            <div className="kv">
-              <span className="k">취업 여부 / 취업일</span>
-              <span className="v">
-                {p.job[0] !== '—' ? <span className={`chip ${p.job[1]}`}>{p.job[0]}</span> : <span className="muted">추적 대기</span>}
-              </span>
-            </div>
-            <div className="kv">
-              <span className="k">숲체험 참여 / 참여일</span>
-              <span className="v">
-                <span className="chip ok">신청함</span> · 07-08 예정
-              </span>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -313,54 +535,60 @@ export default function ParticipantDetailPage() {
           <span className="section-title">메모 (비고)</span>
           <span className="chip neutral">지역담당자 · 상담사 · 강사 작성</span>
           {roleConfig.can.memo === 1 && (
-            <button className="btn" id="btn-memo" style={{ marginLeft: 'auto', padding: '5px 11px', fontSize: '12px' }} onClick={() => setActiveModal('memo')}>
+            <button
+              className="btn"
+              id="btn-memo"
+              style={{ marginLeft: 'auto', padding: '5px 11px', fontSize: '12px' }}
+              onClick={() => setActiveModal('memo')}
+            >
               + 메모 추가
             </button>
           )}
         </div>
         <div id="memo-list">
-          {memos.map((m, idx) => (
-            <div className="memo-item" key={idx}>
-              <div className="memo-av">{m.who[0]}</div>
+          {memos.map((m) => (
+            <div className="memo-item" key={m.memoId}>
+              <div className="memo-av">{(m.writerName ?? '?').charAt(0)}</div>
               <div className="memo-body" style={{ flex: 1 }}>
                 <div className="memo-head">
-                  <b>{m.who}</b>
-                  <span className="chip neutral" style={{ fontSize: '10.5px', marginLeft: '6px' }}>{m.role}</span>
-                  <span className="memo-date">{m.date}</span>
+                  <b>{m.writerName ?? '알 수 없음'}</b>
+                  <span className="memo-date">{formatDateTime(m.createdAt)}</span>
                 </div>
-                <div className="memo-txt">{m.txt}</div>
+                <div className="memo-txt">{m.content}</div>
               </div>
             </div>
           ))}
+          {memos.length === 0 && (
+            <p className="muted" style={{ padding: '14px', fontSize: '12px' }}>
+              등록된 메모가 없습니다.
+            </p>
+          )}
         </div>
       </div>
-      
-      <p className="note">※ 한 참여자의 유입~취업 전 과정이 이 한 화면에 모입니다. (운영 설계 7-4 참여자 통합 총괄표)</p>
+
+      <p className="note">※ 한 참여자의 유입~사후상담 전 과정이 이 한 화면에 모입니다.</p>
 
       {/* Modals */}
-      <ParticipantModal 
-        isOpen={activeModal === 'participant'} 
-        onClose={() => setActiveModal(null)} 
-        phone={p.phone} 
+      <CounselorEditModal
+        isOpen={activeModal === 'counselor'}
+        onClose={() => setActiveModal(null)}
+        courseParticipantId={cpId}
+        counselors={detail.counselors}
+        onSaved={fetchAll}
       />
-      <AttendanceModal 
-        isOpen={activeModal === 'attend'} 
-        onClose={() => setActiveModal(null)} 
-        phone={p.phone} 
+      <CounselingSessionModal
+        isOpen={activeModal === 'session'}
+        onClose={() => setActiveModal(null)}
+        courseParticipantId={cpId}
+        counselors={detail.counselors}
+        defaultType={sessionType}
+        onSaved={fetchAll}
       />
-      <ConsultingModal 
-        isOpen={activeModal === 'consult'} 
-        onClose={() => setActiveModal(null)} 
-        phone={p.phone} 
-      />
-      <CompletionModal 
-        isOpen={activeModal === 'complete'} 
-        onClose={() => setActiveModal(null)} 
-        phone={p.phone} 
-      />
-      <MemoModal 
-        isOpen={activeModal === 'memo'} 
-        onClose={() => setActiveModal(null)} 
+      <ParticipantMemoModal
+        isOpen={activeModal === 'memo'}
+        onClose={() => setActiveModal(null)}
+        courseParticipantId={cpId}
+        onSaved={fetchAll}
       />
     </section>
   );
