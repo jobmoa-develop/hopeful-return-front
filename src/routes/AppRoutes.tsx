@@ -39,7 +39,10 @@ export default function AppRoutes() {
           path="/participants"
           element={
             <ProtectedRoute
-              allowedRoles={['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR']}
+              allowedRoles={[
+                'ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR', 'STAFF',
+                'PROJECT_MANAGER', 'PROJECT_LEADER',
+              ]}
             >
               <ParticipantsPage />
             </ProtectedRoute>
@@ -49,7 +52,10 @@ export default function AppRoutes() {
           path="/participants/:courseParticipantId"
           element={
             <ProtectedRoute
-              allowedRoles={['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR']}
+              allowedRoles={[
+                'ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR', 'STAFF',
+                'PROJECT_MANAGER', 'PROJECT_LEADER',
+              ]}
             >
               <ParticipantDetailPage />
             </ProtectedRoute>

@@ -185,7 +185,7 @@ export default function ParticipantsPage() {
           총 {totalElements}명{loading ? ' · 불러오는 중…' : ''}
         </span>
 
-        {roleConfig.can.editP === 1 && (
+        {roleConfig.can.register === 1 && (
           <button
             className="btn primary"
             id="btn-add-participant"
