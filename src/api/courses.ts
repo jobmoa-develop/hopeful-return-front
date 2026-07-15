@@ -119,12 +119,11 @@ export type CourseParticipant = {
 };
 
 export type CourseStaff = {
-  courseParticipantId?: number;
-  staffId?: number;
+  courseStaffId?: number;
+  userId?: number;
   name?: string;
-  staffName?: string;
-  role?: string;
-  status?: string;
+  staffRole?: string;      // 'LECTURER' | 'COUNSELOR' | 'STAFF' | ...
+  sessionType?: string;
   checkInTime?: string;
   checkOutTime?: string;
 };
