@@ -2,13 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
-import { createCourse, getCourses } from '../api/courses';
+import { createCourse, getCourses, getCourseStaffs } from '../api/courses';
 import type { CourseCreateRequest, CourseStatus, CourseSummary } from '../api/courses';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+
+// 이 역할들은 본인이 담당자로 배정된 회차만 목록에 노출
+const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
 
 const EMPTY_FORM: CourseCreateRequest = {
   regionId: 0,
@@ -61,6 +65,7 @@ function getErrorMessage(error: unknown) {
 export default function RoundsPage() {
   const navigate = useNavigate();
   const { roleConfig } = useRole();
+  const { user } = useAuth();
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [regionId, setRegionId] = useState('');
   const [filterParentRegionId, setFilterParentRegionId] = useState('');
@@ -80,23 +85,50 @@ export default function RoundsPage() {
   const [expandedParentId, setExpandedParentId] = useState<number | null>(null);
 
   const canCreate = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(roleConfig.role);
+  const isRestricted = Boolean(user?.role && RESTRICTED_ROLES.includes(user.role));
+
+  // 담당자로 배정된 회차만 남기는 필터 (제한 대상 역할 전용)
+  const filterToMyCourses = async (list: CourseSummary[]): Promise<CourseSummary[]> => {
+    if (!user) return [];
+    const flags = await Promise.all(
+      list.map((c) =>
+        c.courseId
+          ? getCourseStaffs(c.courseId)
+            .then(({ data: res }) => (res.data.staffs ?? []).some((s) => s.userId === user.userId))
+            .catch(() => false)
+          : Promise.resolve(false),
+      ),
+    );
+    return list.filter((_, idx) => flags[idx]);
+  };
 
   const loadCourses = async () => {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const { data: response } = await getCourses({
+      const commonParams = {
         regionId: regionId ? Number(regionId) : undefined,
         // 하위지역까지 선택했으면 regionId가 우선 적용되므로, 상위지역만 선택("전체")된 경우에만 parentRegionId 전달
         parentRegionId: !regionId && filterParentRegionId ? Number(filterParentRegionId) : undefined,
         status: status || undefined,
         keyword: keyword || undefined,
-        page,
-        size,
-      });
-      setCourses(response.data.content ?? []);
-      setTotalPages(response.data.totalPages ?? 0);
-      setTotalElements(response.data.totalElements ?? 0);
+      };
+
+      if (isRestricted) {
+        // 제한 대상 역할: 전체(필터 적용) 목록을 넉넉히 받아와 담당 회차만 골라낸 뒤 클라이언트에서 페이지네이션
+        const { data: response } = await getCourses({ ...commonParams, page: 0, size: 1000 });
+        const myList = await filterToMyCourses(response.data.content ?? []);
+
+        setTotalElements(myList.length);
+        setTotalPages(Math.max(1, Math.ceil(myList.length / size)));
+        setCourses(myList.slice(page * size, page * size + size));
+      } else {
+        // 그 외 역할: 기존 서버 사이드 페이지네이션 그대로
+        const { data: response } = await getCourses({ ...commonParams, page, size });
+        setCourses(response.data.content ?? []);
+        setTotalPages(response.data.totalPages ?? 0);
+        setTotalElements(response.data.totalElements ?? 0);
+      }
     } catch (error) {
       setCourses([]);
       setErrorMessage(getErrorMessage(error));
@@ -107,7 +139,8 @@ export default function RoundsPage() {
 
   useEffect(() => {
     void loadCourses();
-  }, [page, size]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, size, isRestricted]);
 
   useEffect(() => {
     let active = true;
@@ -179,9 +212,9 @@ export default function RoundsPage() {
   };
 
   const pageSummary = useMemo(() => {
-    if (totalElements === 0) return '등록된 강좌가 없습니다.';
-    return `총 ${totalElements.toLocaleString()}개 강좌`;
-  }, [totalElements]);
+    if (totalElements === 0) return isRestricted ? '담당 중인 회차가 없습니다.' : '등록된 강좌가 없습니다.';
+    return `총 ${totalElements.toLocaleString()}개 강좌${isRestricted ? ' (내 담당 회차만 표시)' : ''}`;
+  }, [totalElements, isRestricted]);
 
   return (
     <section className="view active" id="view-rounds">
@@ -425,7 +458,7 @@ export default function RoundsPage() {
               {!isLoading && courses.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
-                    등록된 강좌가 없습니다.
+                    {isRestricted ? '담당 중인 회차가 없습니다.' : '등록된 강좌가 없습니다.'}
                   </td>
                 </tr>
               )}
