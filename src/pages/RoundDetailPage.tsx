@@ -121,6 +121,7 @@ export default function RoundDetailPage() {
   const { roleConfig } = useRole();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [staffs, setStaffs] = useState<CourseStaff[]>([]);
+
   const [participants, setParticipants] = useState<CourseParticipant[]>([]);
   const [participantKeyword, setParticipantKeyword] = useState('');
   const [participantStatus, setParticipantStatus] = useState('');
