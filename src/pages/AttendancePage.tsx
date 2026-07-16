@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRole } from '../context/RoleContext';
-import { useData } from '../context/DataContext';
 import { getCourses, getCourseParticipants } from '../api/courses';
 import type { CourseSummary, CourseParticipant } from '../api/courses';
 import { getAttendances, getCompletionRisk } from '../api/attendances';
-import type { AttendanceListItem, AttendanceStatus, CompletionRiskItem, RiskStatus } from '../api/attendances';
+import type { AttendanceListItem, CompletionRiskItem, RiskStatus } from '../api/attendances';
 import { AttendanceApiModal } from '../components/ParticipantModals';
 
 const STATUS_TO_KOR: Record<string, string> = {
@@ -15,7 +14,6 @@ const STATUS_TO_KOR: Record<string, string> = {
 
 export default function AttendancePage() {
   const { roleConfig } = useRole();
-  const { participants } = useData();
 
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourseNo, setSelectedCourseNo] = useState<string>('');

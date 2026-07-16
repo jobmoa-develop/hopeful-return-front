@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useMemo } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
 export interface TaskItem {
@@ -390,8 +390,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const attendedCount = days.filter(d => d === '출석').length;
             const otherAttended = days.filter(d => ['지각', '조퇴', '외출'].includes(d)).length;
             const progressCount = days.filter(d => d !== 'none').length;
-            const attPercent = progressCount > 0 
-              ? Math.round(((attendedCount + otherAttended * 0.8) / progressCount) * 100) 
+            const attPercent = progressCount > 0
+              ? Math.round(((attendedCount + otherAttended * 0.8) / progressCount) * 100)
               : 0;
             nextState.att = attPercent;
           }
@@ -434,7 +434,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const sharedSang = a.sang.filter(x => other.sang.includes(x));
         const sharedJin = a.jin.filter(x => other.jin.includes(x));
         const allShared = [...sharedGang, ...sharedSang, ...sharedJin];
-        
+
         if (allShared.length > 0) {
           warnMsg.push(`${allShared.join(', ')} — ${other.no}와 날짜 근접/동시 배정 확인`);
         }
