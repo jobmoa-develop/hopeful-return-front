@@ -77,6 +77,7 @@ export type RecordCounselingSessionRequest = {
   memo?: string | null;
 };
 
+
 export type CounselingSessionResponse = {
   courseParticipantId: number;
   counselingType: CounselingType | string;
@@ -86,6 +87,18 @@ export type CounselingSessionResponse = {
   endedAt: string | null;
   memo: string | null;
   completed: boolean;
+};
+
+// 기존 참여자를 특정 강좌에 배정(수강 등록) — swagger POST /api/course-participants
+// 권한: ADMIN, HEAD_OFFICE, REGIONAL_MANAGER, PROJECT_MANAGER, PROJECT_LEADER
+export type EnrollParticipantRequest = {
+  courseId: number;
+  participantId: number;
+  counselors?: CounselorAssignment[];
+  inflowType?: string;
+  applyDate?: string;
+  receptionDate?: string;
+  basicEducation?: string;
 };
 
 // 권한: HEAD_OFFICE, REGIONAL_MANAGER, OPERATOR, COUNSELOR, STAFF
@@ -149,5 +162,13 @@ export function completeCourseParticipant(
 export function increaseContactAttempt(courseParticipantId: number) {
   return apiClient.patch<ApiResponse<{ courseParticipantId: number; contactAttempt: number }>>(
     `/api/course-participants/${courseParticipantId}/contact-attempt`,
+  );
+}
+
+
+export function enrollParticipant(payload: EnrollParticipantRequest) {
+  return apiClient.post<ApiResponse<{ courseParticipantId: number; status: string }>>(
+    '/api/course-participants',
+    payload,
   );
 }

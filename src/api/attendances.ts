@@ -41,3 +41,81 @@ export type AttendanceListParams = {
 export function getAttendances(params: AttendanceListParams) {
   return apiClient.get<ApiResponse<PageData<AttendanceListItem>>>('/api/attendances', { params });
 }
+
+export function getAttendance(attendanceId: number) {
+  return apiClient.get<ApiResponse<AttendanceListItem>>(`/api/attendances/${attendanceId}`);
+}
+
+export type CreateAttendanceRequest = {
+  courseParticipantId: number;
+  dayNo: number;
+  checkInTime?: string;
+  checkOutTime?: string;
+};
+
+export function createAttendance(payload: CreateAttendanceRequest) {
+  return apiClient.post<ApiResponse<AttendanceListItem>>('/api/attendances', payload);
+}
+
+export type UpdateAttendanceRequest = {
+  checkInTime?: string;
+  checkOutTime?: string;
+};
+
+export function updateAttendance(attendanceId: number, payload: UpdateAttendanceRequest) {
+  return apiClient.put<ApiResponse<{ attendanceId: number; status: string; updatedAt: string }>>(
+    `/api/attendances/${attendanceId}`,
+    payload
+  );
+}
+
+export function deleteAttendance(attendanceId: number) {
+  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(`/api/attendances/${attendanceId}`);
+}
+
+export type CreateAttendanceLeaveRequest = {
+  attendanceId: number;
+  leaveTime?: string;
+  returnTime?: string;
+  reason?: string;
+};
+
+export function createAttendanceLeave(payload: CreateAttendanceLeaveRequest) {
+  return apiClient.post<ApiResponse<AttendanceLeaveItem>>('/api/attendance-leaves', payload);
+}
+
+export type UpdateAttendanceLeaveRequest = {
+  leaveTime?: string;
+  returnTime?: string;
+  reason?: string;
+};
+
+export function updateAttendanceLeave(attendanceLeaveId: number, payload: UpdateAttendanceLeaveRequest) {
+  return apiClient.put<ApiResponse<{ attendanceLeaveId: number; updatedAt: string }>>(
+    `/api/attendance-leaves/${attendanceLeaveId}`,
+    payload
+  );
+}
+
+export function deleteAttendanceLeave(attendanceLeaveId: number) {
+  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(`/api/attendance-leaves/${attendanceLeaveId}`);
+}
+
+export type RiskStatus = 'PASS' | 'SAFE' | 'WARNING' | 'DANGER' | 'FAIL' | 'UNKNOWN';
+
+export type CompletionRiskItem = {
+  courseParticipantId: number;
+  participantName: string;
+  attendedMinutes: number;
+  requiredMinutes: number;
+  attendanceRate: number;
+  riskStatus: RiskStatus;
+};
+
+export type CompletionRiskResponse = {
+  items: CompletionRiskItem[];
+};
+
+export function getCompletionRisk(courseId: number) {
+  return apiClient.get<ApiResponse<CompletionRiskResponse>>(`/api/attendances/courses/${courseId}/completion-risk`);
+}

@@ -15,6 +15,9 @@ import {
 import type { CounselingType, CounselorSummary } from '../api/courseParticipants';
 import { createParticipantMemo } from '../api/participantMemos';
 import { apiErrorMessage } from '../api/apiError';
+import { getParticipants } from '../api/participants';
+import type { ParticipantListItem } from '../api/participants';
+import { enrollParticipant } from '../api/courseParticipants';
 
 const COUNSELING_TYPES: CounselingType[] = ['PRE_SESSION', 'POST_SESSION_1', 'POST_SESSION_2'];
 const INFLOW_OPTS = ['소진공', '워크넷', '컨설턴트 연계', '사내 타사업부', '외부 홍보(당근·벼룩)'];
@@ -193,13 +196,13 @@ export function ParticipantRegisterModal({
         birthYear: birthYear ? Number(birthYear) : undefined,
         enrollment: hasEnrollment
           ? {
-              courseId: Number(courseId),
-              inflowType: inflowType || undefined,
-              applyDate: applyDate || undefined,
-              receptionDate: receptionDate || undefined,
-              basicEducation,
-              counselors: counselors.length > 0 ? counselors : undefined,
-            }
+            courseId: Number(courseId),
+            inflowType: inflowType || undefined,
+            applyDate: applyDate || undefined,
+            receptionDate: receptionDate || undefined,
+            basicEducation,
+            counselors: counselors.length > 0 ? counselors : undefined,
+          }
           : undefined,
       });
       onSaved();
@@ -652,6 +655,393 @@ export function ParticipantMemoModal({
           />
         </div>
       </div>
+    </ApiModal>
+  );
+}
+
+interface ParticipantEnrollModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  courseId: number;
+  onSaved: () => void;
+}
+
+export function ParticipantEnrollModal({
+  isOpen,
+  onClose,
+  courseId,
+  onSaved,
+}: ParticipantEnrollModalProps) {
+  const [keyword, setKeyword] = useState('');
+  const [results, setResults] = useState<ParticipantListItem[]>([]);
+  const [selected, setSelected] = useState<ParticipantListItem | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setKeyword('');
+    setResults([]);
+    setSelected(null);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setResults([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setSearching(true);
+      getParticipants({ name: keyword.trim() || undefined, page: 0, size: 30 })
+        .then((res) => setResults(res.data.data?.content ?? []))
+        .catch(() => setResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [isOpen, keyword]);
+
+  const handleSave = async () => {
+    if (!selected) {
+      alert('배정할 참여자를 선택하세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await enrollParticipant({ courseId, participantId: selected.participantId });
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '참여자 배정에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="강좌 참여자 배정"
+      onSave={handleSave}
+      saving={saving}
+      note="※ 기존에 등록된 참여자를 검색해서 이 강좌에 배정합니다"
+    >
+      <div className="form-grid">
+        <div className="field full">
+          <label>참여자 이름 검색</label>
+          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="이름 입력" />
+        </div>
+        <div className="field full">
+          {searching && <span className="muted">검색 중...</span>}
+          {!searching && keyword.trim() && results.length === 0 && (
+            <span className="muted">검색 결과가 없습니다.</span>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+            {results.map((p) => (
+              <div
+                key={p.participantId}
+                onClick={() => setSelected(p)}
+                style={{
+                  padding: '8px 10px',
+                  border: `1px solid ${selected?.participantId === p.participantId ? 'var(--primary, #2563eb)' : 'var(--line)'}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  background: selected?.participantId === p.participantId ? '#eef4ff' : 'transparent',
+                }}
+              >
+                <b>{p.name}</b>
+                <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
+                  {p.matchKey ?? p.phone}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ApiModal>
+  );
+}
+
+// --- 3. 출결/조퇴·외출 관리 모달 (AttendanceApiModal) ---
+import { getAttendance, createAttendance, updateAttendance, deleteAttendance, createAttendanceLeave, updateAttendanceLeave, deleteAttendanceLeave } from '../api/attendances';
+
+interface AttendanceApiModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+  courseParticipantId: number;
+  participantName: string;
+  dayNo: number;
+  initialAttendanceId?: number; // 있으면 해당 ID로 GET 요청해서 폼 채움
+}
+
+export function AttendanceApiModal({
+  isOpen,
+  onClose,
+  onSaved,
+  courseParticipantId,
+  participantName,
+  dayNo,
+  initialAttendanceId,
+}: AttendanceApiModalProps) {
+  const { roleConfig } = useRole();
+  const canEdit = roleConfig.can.attend === 1; // OPERATOR, STAFF 권한 체크
+  const isAdmin = roleConfig.role.includes('ADMIN'); // 하드 삭제 권한 체크
+
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // 현재 모달에서 관리 중인 출석 정보
+  const [attendanceId, setAttendanceId] = useState<number | null>(null);
+  const [checkInTime, setCheckInTime] = useState('');
+  const [checkOutTime, setCheckOutTime] = useState('');
+  const [currentStatus, setCurrentStatus] = useState(''); // 읽기 전용 (서버에서 계산된 상태)
+
+  // 조퇴/외출 정보 (첫 번째 요소만 사용)
+  const [leaveId, setLeaveId] = useState<number | null>(null);
+  const [leaveTime, setLeaveTime] = useState('');
+  const [returnTime, setReturnTime] = useState('');
+  const [leaveReason, setLeaveReason] = useState('');
+
+  // 탭 상태
+  const [activeTab, setActiveTab] = useState<'ATTEND' | 'LEAVE'>('ATTEND');
+
+  // 데이터 초기 로딩
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // 모달 열릴 때 상태 초기화
+    setAttendanceId(null);
+    setCheckInTime('');
+    setCheckOutTime('');
+    setCurrentStatus('');
+    setLeaveId(null);
+    setLeaveTime('');
+    setReturnTime('');
+    setLeaveReason('');
+    setActiveTab('ATTEND');
+
+    if (initialAttendanceId) {
+      setLoading(true);
+      getAttendance(initialAttendanceId)
+        .then((res) => {
+          const data = res.data.data;
+          if (data) {
+            setAttendanceId(data.attendanceId);
+            setCheckInTime(data.checkInTime || '');
+            setCheckOutTime(data.checkOutTime || '');
+            setCurrentStatus(data.status || '');
+
+            if (data.leaves && data.leaves.length > 0) {
+              const lv = data.leaves[0];
+              setLeaveId(lv.attendanceLeaveId);
+              setLeaveTime(lv.leaveTime || '');
+              setReturnTime(lv.returnTime || '');
+              setLeaveReason(lv.reason || '');
+            }
+          }
+        })
+        .catch((err) => console.error('출석 정보 불러오기 실패', err))
+        .finally(() => setLoading(false));
+    }
+  }, [isOpen, initialAttendanceId]);
+
+  const handleSaveAttendance = async () => {
+    if (!canEdit) return;
+    setSaving(true);
+    try {
+      const payload = {
+        checkInTime: checkInTime || undefined,
+        checkOutTime: checkOutTime || undefined,
+      };
+
+      if (attendanceId) {
+        await updateAttendance(attendanceId, payload);
+      } else {
+        await createAttendance({
+          courseParticipantId,
+          dayNo,
+          ...payload,
+        });
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '출석 정보 저장에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveLeave = async () => {
+    if (!canEdit) return;
+    if (!attendanceId) {
+      alert('출석 정보가 먼저 등록되어야 조퇴/외출 기록을 남길 수 있습니다.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        leaveTime: leaveTime || undefined,
+        returnTime: returnTime || undefined,
+        reason: leaveReason || undefined,
+      };
+
+      if (leaveId) {
+        await updateAttendanceLeave(leaveId, payload);
+      } else {
+        await createAttendanceLeave({
+          attendanceId,
+          ...payload,
+        });
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '조퇴/외출 정보 저장에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteAttendance = async () => {
+    if (!isAdmin || !attendanceId) return;
+    if (!window.confirm('정말 삭제하시겠습니까? 관련 조퇴/외출 기록도 모두 삭제될 수 있습니다.')) return;
+    setSaving(true);
+    try {
+      await deleteAttendance(attendanceId);
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '출석 정보 삭제에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteLeave = async () => {
+    if (!isAdmin || !leaveId) return;
+    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+    setSaving(true);
+    try {
+      await deleteAttendanceLeave(leaveId);
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '조퇴/외출 정보 삭제에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`${participantName} - ${dayNo}일차 출결`}
+      onSave={activeTab === 'ATTEND' ? handleSaveAttendance : handleSaveLeave}
+      saving={saving || loading}
+      note={!canEdit ? '※ 조회 권한만 있습니다.' : undefined}
+    >
+      <div className="tabs" style={{ marginBottom: '16px', display: 'flex', gap: '8px' }}>
+        <button
+          className={`btn ${activeTab === 'ATTEND' ? 'primary' : ''}`}
+          onClick={() => setActiveTab('ATTEND')}
+        >출결 관리</button>
+        <button
+          className={`btn ${activeTab === 'LEAVE' ? 'primary' : ''}`}
+          onClick={() => setActiveTab('LEAVE')}
+        >조퇴·외출 관리</button>
+      </div>
+
+      {loading && <div>로딩 중...</div>}
+
+      {!loading && activeTab === 'ATTEND' && (
+        <div className="form-grid">
+          {attendanceId && (
+            <div className="field full">
+              <label>현재 출결 상태 (자동 판정)</label>
+              <input value={currentStatus} disabled style={{ background: '#f4f6f9', color: '#69768a' }} />
+            </div>
+          )}
+          <div className="field">
+            <label>입실 시간 (HH:mm:ss)</label>
+            <input
+              type="time"
+              step="1"
+              value={checkInTime}
+              onChange={(e) => setCheckInTime(e.target.value)}
+              disabled={!canEdit}
+            />
+          </div>
+          <div className="field">
+            <label>퇴실 시간 (HH:mm:ss)</label>
+            <input
+              type="time"
+              step="1"
+              value={checkOutTime}
+              onChange={(e) => setCheckOutTime(e.target.value)}
+              disabled={!canEdit}
+            />
+          </div>
+          {isAdmin && attendanceId && (
+            <div className="field full" style={{ marginTop: '16px', textAlign: 'right' }}>
+              <button className="btn danger" onClick={handleDeleteAttendance} disabled={saving}>
+                출결 기록 삭제
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!loading && activeTab === 'LEAVE' && (
+        <div className="form-grid">
+          {!attendanceId ? (
+            <div className="field full" style={{ color: 'var(--danger)' }}>
+              출결 기록이 존재해야 조퇴/외출 기록을 남길 수 있습니다.
+            </div>
+          ) : (
+            <>
+              <div className="field">
+                <label>조퇴·외출 시간 (HH:mm:ss)</label>
+                <input
+                  type="time"
+                  step="1"
+                  value={leaveTime}
+                  onChange={(e) => setLeaveTime(e.target.value)}
+                  disabled={!canEdit}
+                />
+              </div>
+              <div className="field">
+                <label>복귀 시간 (HH:mm:ss)</label>
+                <input
+                  type="time"
+                  step="1"
+                  value={returnTime}
+                  onChange={(e) => setReturnTime(e.target.value)}
+                  disabled={!canEdit}
+                />
+              </div>
+              <div className="field full">
+                <label>사유</label>
+                <input
+                  value={leaveReason}
+                  onChange={(e) => setLeaveReason(e.target.value)}
+                  placeholder="사유를 입력하세요"
+                  disabled={!canEdit}
+                />
+              </div>
+              {isAdmin && leaveId && (
+                <div className="field full" style={{ marginTop: '16px', textAlign: 'right' }}>
+                  <button className="btn danger" onClick={handleDeleteLeave} disabled={saving}>
+                    조퇴·외출 기록 삭제
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </ApiModal>
   );
 }
