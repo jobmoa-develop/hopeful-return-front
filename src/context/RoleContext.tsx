@@ -2,9 +2,19 @@ import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import { useAuth } from './AuthContext';
 
-export type AppRole = 'ADMIN' | 'HEAD_OFFICE' | 'REGIONAL_MANAGER' | 'OPERATOR' | 'COUNSELOR' | 'STAFF';
+export type AppRole =
+  | 'ADMIN'
+  | 'HEAD_OFFICE'
+  | 'REGIONAL_MANAGER'
+  | 'OPERATOR'
+  | 'COUNSELOR'
+  | 'STAFF'
+  | 'LECTURER'
+  | 'PROJECT_MANAGER'
+  | 'PROJECT_LEADER';
 
 export interface Permissions {
+  register: number; // 참여자 등록 — 관리 롤(ADMIN·본부장·지역담당·PM·PL) 전용, BE와 동일 기준
   editP: number;
   attend: number;
   consult: number;
@@ -26,12 +36,19 @@ export interface RoleConfig {
   can: Permissions;
 }
 
-const ALL_ROLES: AppRole[] = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR', 'STAFF'];
+const ALL_ROLES: AppRole[] = [
+  'ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR', 'STAFF',
+  'LECTURER', 'PROJECT_MANAGER', 'PROJECT_LEADER',
+];
 
 export const ROLE_MENU_RULES: Record<string, AppRole[]> = {
   dashboard: ALL_ROLES,
   calendar: ALL_ROLES,
-  participants: ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR'],
+  // 참여자 화면은 강사(LECTURER)를 제외한 8롤 사용 (backend#51 정책)
+  participants: [
+    'ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR', 'STAFF',
+    'PROJECT_MANAGER', 'PROJECT_LEADER',
+  ],
   rounds: ALL_ROLES,
   assign: ['ADMIN', 'REGIONAL_MANAGER', 'OPERATOR'],
   consulting: ['ADMIN', 'OPERATOR', 'COUNSELOR'],
@@ -51,42 +68,63 @@ const ROLE_PERMISSIONS: Record<AppRole, Omit<RoleConfig, 'nm' | 'role' | 'menu'>
     scope: 'all',
     phone: true,
     perm: '전체 메뉴 접근 가능',
-    can: { editP: 1, attend: 1, consult: 1, memo: 1, editR: 1, complete: 1 },
+    can: { register: 1, editP: 1, attend: 1, consult: 1, memo: 1, editR: 1, complete: 1 },
   },
   HEAD_OFFICE: {
     mode: 'admin',
     scope: 'all',
     phone: true,
     perm: '본사 운영 메뉴 접근 가능',
-    can: { editP: 1, attend: 0, consult: 0, memo: 1, editR: 1, complete: 1 },
+    can: { register: 1, editP: 1, attend: 0, consult: 0, memo: 1, editR: 1, complete: 1 },
   },
   REGIONAL_MANAGER: {
     mode: 'admin',
     scope: 'all',
     phone: true,
     perm: '지역 운영 메뉴 접근 가능',
-    can: { editP: 1, attend: 0, consult: 0, memo: 1, editR: 1, complete: 0 },
+    can: { register: 1, editP: 1, attend: 0, consult: 0, memo: 1, editR: 1, complete: 0 },
   },
   OPERATOR: {
     mode: 'admin',
     scope: 'all',
     phone: true,
-    perm: '운영 담당 메뉴 접근 가능',
-    can: { editP: 1, attend: 1, consult: 1, memo: 1, editR: 1, complete: 0 },
+    perm: '운영 담당 메뉴 접근 가능 (참여자 등록 제외)',
+    can: { register: 0, editP: 1, attend: 1, consult: 1, memo: 1, editR: 1, complete: 0 },
   },
   COUNSELOR: {
     mode: 'field',
     scope: 'all',
     phone: true,
     perm: '상담 메뉴 접근 가능',
-    can: { editP: 0, attend: 0, consult: 1, memo: 1, editR: 0, complete: 0 },
+    can: { register: 0, editP: 0, attend: 0, consult: 1, memo: 1, editR: 0, complete: 0 },
   },
   STAFF: {
     mode: 'field',
     scope: 'all',
     phone: true,
-    perm: '현장 출결 메뉴 접근 가능',
-    can: { editP: 0, attend: 1, consult: 0, memo: 1, editR: 0, complete: 0 },
+    perm: '현장 출결 메뉴 접근 가능 · 참여자 조회',
+    can: { register: 0, editP: 0, attend: 1, consult: 0, memo: 1, editR: 0, complete: 0 },
+  },
+  LECTURER: {
+    mode: 'field',
+    scope: 'all',
+    phone: false,
+    perm: '강의 일정 조회 가능',
+    can: { register: 0, editP: 0, attend: 0, consult: 0, memo: 0, editR: 0, complete: 0 },
+  },
+  PROJECT_MANAGER: {
+    mode: 'admin',
+    scope: 'all',
+    phone: true,
+    perm: '총괄(PM) 메뉴 접근 가능',
+    can: { register: 1, editP: 1, attend: 0, consult: 0, memo: 1, editR: 1, complete: 1 },
+  },
+  PROJECT_LEADER: {
+    mode: 'admin',
+    scope: 'all',
+    phone: true,
+    perm: '리더(PL) 메뉴 접근 가능',
+    can: { register: 1, editP: 1, attend: 0, consult: 0, memo: 1, editR: 1, complete: 0 },
   },
 };
 

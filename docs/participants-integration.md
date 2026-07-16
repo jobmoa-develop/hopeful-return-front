@@ -41,6 +41,21 @@
 | 수료 | status = COMPLETED |
 | 사후상담 1·2차 | POST_SESSION_1/2 슬롯 `completed` |
 
+## 롤 × 기능 매트릭스 (front#28 · backend#51, 2026-07-15)
+
+참여자 화면은 **강사(LECTURER)를 제외한 8롤**이 사용한다. FE 게이트는 `RoleContext`의 `can` 플래그, 보안 경계는 BE `@PreAuthorize`.
+
+| 기능 (FE 게이트) | 허용 롤 |
+|---|---|
+| 참여자 등록 버튼 (`can.register`) | ADMIN · 본부장 · 지역담당 · PM · PL — **행정(OPERATOR)·상담사·진행요원 불가** |
+| 진행상태 변경·상담사 편집 (`can.editP`) | 위 5롤 + 행정 |
+| 상담 기록·연락시도 (`can.consult`) | ADMIN · 행정 · 상담사 (PM/PL은 BE는 허용, FE는 후속) |
+| 메모 추가 (`can.memo`) | 강사 제외 전 롤 |
+| 조회 (메뉴·라우트) | 8롤 (강사는 메뉴 미노출 + 라우트 차단 + BE 403) |
+
+- PM/PL/LECTURER가 `AppRole`에 추가되어 **미등록 롤의 STAFF fallback 버그 해소**.
+- 라우트 `allowedRoles`(AppRoutes)와 메뉴 규칙(`ROLE_MENU_RULES.participants`)은 8롤로 동기화.
+
 ## 유의사항
 
 - 상담사 편집은 **전체 교체** 방식 — "배정 안 함"으로 저장하면 해당 슬롯 배정(세션 기록 포함)이 삭제됨.
