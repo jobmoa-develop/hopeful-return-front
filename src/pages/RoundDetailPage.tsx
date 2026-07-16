@@ -15,6 +15,7 @@ import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { roleNameLabel } from '../api/userRoles'; // ROLE_NAME_LABELS 매핑만 재사용
+import { ParticipantEnrollModal } from '../components/ParticipantModals';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
@@ -130,6 +131,7 @@ export default function RoundDetailPage() {
   const [isParticipantsLoading, setIsParticipantsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isEnrollOpen, setIsEnrollOpen] = useState(false);
   const [editForm, setEditForm] = useState<EditFormState>(EMPTY_EDIT_FORM);
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const [regionsLoading, setRegionsLoading] = useState(false);
@@ -642,6 +644,9 @@ export default function RoundDetailPage() {
         <div className="card-h">
           <span className="section-title">강좌 참여자</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button className="btn primary" type="button" onClick={() => setIsEnrollOpen(true)}>
+              + 참여자 등록
+            </button>
             <input
               value={participantKeyword}
               onChange={(event) => setParticipantKeyword(event.target.value)}
@@ -693,6 +698,12 @@ export default function RoundDetailPage() {
           </table>
         </div>
       </div>
+      <ParticipantEnrollModal
+        isOpen={isEnrollOpen}
+        onClose={() => setIsEnrollOpen(false)}
+        courseId={courseId}
+        onSaved={loadParticipants}
+      />
     </section>
   );
 }
