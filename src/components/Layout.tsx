@@ -1,18 +1,60 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { logout as requestLogout } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { useRole } from '../context/RoleContext';
 
+// 한국시간(KST) 실시간 시계 — 1초마다 갱신
+function KstClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const text = now.toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return (
+    <div
+      className="kst-clock"
+      title="한국시간(KST)"
+      style={{
+        fontSize: '12.5px',
+        color: 'var(--muted)',
+        fontVariantNumeric: 'tabular-nums',
+        marginRight: '12px',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      🕒 {text} (KST)
+    </div>
+  );
+}
+
 const PAGE_META = [
   { match: (path: string) => path === '/', crumb: '운영', title: '대시보드' },
   { match: (path: string) => path === '/participants', crumb: '운영', title: '참여자 관리' },
-  { match: (path: string) => path.startsWith('/participants/'), crumb: '운영 · 참여자', title: '참여자 상세' },
+  {
+    match: (path: string) => path.startsWith('/participants/'),
+    crumb: '운영 · 참여자',
+    title: '참여자 상세',
+  },
   { match: (path: string) => path === '/rounds', crumb: '운영', title: '회차 · 일정' },
-  { match: (path: string) => path.startsWith('/rounds/'), crumb: '운영 · 회차', title: '회차 상세' },
+  {
+    match: (path: string) => path.startsWith('/rounds/'),
+    crumb: '운영 · 회차',
+    title: '회차 상세',
+  },
   { match: (path: string) => path === '/calendar', crumb: '운영', title: '강의 일정' },
   { match: (path: string) => path === '/assign', crumb: '단계 관리', title: '인력 배정' },
-  { match: (path: string) => path === '/consulting', crumb: '단계 관리', title: '사전상담' },
+  { match: (path: string) => path === '/consulting', crumb: '단계 관리', title: '상담 관리' },
   { match: (path: string) => path === '/attendance', crumb: '단계 관리', title: '출결 · 현장' },
 ];
 
@@ -42,9 +84,15 @@ export default function Layout() {
     return false;
   };
 
-  const showOperationGroup = ['dashboard', 'participants', 'rounds', 'calendar'].some((menu) => roleConfig.menu.includes(menu));
-  const showStepGroup = ['assign', 'consulting', 'attendance'].some((menu) => roleConfig.menu.includes(menu));
-  const showAdminGroup = ['followUp', 'userManagement'].some((menu) => roleConfig.menu.includes(menu));
+  const showOperationGroup = ['dashboard', 'participants', 'rounds', 'calendar'].some((menu) =>
+    roleConfig.menu.includes(menu),
+  );
+  const showStepGroup = ['assign', 'consulting', 'attendance'].some((menu) =>
+    roleConfig.menu.includes(menu),
+  );
+  const showAdminGroup = ['followUp', 'userManagement'].some((menu) =>
+    roleConfig.menu.includes(menu),
+  );
   const userInitial = roleConfig.nm.charAt(0) || roleConfig.role.charAt(0);
 
   const handleLogout = async () => {
@@ -67,8 +115,19 @@ export default function Layout() {
         <div className="brand">
           <div className="mark">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M5 14a7 7 0 1 1 2.5 5.3" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
-              <path d="M5 9v5h5" stroke="#9ec3e6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M5 14a7 7 0 1 1 2.5 5.3"
+                stroke="#fff"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+              />
+              <path
+                d="M5 9v5h5"
+                stroke="#9ec3e6"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
           <div>
@@ -80,7 +139,11 @@ export default function Layout() {
         <nav className="nav">
           {showOperationGroup && <div className="nav-group">운영</div>}
           {roleConfig.menu.includes('dashboard') && (
-            <Link to="/" className={`nav-item ${isNavActive('dashboard') ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
+            <Link
+              to="/"
+              className={`nav-item ${isNavActive('dashboard') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
               <span className="ic">📊</span>대시보드
             </Link>
           )}
@@ -94,19 +157,31 @@ export default function Layout() {
             </Link>
           )}
           {roleConfig.menu.includes('rounds') && (
-            <Link to="/rounds" className={`nav-item ${isNavActive('rounds') ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
+            <Link
+              to="/rounds"
+              className={`nav-item ${isNavActive('rounds') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
               <span className="ic">📅</span>회차 · 일정
             </Link>
           )}
           {roleConfig.menu.includes('calendar') && (
-            <Link to="/calendar" className={`nav-item ${isNavActive('calendar') ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
+            <Link
+              to="/calendar"
+              className={`nav-item ${isNavActive('calendar') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
               <span className="ic">🗓️</span>강의 일정
             </Link>
           )}
 
           {showStepGroup && <div className="nav-group">단계 관리</div>}
           {roleConfig.menu.includes('assign') && (
-            <Link to="/assign" className={`nav-item ${isNavActive('assign') ? 'active' : ''}`} onClick={() => setIsSidebarOpen(false)}>
+            <Link
+              to="/assign"
+              className={`nav-item ${isNavActive('assign') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
               <span className="ic">🧩</span>인력 배정
             </Link>
           )}
@@ -116,7 +191,7 @@ export default function Layout() {
               className={`nav-item ${isNavActive('consulting') ? 'active' : ''}`}
               onClick={() => setIsSidebarOpen(false)}
             >
-              <span className="ic">💬</span>사전상담
+              <span className="ic">💬</span>상담 관리
             </Link>
           )}
           {roleConfig.menu.includes('attendance') && (
@@ -157,6 +232,8 @@ export default function Layout() {
             <h1 id="page-title">{title}</h1>
           </div>
           <div className="spacer"></div>
+
+          <KstClock />
 
           <div className="user">
             <div className="avatar" id="u-avatar">
