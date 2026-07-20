@@ -9,7 +9,11 @@ import {
   CP_STATUS_LABELS,
 } from '../api/courseParticipants';
 import type { CounselingType, CourseParticipantStatus } from '../api/courseParticipants';
-import { ParticipantRegisterModal, CounselorEditModal } from '../components/ParticipantModals';
+import {
+  ParticipantRegisterModal,
+  CounselorEditModal,
+  BulkCompletionModal,
+} from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 
 const PAGE_SIZE = 20;
@@ -58,6 +62,10 @@ export default function ParticipantsPage() {
 
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [counselorEditTarget, setCounselorEditTarget] = useState<ParticipantListItem | null>(null);
+
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState<'COMPLETED' | 'INCOMPLETE' | null>(null);
+  const canBulkComplete = roleConfig.can.complete === 1;
 
   const fetchList = useCallback(() => {
     setLoading(true);
@@ -117,6 +125,45 @@ export default function ParticipantsPage() {
   const handleCounselorEdit = (e: React.MouseEvent, p: ParticipantListItem) => {
     e.stopPropagation();
     setCounselorEditTarget(p);
+  };
+
+  // 선택 가능한(수강 이력이 있는) 행의 courseParticipantId 목록
+  const selectableIds = useMemo(
+    () =>
+      filteredList
+        .map((p) => p.latestEnrollment?.courseParticipantId)
+        .filter((id): id is number => id != null),
+    [filteredList],
+  );
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selectableIds.every((id) => next.has(id))) {
+        selectableIds.forEach((id) => next.delete(id));
+      } else {
+        selectableIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectRow = (cpId: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(cpId)) next.delete(cpId);
+      else next.add(cpId);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkSaved = () => {
+    clearSelection();
+    setBulkStatus(null);
+    fetchList();
   };
 
   return (
@@ -197,6 +244,30 @@ export default function ParticipantsPage() {
         )}
       </div>
 
+      {canBulkComplete && selectedIds.size > 0 && (
+        <div
+          className="card"
+          style={{
+            padding: '10px 14px',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+          }}
+        >
+          <strong style={{ fontSize: '13px' }}>{selectedIds.size}건 선택됨</strong>
+          <button className="btn primary" onClick={() => setBulkStatus('COMPLETED')}>
+            일괄 수료
+          </button>
+          <button className="btn" onClick={() => setBulkStatus('INCOMPLETE')}>
+            일괄 미수료
+          </button>
+          <button className="btn" onClick={clearSelection} style={{ marginLeft: 'auto' }}>
+            선택 해제
+          </button>
+        </div>
+      )}
+
       {error && (
         <div
           className="card"
@@ -211,6 +282,16 @@ export default function ParticipantsPage() {
           <table className="data">
             <thead>
               <tr>
+                {canBulkComplete && (
+                  <th style={{ width: '36px' }}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="전체 선택"
+                    />
+                  </th>
+                )}
                 <th>참여자</th>
                 <th>지역 / 회차</th>
                 <th>진행상태</th>
@@ -224,8 +305,20 @@ export default function ParticipantsPage() {
               {filteredList.map((p) => {
                 const e = p.latestEnrollment;
                 const att = attendancePercent(p);
+                const cpId = e?.courseParticipantId;
                 return (
                   <tr key={p.participantId} onClick={() => handleRowClick(p)}>
+                    {canBulkComplete && (
+                      <td onClick={(ev) => ev.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={cpId != null && selectedIds.has(cpId)}
+                          disabled={cpId == null}
+                          onChange={() => cpId != null && toggleSelectRow(cpId)}
+                          aria-label={`${p.name} 선택`}
+                        />
+                      </td>
+                    )}
                     <td>
                       <div className="pname">{p.name}</div>
                       <div className="cell-sub">{p.matchKey ?? p.phone}</div>
@@ -302,7 +395,7 @@ export default function ParticipantsPage() {
               {!loading && filteredList.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={canBulkComplete ? 8 : 7}
                     style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
                   >
                     조건에 일치하는 참여자가 없습니다.
@@ -357,6 +450,15 @@ export default function ParticipantsPage() {
           courseParticipantId={counselorEditTarget.latestEnrollment.courseParticipantId}
           counselors={counselorEditTarget.latestEnrollment.counselors}
           onSaved={fetchList}
+        />
+      )}
+      {bulkStatus && (
+        <BulkCompletionModal
+          isOpen={true}
+          onClose={() => setBulkStatus(null)}
+          courseParticipantIds={Array.from(selectedIds)}
+          status={bulkStatus}
+          onSaved={handleBulkSaved}
         />
       )}
     </section>

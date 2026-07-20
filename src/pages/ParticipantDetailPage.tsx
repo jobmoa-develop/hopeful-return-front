@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
 import {
   COUNSELING_TYPE_LABELS,
   CP_STATUS_CHIP,
   CP_STATUS_LABELS,
-  changeCourseParticipantStatus,
   getCourseParticipant,
   increaseContactAttempt,
 } from '../api/courseParticipants';
@@ -15,14 +15,21 @@ import type {
   CourseParticipantDetail,
   CourseParticipantStatus,
 } from '../api/courseParticipants';
-import { getAttendances, ATTENDANCE_STATUS_LABELS } from '../api/attendances';
-import type { AttendanceListItem, AttendanceStatus } from '../api/attendances';
+import {
+  getAttendances,
+  ATTENDANCE_STATUS_LABELS,
+  getCompletionRisk,
+  RISK_STATUS_LABELS,
+  RISK_STATUS_CHIP,
+} from '../api/attendances';
+import type { AttendanceListItem, AttendanceStatus, CompletionRiskItem } from '../api/attendances';
 import { getParticipantMemos } from '../api/participantMemos';
 import type { ParticipantMemoItem } from '../api/participantMemos';
 import {
   CounselorEditModal,
   CounselingSessionModal,
   ParticipantMemoModal,
+  StatusChangeModal,
 } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 
@@ -48,12 +55,18 @@ export default function ParticipantDetailPage() {
   const cpId = Number(courseParticipantId);
   const navigate = useNavigate();
   const { roleConfig } = useRole();
+  const { user } = useAuth();
+  const currentUserId = user?.userId;
+  const isCounselorOnly = roleConfig.role === 'COUNSELOR';
 
   const [detail, setDetail] = useState<CourseParticipantDetail | null>(null);
   const [attendances, setAttendances] = useState<AttendanceListItem[]>([]);
+  const [riskInfo, setRiskInfo] = useState<CompletionRiskItem | null>(null);
   const [memos, setMemos] = useState<ParticipantMemoItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [activeModal, setActiveModal] = useState<'counselor' | 'session' | 'memo' | null>(null);
+  const [activeModal, setActiveModal] = useState<
+    'counselor' | 'session' | 'memo' | 'status' | null
+  >(null);
   const [sessionType, setSessionType] = useState<CounselingType>('PRE_SESSION');
 
   const fetchAll = useCallback(() => {
@@ -63,7 +76,21 @@ export default function ParticipantDetailPage() {
     }
     setError(null);
     getCourseParticipant(cpId)
-      .then((res) => setDetail(res.data.data))
+      .then((res) => {
+        const d = res.data.data;
+        setDetail(d);
+        // 출결 기반 수료 위험도 — 회차 단위 조회 후 이 수강건 항목만 추출
+        if (d?.courseId != null) {
+          getCompletionRisk(d.courseId)
+            .then((r) => {
+              const items = r.data.data?.items ?? [];
+              setRiskInfo(items.find((it) => it.courseParticipantId === cpId) ?? null);
+            })
+            .catch(() => setRiskInfo(null));
+        } else {
+          setRiskInfo(null);
+        }
+      })
       .catch((err) => setError(apiErrorMessage(err, '참여자 정보를 불러오지 못했습니다.')));
     getAttendances({ courseParticipantId: cpId, size: 100 })
       .then((res) => setAttendances(res.data.data?.content ?? []))
@@ -101,18 +128,6 @@ export default function ParticipantDetailPage() {
 
     return { selection, preStep, education, completion, post1Step, post2Step };
   }, [detail, attendedDays]);
-
-  const handleStatusChange = async (next: string) => {
-    if (!detail || next === detail.status) return;
-    const label = CP_STATUS_LABELS[next as CourseParticipantStatus] ?? next;
-    if (!window.confirm(`진행상태를 '${label}'(으)로 변경할까요?`)) return;
-    try {
-      await changeCourseParticipantStatus(cpId, next);
-      fetchAll();
-    } catch (err) {
-      alert(apiErrorMessage(err, '진행상태 변경에 실패했습니다.'));
-    }
-  };
 
   const handleContactAttempt = async () => {
     try {
@@ -154,6 +169,10 @@ export default function ParticipantDetailPage() {
   const preSlot = slotOf(detail.counselors, 'PRE_SESSION');
   const post1Slot = slotOf(detail.counselors, 'POST_SESSION_1');
   const post2Slot = slotOf(detail.counselors, 'POST_SESSION_2');
+  // 상담 세션 기록 버튼 노출: consult 권한 + (관리 롤이거나 본인 배정 슬롯) — 미배정 슬롯 편집 차단
+  const canRecordSlot = (slot?: CounselorSummary) =>
+    roleConfig.can.consult === 1 &&
+    (!isCounselorOnly || (slot != null && slot.counselorId === currentUserId));
   const roundText = [
     detail.regionName,
     detail.localCourseNumber != null ? `${detail.localCourseNumber}회차` : detail.courseName,
@@ -201,26 +220,9 @@ export default function ParticipantDetailPage() {
         </div>
         <div className="actions">
           {canChangeStatus && (
-            <div className="select" title="진행상태 변경">
-              <span className="ico">진행상태</span>
-              <select
-                value={status}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  fontWeight: 'inherit',
-                  outline: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                {Object.entries(CP_STATUS_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <button className="btn" title="진행상태 변경" onClick={() => setActiveModal('status')}>
+              진행상태 변경 · {statusLabel}
+            </button>
           )}
           {roleConfig.can.consult === 1 && (
             <button className="btn" id="btn-consult" onClick={() => navigate('/consulting')}>
@@ -246,6 +248,15 @@ export default function ParticipantDetailPage() {
           <span className={`chip ${statusChip}`} id="d-status">
             {statusLabel}
           </span>
+          {riskInfo && (
+            <span
+              className={`chip ${RISK_STATUS_CHIP[riskInfo.riskStatus]}`}
+              title="출결 기반 수료 위험도 (서버 계산값)"
+            >
+              출석률 {riskInfo.attendanceRate.toFixed(1)}% ·{' '}
+              {RISK_STATUS_LABELS[riskInfo.riskStatus]}
+            </span>
+          )}
         </div>
         <div className="rail">
           <div className="step done">
@@ -361,7 +372,7 @@ export default function ParticipantDetailPage() {
           <div className="card">
             <div className="card-h">
               <span className="section-title">사전상담 (대면)</span>
-              {roleConfig.can.consult === 1 && (
+              {canRecordSlot(preSlot) && (
                 <button
                   className="btn"
                   style={{ marginLeft: 'auto', padding: '5px 11px', fontSize: '12px' }}
@@ -465,8 +476,22 @@ export default function ParticipantDetailPage() {
                 <span className="k">수료일</span>
                 <span className="v">{detail.completionDate ?? '—'}</span>
               </div>
+              <div className="kv">
+                <span className="k">수료 위험도</span>
+                <span className="v">
+                  {riskInfo ? (
+                    <span className={`chip ${RISK_STATUS_CHIP[riskInfo.riskStatus]}`}>
+                      {RISK_STATUS_LABELS[riskInfo.riskStatus]} · 출석률{' '}
+                      {riskInfo.attendanceRate.toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span className="muted">집계 전</span>
+                  )}
+                </span>
+              </div>
               <p className="muted" style={{ fontSize: '11.5px', marginTop: '6px' }}>
-                · 수료/미수료 처리는 상단 진행상태 변경으로 반영됩니다.
+                · 수료/미수료 처리는 상단 진행상태 변경으로 반영됩니다. · 위험도는 출결 기준 서버
+                판정값입니다.
               </p>
             </div>
           </div>
@@ -476,7 +501,7 @@ export default function ParticipantDetailPage() {
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="card-h">
           <span className="section-title">사후상담 (대면 2회)</span>
-          {roleConfig.can.consult === 1 && (
+          {canRecordSlot(post1Slot?.completed ? post2Slot : post1Slot) && (
             <button
               className="btn"
               style={{ marginLeft: 'auto', padding: '5px 11px', fontSize: '12px' }}
@@ -582,12 +607,23 @@ export default function ParticipantDetailPage() {
         courseParticipantId={cpId}
         counselors={detail.counselors}
         defaultType={sessionType}
+        currentUserId={currentUserId}
+        counselorOnly={isCounselorOnly}
         onSaved={fetchAll}
       />
       <ParticipantMemoModal
         isOpen={activeModal === 'memo'}
         onClose={() => setActiveModal(null)}
         courseParticipantId={cpId}
+        onSaved={fetchAll}
+      />
+      <StatusChangeModal
+        isOpen={activeModal === 'status'}
+        onClose={() => setActiveModal(null)}
+        courseParticipantId={cpId}
+        currentStatus={detail.status}
+        riskStatus={riskInfo?.riskStatus}
+        attendanceRate={riskInfo?.attendanceRate}
         onSaved={fetchAll}
       />
     </section>

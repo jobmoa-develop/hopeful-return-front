@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { ApiResponse } from './courses';
+import type { ApiResponse, PageData } from './courses';
 
 // 상담 슬롯 3분화(V10) — 구 값 PRE/POST 전송 시 400
 export type CounselingType = 'PRE_SESSION' | 'POST_SESSION_1' | 'POST_SESSION_2';
@@ -76,7 +76,6 @@ export type RecordCounselingSessionRequest = {
   endedAt?: string | null;
   memo?: string | null;
 };
-
 
 export type CounselingSessionResponse = {
   courseParticipantId: number;
@@ -165,10 +164,81 @@ export function increaseContactAttempt(courseParticipantId: number) {
   );
 }
 
-
 export function enrollParticipant(payload: EnrollParticipantRequest) {
   return apiClient.post<ApiResponse<{ courseParticipantId: number; status: string }>>(
     '/api/course-participants',
+    payload,
+  );
+}
+
+// ── 상담 관리(course-participants 목록) · 일괄 처리 · 상담사 지정 ──────────────
+
+// GET /api/course-participants 목록 항목 (BE CourseParticipantListResponse.Item)
+export type CourseParticipantListItem = {
+  courseParticipantId: number;
+  participantName: string | null;
+  matchKey: string | null;
+  phone: string | null;
+  regionName: string | null;
+  courseName: string | null;
+  courseNumber: number | null;
+  localCourseNumber: number | null;
+  status: CourseParticipantStatus | string | null;
+  counselors: CounselorSummary[];
+};
+
+export type CourseParticipantListParams = {
+  courseId?: number;
+  regionId?: number;
+  courseNumber?: number;
+  status?: string;
+  keyword?: string;
+  page?: number;
+  size?: number;
+};
+
+// 수강생 목록 조회 — COUNSELOR는 본인 배정건만(서버측 스코프), 지역/회차/상태/검색어 필터
+export function getCourseParticipants(params: CourseParticipantListParams) {
+  return apiClient.get<ApiResponse<PageData<CourseParticipantListItem>>>(
+    '/api/course-participants',
+    {
+      params,
+    },
+  );
+}
+
+// 일괄 수료/미수료 처리 — 선택 수강건에 동일 상태·수료일·미수료 사유 적용
+export function bulkCompleteCourseParticipants(payload: {
+  courseParticipantIds: number[];
+  status: 'COMPLETED' | 'INCOMPLETE';
+  completionDate?: string; // "YYYY-MM-DD"
+  incompleteReason?: string;
+}) {
+  return apiClient.patch<ApiResponse<{ updatedCount: number; updatedIds: number[] }>>(
+    '/api/course-participants/completion/bulk',
+    payload,
+  );
+}
+
+export type AssignableCounselor = { counselorId: number; name: string | null };
+
+// 배정 가능 상담사 조회 — 해당 수강건 회차에 인력 배치된 상담사
+export function getAssignableCounselors(courseParticipantId: number) {
+  return apiClient.get<ApiResponse<{ counselors: AssignableCounselor[] }>>(
+    `/api/course-participants/${courseParticipantId}/assignable-counselors`,
+  );
+}
+
+// 단일 슬롯 상담사 지정 — COUNSELOR는 본인 배정건만, 대상은 회차 배치 상담사만(BE 검증)
+export function assignSlotCounselor(
+  courseParticipantId: number,
+  counselingType: CounselingType,
+  payload: { counselorId: number },
+) {
+  return apiClient.patch<
+    ApiResponse<{ courseParticipantId: number; counselors: CounselorSummary[] }>
+  >(
+    `/api/course-participants/${courseParticipantId}/counselors/${counselingType}/counselor`,
     payload,
   );
 }

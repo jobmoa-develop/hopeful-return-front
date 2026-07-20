@@ -1,14 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRole } from '../context/RoleContext';
-import { getParticipants } from '../api/participants';
-import type { ParticipantListItem } from '../api/participants';
-import { CP_STATUS_CHIP, CP_STATUS_LABELS } from '../api/courseParticipants';
-import type { CounselingType, CourseParticipantStatus } from '../api/courseParticipants';
-import { CounselingSessionModal } from '../components/ParticipantModals';
+import { useAuth } from '../context/AuthContext';
+import { getCourseParticipants, CP_STATUS_CHIP, CP_STATUS_LABELS } from '../api/courseParticipants';
+import type {
+  CourseParticipantListItem,
+  CounselingType,
+  CourseParticipantStatus,
+} from '../api/courseParticipants';
+import { getRegions } from '../api/regions';
+import type { RegionSummary } from '../api/regions';
+import { CounselingSessionModal, SlotCounselorAssignModal } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 
 const PAGE_SIZE = 100;
+const SEARCH_DEBOUNCE_MS = 300;
 const SLOT_COLUMNS: { type: CounselingType; label: string }[] = [
   { type: 'PRE_SESSION', label: '사전상담' },
   { type: 'POST_SESSION_1', label: '사후 1차' },
@@ -18,34 +24,66 @@ const SLOT_COLUMNS: { type: CounselingType; label: string }[] = [
 export default function ConsultingPage() {
   const navigate = useNavigate();
   const { roleConfig } = useRole();
+  const { user } = useAuth();
+  const currentUserId = user?.userId;
+  const isCounselorOnly = roleConfig.role === 'COUNSELOR';
 
-  const [items, setItems] = useState<ParticipantListItem[]>([]);
+  const [items, setItems] = useState<CourseParticipantListItem[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [sessionTarget, setSessionTarget] = useState<ParticipantListItem | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [sessionTarget, setSessionTarget] = useState<CourseParticipantListItem | null>(null);
+  const [assignTarget, setAssignTarget] = useState<CourseParticipantListItem | null>(null);
+
+  // 검색 필터 (서버측)
+  const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const [keyword, setKeyword] = useState('');
+  const [searchName, setSearchName] = useState('');
+  const [regionId, setRegionId] = useState<number | ''>('');
+  const [courseNumber, setCourseNumber] = useState('');
+  const [status, setStatus] = useState('');
+
+  const canConsult = roleConfig.can.consult === 1;
+  const canAssign = canConsult || roleConfig.can.editP === 1;
+  // 지역 목록(GET /api/regions)은 COUNSELOR 권한 밖 — 상담사는 어차피 본인 배정건만 조회하므로 지역 필터 생략
+  const canFilterRegion = roleConfig.role !== 'COUNSELOR';
+
+  useEffect(() => {
+    if (!canFilterRegion) return;
+    getRegions()
+      .then((res) => setRegions(res.data.data ?? []))
+      .catch(() => setRegions([]));
+  }, [canFilterRegion]);
+
+  // 이름 검색 디바운스
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchName(keyword.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [keyword]);
 
   const fetchList = useCallback(() => {
+    setLoading(true);
     setError(null);
-    getParticipants({ page: 0, size: PAGE_SIZE })
+    getCourseParticipants({
+      keyword: searchName || undefined,
+      regionId: regionId === '' ? undefined : Number(regionId),
+      courseNumber: courseNumber === '' ? undefined : Number(courseNumber),
+      status: status || undefined,
+      page: 0,
+      size: PAGE_SIZE,
+    })
       .then((res) => setItems(res.data.data?.content ?? []))
-      .catch((err) => setError(apiErrorMessage(err, '상담 대상 목록을 불러오지 못했습니다.')));
-  }, []);
+      .catch((err) => setError(apiErrorMessage(err, '상담 대상 목록을 불러오지 못했습니다.')))
+      .finally(() => setLoading(false));
+  }, [searchName, regionId, courseNumber, status]);
 
   useEffect(() => {
     fetchList();
   }, [fetchList]);
 
-  // 수강 이력이 있고 취소되지 않은 참여자만 상담 대상
-  const list = useMemo(
-    () => items.filter((p) => p.latestEnrollment && p.latestEnrollment.status !== 'CANCELED'),
-    [items],
-  );
-
-  const canConsult = roleConfig.can.consult === 1;
-
-  const handleOpenSession = (e: React.MouseEvent, p: ParticipantListItem) => {
-    e.stopPropagation();
-    setSessionTarget(p);
-  };
+  const roundText = (p: CourseParticipantListItem) =>
+    [p.regionName, p.localCourseNumber != null ? `${p.localCourseNumber}회차` : p.courseName]
+      .filter(Boolean)
+      .join(' · ') || '—';
 
   return (
     <section className="view active" id="view-consulting">
@@ -53,8 +91,77 @@ export default function ConsultingPage() {
         <span className="pb-ic">💬</span>
         <span id="perm-consulting-txt">
           {canConsult
-            ? '배정 참여자 상담 입력 가능 · 사전(대면1)·사후(대면2)'
+            ? '배정 참여자 상담 입력·상담사 지정 가능 · 사전(대면1)·사후(대면2)'
             : '상담 현황 조회만 가능'}
+        </span>
+      </div>
+
+      <div className="filters">
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+          <div className="searchbox" style={{ width: '170px', padding: '4px 10px' }}>
+            <input
+              type="text"
+              placeholder="이름·전화 검색..."
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              style={{ fontSize: '12px' }}
+            />
+          </div>
+          {canFilterRegion && (
+            <div className="select">
+              <span className="ico">지역</span>
+              <select
+                value={regionId}
+                onChange={(e) => setRegionId(e.target.value === '' ? '' : Number(e.target.value))}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="">전체</option>
+                {regions.map((r) => (
+                  <option key={r.regionId} value={r.regionId}>
+                    {r.regionName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="select">
+            <span className="ico">회차</span>
+            <input
+              type="number"
+              value={courseNumber}
+              onChange={(e) => setCourseNumber(e.target.value)}
+              placeholder="전체"
+              style={{ border: 'none', background: 'transparent', outline: 'none', width: '60px' }}
+            />
+          </div>
+          <div className="select">
+            <span className="ico">진행상태</span>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="">전체</option>
+              {(Object.keys(CP_STATUS_LABELS) as CourseParticipantStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {CP_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <span className="count">
+          총 {items.length}건{loading ? ' · 불러오는 중…' : ''}
         </span>
       </div>
 
@@ -82,33 +189,25 @@ export default function ConsultingPage() {
               </tr>
             </thead>
             <tbody id="consult-rows">
-              {list.map((p) => {
-                const e = p.latestEnrollment!;
-                const status = e.status as CourseParticipantStatus;
+              {items.map((p) => {
+                const st = p.status as CourseParticipantStatus;
                 return (
                   <tr
-                    key={p.participantId}
-                    onClick={() => navigate(`/participants/${e.courseParticipantId}`)}
+                    key={p.courseParticipantId}
+                    onClick={() => navigate(`/participants/${p.courseParticipantId}`)}
                   >
                     <td>
-                      <div className="pname">{p.name}</div>
+                      <div className="pname">{p.participantName}</div>
                       <div className="cell-sub">{p.matchKey ?? p.phone}</div>
                     </td>
+                    <td>{roundText(p)}</td>
                     <td>
-                      {[
-                        e.regionName,
-                        e.localCourseNumber != null ? `${e.localCourseNumber}회차` : e.courseName,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ') || '—'}
-                    </td>
-                    <td>
-                      <span className={`chip ${CP_STATUS_CHIP[status] ?? 'neutral'}`}>
-                        {CP_STATUS_LABELS[status] ?? e.status ?? '—'}
+                      <span className={`chip ${CP_STATUS_CHIP[st] ?? 'neutral'}`}>
+                        {CP_STATUS_LABELS[st] ?? p.status ?? '—'}
                       </span>
                     </td>
                     {SLOT_COLUMNS.map(({ type }) => {
-                      const slot = e.counselors.find((c) => c.status === type);
+                      const slot = p.counselors.find((c) => c.status === type);
                       return (
                         <td key={type}>
                           {slot ? (
@@ -126,15 +225,26 @@ export default function ConsultingPage() {
                         </td>
                       );
                     })}
-                    <td>
+                    <td onClick={(ev) => ev.stopPropagation()}>
                       {canConsult ? (
-                        <button
-                          className="btn"
-                          style={{ padding: '5px 11px', fontSize: '12px' }}
-                          onClick={(ev) => handleOpenSession(ev, p)}
-                        >
-                          상담 입력
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn"
+                            style={{ padding: '5px 11px', fontSize: '12px' }}
+                            onClick={() => setSessionTarget(p)}
+                          >
+                            상담 입력
+                          </button>
+                          {canAssign && (
+                            <button
+                              className="btn"
+                              style={{ padding: '5px 11px', fontSize: '12px' }}
+                              onClick={() => setAssignTarget(p)}
+                            >
+                              상담사 지정
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <span className="muted" style={{ fontSize: '11.5px' }}>
                           조회
@@ -144,7 +254,7 @@ export default function ConsultingPage() {
                   </tr>
                 );
               })}
-              {list.length === 0 && (
+              {!loading && items.length === 0 && (
                 <tr>
                   <td
                     colSpan={7}
@@ -158,14 +268,30 @@ export default function ConsultingPage() {
           </table>
         </div>
       </div>
-      <p className="note">※ 상담 완료 = 종료 일시 입력 기준 · 연락 5회 실패 시 지역담당자 보고</p>
+      <p className="note">
+        ※ 상담 완료 = 종료 일시 입력 기준 · 상담사는 본인 배정 참여자만 조회됩니다 · 상담사 지정은
+        해당 회차 배치 상담사만 가능
+      </p>
 
-      {sessionTarget?.latestEnrollment && (
+      {sessionTarget && (
         <CounselingSessionModal
           isOpen={true}
           onClose={() => setSessionTarget(null)}
-          courseParticipantId={sessionTarget.latestEnrollment.courseParticipantId}
-          counselors={sessionTarget.latestEnrollment.counselors}
+          courseParticipantId={sessionTarget.courseParticipantId}
+          counselors={sessionTarget.counselors}
+          currentUserId={currentUserId}
+          counselorOnly={isCounselorOnly}
+          onSaved={fetchList}
+        />
+      )}
+      {assignTarget && (
+        <SlotCounselorAssignModal
+          isOpen={true}
+          onClose={() => setAssignTarget(null)}
+          courseParticipantId={assignTarget.courseParticipantId}
+          counselors={assignTarget.counselors}
+          currentUserId={currentUserId}
+          counselorOnly={isCounselorOnly}
           onSaved={fetchList}
         />
       )}

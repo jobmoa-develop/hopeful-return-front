@@ -103,6 +103,25 @@ export function deleteAttendanceLeave(attendanceLeaveId: number) {
 
 export type RiskStatus = 'PASS' | 'SAFE' | 'WARNING' | 'DANGER' | 'FAIL' | 'UNKNOWN';
 
+// 수료 위험도 표시용 라벨/칩 색상 — BE 계산값(riskStatus)을 그대로 표시(프론트 재계산 없음)
+export const RISK_STATUS_LABELS: Record<RiskStatus, string> = {
+  PASS: '수료 완료',
+  SAFE: '수료 가능',
+  WARNING: '주의',
+  DANGER: '위험',
+  FAIL: '수료 불가',
+  UNKNOWN: '미집계',
+};
+
+export const RISK_STATUS_CHIP: Record<RiskStatus, string> = {
+  PASS: 'ok',
+  SAFE: 'ok',
+  WARNING: 'warn',
+  DANGER: 'danger',
+  FAIL: 'danger',
+  UNKNOWN: 'neutral',
+};
+
 export type CompletionRiskItem = {
   courseParticipantId: number;
   participantName: string;

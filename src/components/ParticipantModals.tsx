@@ -9,18 +9,61 @@ import { getUserRoles } from '../api/userRoles';
 import { createParticipant } from '../api/participants';
 import {
   COUNSELING_TYPE_LABELS,
+  CP_STATUS_LABELS,
+  assignSlotCounselor,
+  bulkCompleteCourseParticipants,
   changeCounselors,
+  changeCourseParticipantStatus,
+  completeCourseParticipant,
+  getAssignableCounselors,
   recordCounselingSession,
 } from '../api/courseParticipants';
-import type { CounselingType, CounselorSummary } from '../api/courseParticipants';
+import type {
+  AssignableCounselor,
+  CounselingType,
+  CounselorSummary,
+  CourseParticipantStatus,
+} from '../api/courseParticipants';
 import { createParticipantMemo } from '../api/participantMemos';
 import { apiErrorMessage } from '../api/apiError';
 import { getParticipants } from '../api/participants';
 import type { ParticipantListItem } from '../api/participants';
 import { enrollParticipant } from '../api/courseParticipants';
+import type { RiskStatus } from '../api/attendances';
 
 const COUNSELING_TYPES: CounselingType[] = ['PRE_SESSION', 'POST_SESSION_1', 'POST_SESSION_2'];
 const INFLOW_OPTS = ['소진공', '워크넷', '컨설턴트 연계', '사내 타사업부', '외부 홍보(당근·벼룩)'];
+
+// 상담 단계 체인의 "직전 슬롯" — 다음 상담사 지정 권한 판정용(PRE는 직전 없음 → 상담사 지정 불가)
+const PREDECESSOR_SLOT: Partial<Record<CounselingType, CounselingType>> = {
+  POST_SESSION_1: 'PRE_SESSION',
+  POST_SESSION_2: 'POST_SESSION_1',
+};
+
+// 이 사용자가 해당 슬롯의 세션(일시·메모)을 기록할 수 있는가 — COUNSELOR는 본인 배정 슬롯만
+function canRecordSlot(
+  counselors: CounselorSummary[],
+  type: CounselingType,
+  counselorOnly: boolean,
+  currentUserId?: number,
+): boolean {
+  const slot = counselors.find((c) => c.status === type);
+  if (!slot) return false;
+  return !counselorOnly || slot.counselorId === currentUserId;
+}
+
+// 이 사용자가 해당 슬롯의 상담사를 지정할 수 있는가 — COUNSELOR는 직전 슬롯 배정자만(체인)
+function canAssignSlot(
+  counselors: CounselorSummary[],
+  type: CounselingType,
+  counselorOnly: boolean,
+  currentUserId?: number,
+): boolean {
+  if (!counselorOnly) return true;
+  const predecessor = PREDECESSOR_SLOT[type];
+  if (!predecessor) return false;
+  return counselors.find((c) => c.status === predecessor)?.counselorId === currentUserId;
+}
 
 type CounselorOption = { userId: number; userName: string };
 
@@ -196,13 +239,13 @@ export function ParticipantRegisterModal({
         birthYear: birthYear ? Number(birthYear) : undefined,
         enrollment: hasEnrollment
           ? {
-            courseId: Number(courseId),
-            inflowType: inflowType || undefined,
-            applyDate: applyDate || undefined,
-            receptionDate: receptionDate || undefined,
-            basicEducation,
-            counselors: counselors.length > 0 ? counselors : undefined,
-          }
+              courseId: Number(courseId),
+              inflowType: inflowType || undefined,
+              applyDate: applyDate || undefined,
+              receptionDate: receptionDate || undefined,
+              basicEducation,
+              counselors: counselors.length > 0 ? counselors : undefined,
+            }
           : undefined,
       });
       onSaved();
@@ -470,6 +513,8 @@ interface CounselingSessionModalProps {
   courseParticipantId: number;
   counselors: CounselorSummary[];
   defaultType?: CounselingType;
+  currentUserId?: number;
+  counselorOnly?: boolean;
   onSaved: () => void;
 }
 
@@ -479,11 +524,19 @@ export function CounselingSessionModal({
   courseParticipantId,
   counselors,
   defaultType,
+  currentUserId,
+  counselorOnly = false,
   onSaved,
 }: CounselingSessionModalProps) {
   const assignedTypes = useMemo(
     () => COUNSELING_TYPES.filter((type) => counselors.some((c) => c.status === type)),
     [counselors],
+  );
+  // COUNSELOR는 본인 배정 슬롯만 기록 가능(관리 롤은 배정된 전 슬롯).
+  const editableTypes = useMemo(
+    () =>
+      assignedTypes.filter((type) => canRecordSlot(counselors, type, counselorOnly, currentUserId)),
+    [assignedTypes, counselors, counselorOnly, currentUserId],
   );
   const [counselingType, setCounselingType] = useState<CounselingType>('PRE_SESSION');
   const [startedAt, setStartedAt] = useState('');
@@ -493,8 +546,10 @@ export function CounselingSessionModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setCounselingType(defaultType ?? assignedTypes[0] ?? 'PRE_SESSION');
-  }, [isOpen, defaultType, assignedTypes]);
+    const preferred =
+      defaultType && editableTypes.includes(defaultType) ? defaultType : editableTypes[0];
+    setCounselingType(preferred ?? defaultType ?? assignedTypes[0] ?? 'PRE_SESSION');
+  }, [isOpen, defaultType, editableTypes, assignedTypes]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -505,10 +560,16 @@ export function CounselingSessionModal({
   }, [isOpen, counselingType, counselors]);
 
   const currentCounselor = counselors.find((c) => c.status === counselingType);
+  // 현재 선택 슬롯을 이 사용자가 편집할 수 있는가(권한 게이트)
+  const canEditCurrent = canRecordSlot(counselors, counselingType, counselorOnly, currentUserId);
 
   const handleSave = async () => {
     if (!currentCounselor) {
       alert('해당 상담 구분에 배정된 상담사가 없습니다. 상담사 배정을 먼저 진행하세요.');
+      return;
+    }
+    if (!canEditCurrent) {
+      alert('본인에게 배정된 상담만 기록할 수 있습니다.');
       return;
     }
     setSaving(true);
@@ -543,14 +604,23 @@ export function CounselingSessionModal({
             value={counselingType}
             onChange={(e) => setCounselingType(e.target.value as CounselingType)}
           >
-            {COUNSELING_TYPES.map((type) => (
-              <option key={type} value={type} disabled={!assignedTypes.includes(type)}>
-                {COUNSELING_TYPE_LABELS[type]}
-                {!assignedTypes.includes(type) ? ' (배정 없음)' : ''}
-              </option>
-            ))}
+            {COUNSELING_TYPES.map((type) => {
+              const isEditable = editableTypes.includes(type);
+              const isAssigned = assignedTypes.includes(type);
+              return (
+                <option key={type} value={type} disabled={!isEditable}>
+                  {COUNSELING_TYPE_LABELS[type]}
+                  {!isAssigned ? ' (배정 없음)' : !isEditable ? ' (권한 없음)' : ''}
+                </option>
+              );
+            })}
           </select>
         </div>
+        {!canEditCurrent && (
+          <div className="field full" style={{ color: 'var(--danger)', fontSize: '12.5px' }}>
+            본인에게 배정된 상담만 기록할 수 있습니다.
+          </div>
+        )}
         <div className="field full">
           <label>담당 상담사</label>
           <input
@@ -565,6 +635,7 @@ export function CounselingSessionModal({
             type="datetime-local"
             value={startedAt}
             onChange={(e) => setStartedAt(e.target.value)}
+            disabled={!canEditCurrent}
           />
         </div>
         <div className="field">
@@ -573,6 +644,7 @@ export function CounselingSessionModal({
             type="datetime-local"
             value={endedAt}
             onChange={(e) => setEndedAt(e.target.value)}
+            disabled={!canEditCurrent}
           />
         </div>
         <div className="field full">
@@ -581,6 +653,7 @@ export function CounselingSessionModal({
             value={memo}
             onChange={(e) => setMemo(e.target.value)}
             placeholder="상담 내용을 입력하세요."
+            disabled={!canEditCurrent}
           />
         </div>
       </div>
@@ -729,14 +802,26 @@ export function ParticipantEnrollModal({
       <div className="form-grid">
         <div className="field full">
           <label>참여자 이름 검색</label>
-          <input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="이름 입력" />
+          <input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="이름 입력"
+          />
         </div>
         <div className="field full">
           {searching && <span className="muted">검색 중...</span>}
           {!searching && keyword.trim() && results.length === 0 && (
             <span className="muted">검색 결과가 없습니다.</span>
           )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto' }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 6,
+              maxHeight: 220,
+              overflowY: 'auto',
+            }}
+          >
             {results.map((p) => (
               <div
                 key={p.participantId}
@@ -746,7 +831,8 @@ export function ParticipantEnrollModal({
                   border: `1px solid ${selected?.participantId === p.participantId ? 'var(--primary, #2563eb)' : 'var(--line)'}`,
                   borderRadius: 8,
                   cursor: 'pointer',
-                  background: selected?.participantId === p.participantId ? '#eef4ff' : 'transparent',
+                  background:
+                    selected?.participantId === p.participantId ? '#eef4ff' : 'transparent',
                 }}
               >
                 <b>{p.name}</b>
@@ -762,8 +848,262 @@ export function ParticipantEnrollModal({
   );
 }
 
+// 한국시간(KST) 기준 오늘 날짜("YYYY-MM-DD")
+function kstToday(): string {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+}
+
+// 5. 일괄 수료/미수료 처리 모달 (참여자 관리 메인)
+interface BulkCompletionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  courseParticipantIds: number[];
+  status: 'COMPLETED' | 'INCOMPLETE';
+  onSaved: () => void;
+}
+
+export function BulkCompletionModal({
+  isOpen,
+  onClose,
+  courseParticipantIds,
+  status,
+  onSaved,
+}: BulkCompletionModalProps) {
+  const [completionDate, setCompletionDate] = useState('');
+  const [incompleteReason, setIncompleteReason] = useState('');
+  const [saving, setSaving] = useState(false);
+  const isComplete = status === 'COMPLETED';
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCompletionDate(kstToday());
+    setIncompleteReason('');
+  }, [isOpen]);
+
+  const handleSave = async () => {
+    if (isComplete && !completionDate) {
+      alert('수료일을 입력하세요.');
+      return;
+    }
+    if (!isComplete && !incompleteReason.trim()) {
+      alert('미수료 사유를 입력하세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await bulkCompleteCourseParticipants({
+        courseParticipantIds,
+        status,
+        completionDate: isComplete ? completionDate : undefined,
+        incompleteReason: isComplete ? undefined : incompleteReason.trim(),
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '일괄 처리에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isComplete ? '일괄 수료 처리' : '일괄 미수료 처리'}
+      onSave={handleSave}
+      saving={saving}
+      note={`※ 선택한 ${courseParticipantIds.length}건에 동일하게 반영됩니다`}
+    >
+      <div className="form-grid">
+        {isComplete && (
+          <div className="field full" style={{ color: 'var(--danger)', fontSize: '12.5px' }}>
+            수료기준 미달시 진짜 수료로 변경하시겠습니까?
+          </div>
+        )}
+        <div className="field full">
+          <label>대상 건수</label>
+          <input
+            value={`${courseParticipantIds.length}건`}
+            disabled
+            style={{ background: '#f4f6f9', color: '#69768a' }}
+          />
+        </div>
+        {isComplete ? (
+          <div className="field full">
+            <label>
+              수료일<span className="req">*</span>
+            </label>
+            <input
+              type="date"
+              value={completionDate}
+              onChange={(e) => setCompletionDate(e.target.value)}
+            />
+          </div>
+        ) : (
+          <div className="field full">
+            <label>
+              미수료 사유<span className="req">*</span>
+            </label>
+            <input
+              value={incompleteReason}
+              onChange={(e) => setIncompleteReason(e.target.value)}
+              placeholder="예: 출석 기준 미달"
+            />
+          </div>
+        )}
+      </div>
+    </ApiModal>
+  );
+}
+
+// 6. 진행상태 변경 모달 (참여자 상세) — 수료 시 수료일, 미수료 시 사유 입력
+interface StatusChangeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  courseParticipantId: number;
+  currentStatus: CourseParticipantStatus | string;
+  riskStatus?: RiskStatus;
+  attendanceRate?: number;
+  onSaved: () => void;
+}
+
+const STATUS_OPTIONS: CourseParticipantStatus[] = [
+  'APPLIED',
+  'CONFIRMED',
+  'COMPLETED',
+  'INCOMPLETE',
+  'CANCELED',
+];
+
+export function StatusChangeModal({
+  isOpen,
+  onClose,
+  courseParticipantId,
+  currentStatus,
+  riskStatus,
+  attendanceRate,
+  onSaved,
+}: StatusChangeModalProps) {
+  const [nextStatus, setNextStatus] = useState<CourseParticipantStatus>('CONFIRMED');
+  const [completionDate, setCompletionDate] = useState('');
+  const [incompleteReason, setIncompleteReason] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setNextStatus((currentStatus as CourseParticipantStatus) ?? 'CONFIRMED');
+    setCompletionDate(kstToday());
+    setIncompleteReason('');
+  }, [isOpen, currentStatus]);
+
+  // 수료 기준 미달 경고: 출결 위험도가 PASS(기준 충족)가 아닐 때만 노출.
+  // riskStatus 미조회/UNKNOWN이면 정보 부재이므로 안전하게 경고 유지.
+  const showCompletionWarning = nextStatus === 'COMPLETED' && riskStatus !== 'PASS';
+
+  const handleSave = async () => {
+    if (nextStatus === (currentStatus as CourseParticipantStatus)) {
+      onClose();
+      return;
+    }
+    if (nextStatus === 'COMPLETED' && !completionDate) {
+      alert('수료일을 입력하세요.');
+      return;
+    }
+    if (nextStatus === 'INCOMPLETE' && !incompleteReason.trim()) {
+      alert('미수료 사유를 입력하세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (nextStatus === 'COMPLETED' || nextStatus === 'INCOMPLETE') {
+        await completeCourseParticipant(courseParticipantId, {
+          status: nextStatus,
+          completionDate: nextStatus === 'COMPLETED' ? completionDate : undefined,
+          incompleteReason: nextStatus === 'INCOMPLETE' ? incompleteReason.trim() : undefined,
+        });
+      } else {
+        await changeCourseParticipantStatus(courseParticipantId, nextStatus);
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '진행상태 변경에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="진행상태 변경"
+      onSave={handleSave}
+      saving={saving}
+    >
+      <div className="form-grid">
+        <div className="field full">
+          <label>진행상태</label>
+          <select
+            value={nextStatus}
+            onChange={(e) => setNextStatus(e.target.value as CourseParticipantStatus)}
+          >
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {CP_STATUS_LABELS[s]}
+              </option>
+            ))}
+          </select>
+        </div>
+        {nextStatus === 'COMPLETED' && (
+          <>
+            {showCompletionWarning && (
+              <div className="field full" style={{ color: 'var(--danger)', fontSize: '12.5px' }}>
+                {typeof attendanceRate === 'number'
+                  ? `출석률 ${attendanceRate.toFixed(1)}% — 수료기준 미달 상태입니다. 진짜 수료로 변경하시겠습니까?`
+                  : '수료기준 미달시 진짜 수료로 변경하시겠습니까?'}
+              </div>
+            )}
+            <div className="field full">
+              <label>
+                수료일<span className="req">*</span>
+              </label>
+              <input
+                type="date"
+                value={completionDate}
+                onChange={(e) => setCompletionDate(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        {nextStatus === 'INCOMPLETE' && (
+          <div className="field full">
+            <label>
+              미수료 사유<span className="req">*</span>
+            </label>
+            <input
+              value={incompleteReason}
+              onChange={(e) => setIncompleteReason(e.target.value)}
+              placeholder="예: 출석 기준 미달"
+            />
+          </div>
+        )}
+      </div>
+    </ApiModal>
+  );
+}
+
 // --- 3. 출결/조퇴·외출 관리 모달 (AttendanceApiModal) ---
-import { getAttendance, createAttendance, updateAttendance, deleteAttendance, createAttendanceLeave, updateAttendanceLeave, deleteAttendanceLeave } from '../api/attendances';
+import {
+  getAttendance,
+  createAttendance,
+  updateAttendance,
+  deleteAttendance,
+  createAttendanceLeave,
+  updateAttendanceLeave,
+  deleteAttendanceLeave,
+} from '../api/attendances';
 
 interface AttendanceApiModalProps {
   isOpen: boolean;
@@ -906,7 +1246,8 @@ export function AttendanceApiModal({
 
   const handleDeleteAttendance = async () => {
     if (!isAdmin || !attendanceId) return;
-    if (!window.confirm('정말 삭제하시겠습니까? 관련 조퇴/외출 기록도 모두 삭제될 수 있습니다.')) return;
+    if (!window.confirm('정말 삭제하시겠습니까? 관련 조퇴/외출 기록도 모두 삭제될 수 있습니다.'))
+      return;
     setSaving(true);
     try {
       await deleteAttendance(attendanceId);
@@ -947,11 +1288,15 @@ export function AttendanceApiModal({
         <button
           className={`btn ${activeTab === 'ATTEND' ? 'primary' : ''}`}
           onClick={() => setActiveTab('ATTEND')}
-        >출결 관리</button>
+        >
+          출결 관리
+        </button>
         <button
           className={`btn ${activeTab === 'LEAVE' ? 'primary' : ''}`}
           onClick={() => setActiveTab('LEAVE')}
-        >조퇴·외출 관리</button>
+        >
+          조퇴·외출 관리
+        </button>
       </div>
 
       {loading && <div>로딩 중...</div>}
@@ -961,7 +1306,11 @@ export function AttendanceApiModal({
           {attendanceId && (
             <div className="field full">
               <label>현재 출결 상태 (자동 판정)</label>
-              <input value={currentStatus} disabled style={{ background: '#f4f6f9', color: '#69768a' }} />
+              <input
+                value={currentStatus}
+                disabled
+                style={{ background: '#f4f6f9', color: '#69768a' }}
+              />
             </div>
           )}
           <div className="field">
@@ -1042,6 +1391,137 @@ export function AttendanceApiModal({
           )}
         </div>
       )}
+    </ApiModal>
+  );
+}
+
+// 7. 상담 슬롯 상담사 지정 모달 (상담 관리) — 회차 배치 상담사만 선택 가능
+interface SlotCounselorAssignModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  courseParticipantId: number;
+  counselors: CounselorSummary[];
+  currentUserId?: number;
+  counselorOnly?: boolean;
+  onSaved: () => void;
+}
+
+export function SlotCounselorAssignModal({
+  isOpen,
+  onClose,
+  courseParticipantId,
+  counselors,
+  currentUserId,
+  counselorOnly = false,
+  onSaved,
+}: SlotCounselorAssignModalProps) {
+  const [options, setOptions] = useState<AssignableCounselor[]>([]);
+  const [slots, setSlots] = useState<Record<CounselingType, number | ''>>({
+    PRE_SESSION: '',
+    POST_SESSION_1: '',
+    POST_SESSION_2: '',
+  });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const next: Record<CounselingType, number | ''> = {
+      PRE_SESSION: '',
+      POST_SESSION_1: '',
+      POST_SESSION_2: '',
+    };
+    for (const c of counselors) {
+      if (COUNSELING_TYPES.includes(c.status as CounselingType)) {
+        next[c.status as CounselingType] = c.counselorId;
+      }
+    }
+    setSlots(next);
+    getAssignableCounselors(courseParticipantId)
+      .then((res) => setOptions(res.data.data?.counselors ?? []))
+      .catch(() => setOptions([]));
+  }, [isOpen, courseParticipantId, counselors]);
+
+  const currentByType = useMemo(() => {
+    const map: Record<string, number | undefined> = {};
+    for (const c of counselors) map[c.status] = c.counselorId;
+    return map;
+  }, [counselors]);
+
+  const handleSave = async () => {
+    // 값이 있고 기존과 다르며, 이 사용자가 지정 권한을 가진(체인) 슬롯만 반영한다.
+    const changed = COUNSELING_TYPES.filter(
+      (type) =>
+        slots[type] !== '' &&
+        Number(slots[type]) !== currentByType[type] &&
+        canAssignSlot(counselors, type, counselorOnly, currentUserId),
+    );
+    if (changed.length === 0) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      for (const type of changed) {
+        await assignSlotCounselor(courseParticipantId, type, { counselorId: Number(slots[type]) });
+      }
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '상담사 지정에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="상담사 지정"
+      onSave={handleSave}
+      saving={saving}
+      note="※ 변경한 슬롯의 상담사만 지정됩니다"
+    >
+      <div className="form-grid">
+        {options.length === 0 && (
+          <div className="field full muted" style={{ fontSize: '12px' }}>
+            이 회차에 인력 배치된 상담사가 없습니다. 인력배정에서 상담사를 먼저 배치하세요.
+          </div>
+        )}
+        {COUNSELING_TYPES.map((type) => {
+          const assignable = canAssignSlot(counselors, type, counselorOnly, currentUserId);
+          return (
+            <div className="field full" key={type}>
+              <label>
+                {COUNSELING_TYPE_LABELS[type]}
+                {counselorOnly && !assignable ? ' (지정 권한 없음)' : ''}
+              </label>
+              <select
+                value={slots[type]}
+                disabled={!assignable}
+                onChange={(e) =>
+                  setSlots((prev) => ({
+                    ...prev,
+                    [type]: e.target.value === '' ? '' : Number(e.target.value),
+                  }))
+                }
+              >
+                <option value="">배정 안 함</option>
+                {options.map((c) => (
+                  <option key={c.counselorId} value={c.counselorId}>
+                    {c.name ?? `#${c.counselorId}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
+      </div>
+      <p className="muted" style={{ fontSize: '11.5px', marginTop: '10px' }}>
+        · 지정 대상은 해당 회차에 배치된 상담사만 선택할 수 있습니다. 상담사 교체 시 이전 세션
+        기록은 초기화됩니다.
+        {counselorOnly ? ' · 상담사는 본인 담당 다음 단계의 상담사만 지정할 수 있습니다.' : ''}
+      </p>
     </ApiModal>
   );
 }
