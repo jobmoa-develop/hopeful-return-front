@@ -12,6 +12,7 @@ import {
 } from '../api/courseDailyStaff';
 import type {
   AssignConflict,
+  AssignUnavailable,
   CandidateBusy,
   CourseDailyStaffItem,
   SessionTypeValue,
@@ -42,6 +43,10 @@ const counselorRowKey = (idx: number) => `counselor-${idx}`;
 const sessionsOverlap = (a: SessionTypeValue, b: SessionTypeValue) =>
   a === 'FULL' || b === 'FULL' || a === b;
 
+// 세션 코드 → 표시 라벨
+const sessionLabel = (s: SessionTypeValue): string =>
+  s === 'AM' ? '오전' : s === 'PM' ? '오후' : '종일';
+
 // 후보가 해당 날짜·세션에 타 회차 배정(busy)으로 겹치는지 → 겹치는 busy 반환
 const busyConflictOf = (
   candidate: StaffCandidate | undefined,
@@ -66,8 +71,8 @@ const yearOf = (c: CourseSummary): number | undefined =>
 
 // 강좌의 교육일(day1~day5) → ISO 배열(빈 값 제외)
 const courseDates = (c?: CourseSummary): string[] =>
-  [c?.day1Date, c?.day2Date, c?.day3Date, c?.day4Date, c?.day5Date].filter(
-    (d): d is string => Boolean(d),
+  [c?.day1Date, c?.day2Date, c?.day3Date, c?.day4Date, c?.day5Date].filter((d): d is string =>
+    Boolean(d),
   );
 
 // 기존 배정 목록 → 그리드 역피벗(상담사는 날짜별 다중 → counselor-0,1,… 확장)
@@ -123,9 +128,13 @@ export default function AssignPage() {
   const [bulkCounselors, setBulkCounselors] = useState<(number | '')[]>(['']);
   const [hasExistingAssignments, setHasExistingAssignments] = useState(false);
 
-  // 일괄 적용 중복 경고 모달 / 저장 중복 확인 모달
+  // 일괄 적용 중복 경고 모달 / 저장 중복 확인 모달 / 근무 불가일 차단(하드 블록) 모달
   const [bulkConflict, setBulkConflict] = useState<BulkFill[] | null>(null);
   const [saveConflict, setSaveConflict] = useState<AssignConflict[] | null>(null);
+  const [unavailableBlock, setUnavailableBlock] = useState<AssignUnavailable[] | null>(null);
+
+  // 신규/수정 셀 구분 표기용 — 로드 시점 그리드 스냅샷(깊은 복사)
+  const [originalGrid, setOriginalGrid] = useState<Grid>({});
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -210,8 +219,11 @@ export default function AssignPage() {
         candidateList = [];
       }
 
-      const { grid: nextGrid, counselorCount: nextCount, nameById: assignNames } =
-        buildGridFromAssignments(assignments);
+      const {
+        grid: nextGrid,
+        counselorCount: nextCount,
+        nameById: assignNames,
+      } = buildGridFromAssignments(assignments);
       const candNames: Record<number, string> = {};
       candidateList.forEach((c) => {
         candNames[c.userId] = c.name;
@@ -220,11 +232,13 @@ export default function AssignPage() {
       setCandidates(candidateList);
       setNameById({ ...candNames, ...assignNames });
       setGrid(nextGrid);
+      setOriginalGrid(structuredClone(nextGrid)); // 신규/수정 비교 기준 스냅샷
       setCounselorCount(nextCount);
       setBulk({});
       setBulkCounselors(Array.from({ length: nextCount }, () => '' as const));
       setBulkConflict(null);
       setSaveConflict(null);
+      setUnavailableBlock(null);
       setHasExistingAssignments(assignments.length > 0);
     } catch (error) {
       resetBoard();
@@ -238,11 +252,13 @@ export default function AssignPage() {
 
   const resetBoard = () => {
     setGrid({});
+    setOriginalGrid({});
     setBulk({});
     setBulkCounselors(['']);
     setCounselorCount(1);
     setBulkConflict(null);
     setSaveConflict(null);
+    setUnavailableBlock(null);
     setHasExistingAssignments(false);
   };
 
@@ -269,7 +285,8 @@ export default function AssignPage() {
     const c = candidates.find((x) => x.userId === userId);
     if (!c || !c.staffRoles.includes(role.staffRole)) return false;
     return c.availability.some(
-      (a) => a.scheduleDate === dateISO && (a.sessionType === 'FULL' || a.sessionType === role.session),
+      (a) =>
+        a.scheduleDate === dateISO && (a.sessionType === 'FULL' || a.sessionType === role.session),
     );
   };
 
@@ -333,29 +350,44 @@ export default function AssignPage() {
     }
   };
 
-  // 셀 옵션: 해당 역할·날짜 후보(불가일 + 타 회차 중복 제외). PM 은 박문순 고정.
+  // 해당 역할·날짜·세션에 실제 배정 가능한 후보(불가일 + 타 회차 중복 제외). 현재 선택자 주입 없음
+  // → 셀 가용 인원 수/불가 표기 계산에 사용. PM 은 busy 검사 면제(전 날짜 고정).
+  const availableCandidatesForCell = (role: AssignRole, dateISO: string): StaffCandidate[] => {
+    const isPm = role.staffRole === PM_ROLE;
+    return candidates.filter(
+      (c) =>
+        c.staffRoles.includes(role.staffRole) &&
+        c.availability.some(
+          (a) =>
+            a.scheduleDate === dateISO &&
+            (a.sessionType === 'FULL' || a.sessionType === role.session),
+        ) &&
+        (isPm || !busyConflictOf(c, dateISO, role.session)),
+    );
+  };
+
+  // 셀 옵션: 가용 후보 + 현재 선택자(가용 목록에 없더라도 유지 표시). PM 은 박문순 고정.
   const cellOptions = (
     role: AssignRole,
     dateISO: string,
     selectedId: number | undefined,
   ): StaffOption[] => {
-    const isPm = role.staffRole === PM_ROLE;
-    const options: StaffOption[] = candidates
-      .filter(
-        (c) =>
-          c.staffRoles.includes(role.staffRole) &&
-          c.availability.some(
-            (a) =>
-              a.scheduleDate === dateISO &&
-              (a.sessionType === 'FULL' || a.sessionType === role.session),
-          ) &&
-          (isPm || !busyConflictOf(c, dateISO, role.session)),
-      )
-      .map((c) => ({ userId: c.userId, name: c.name }));
+    const options: StaffOption[] = availableCandidatesForCell(role, dateISO).map((c) => ({
+      userId: c.userId,
+      name: c.name,
+    }));
     if (selectedId && !options.some((o) => o.userId === selectedId)) {
       return [{ userId: selectedId, name: nameById[selectedId] ?? `#${selectedId}` }, ...options];
     }
     return options;
+  };
+
+  // 로드 시점 대비 셀 상태: 'new'(빈→채움) | 'modified'(값 변경·해제) | 'same'
+  const cellDiff = (rowKey: string, dateISO: string): 'new' | 'modified' | 'same' => {
+    const orig = originalGrid[rowKey]?.[dateISO];
+    const cur = grid[rowKey]?.[dateISO];
+    if (cur === orig) return 'same';
+    return orig == null ? 'new' : 'modified';
   };
 
   // 일괄 적용 후보(역할 전체, 날짜 무관). PM 은 별도 고정 처리.
@@ -406,12 +438,21 @@ export default function AssignPage() {
         confirmConflicts,
       });
       setSaveConflict(null);
+      setUnavailableBlock(null);
       await loadCourseAssignment(selectedCourseId);
       setSaveMessage(`${wasEditing ? '수정' : '저장'} 완료: ${response.data.saved}건`);
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 409) {
-        const conflicts = (error.response.data?.data as AssignConflict[]) ?? [];
-        setSaveConflict(conflicts);
+        const items = (error.response.data?.data as (AssignConflict | AssignUnavailable)[]) ?? [];
+        // 불가일 하드 블록(ASSIGN_ON_UNAVAILABLE_DATE)은 courseName 이 없어 중복 충돌과 구분된다.
+        // override 없이 메시지만 노출(confirmConflicts 재요청 없음).
+        const isUnavailable = items.length > 0 && (items[0] as AssignConflict).courseName == null;
+        if (isUnavailable) {
+          setUnavailableBlock(items as AssignUnavailable[]);
+          setErrorMessage(getErrorMessage(error));
+          return;
+        }
+        setSaveConflict(items as AssignConflict[]);
         return;
       }
       setErrorMessage(getErrorMessage(error));
@@ -453,7 +494,13 @@ export default function AssignPage() {
             value={selectedYear ?? ''}
             disabled={isLoading || years.length === 0}
             onChange={(e) => handleYearChange(Number(e.target.value))}
-            style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              fontWeight: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
           >
             {years.map((y) => (
               <option key={y} value={y}>
@@ -468,7 +515,13 @@ export default function AssignPage() {
             value={selectedCourseId ?? ''}
             disabled={isLoading || coursesInYear.length === 0}
             onChange={(e) => handleCourseChange(Number(e.target.value))}
-            style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              fontWeight: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
           >
             {coursesInYear.map((c) => (
               <option key={c.courseId} value={c.courseId}>
@@ -491,12 +544,20 @@ export default function AssignPage() {
       )}
 
       {isLoading ? (
-        <div className="card" style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+        <div
+          className="card"
+          style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
+        >
           불러오는 중…
         </div>
       ) : !selectedCourse || dates.length === 0 ? (
-        <div className="card" style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
-          {courses.length === 0 ? '표시할 회차가 없습니다.' : '선택한 년도에 회차가 없거나 교육일이 지정되지 않았습니다.'}
+        <div
+          className="card"
+          style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
+        >
+          {courses.length === 0
+            ? '표시할 회차가 없습니다.'
+            : '선택한 년도에 회차가 없거나 교육일이 지정되지 않았습니다.'}
         </div>
       ) : (
         <>
@@ -516,7 +577,11 @@ export default function AssignPage() {
                     return (
                       <div className="assign-bulk-item" key={role.key}>
                         <label>{role.label}</label>
-                        <select className="assign-select" value={pmCandidate?.userId ?? ''} disabled>
+                        <select
+                          className="assign-select"
+                          value={pmCandidate?.userId ?? ''}
+                          disabled
+                        >
                           <option value={pmCandidate?.userId ?? ''}>{pmLabel} (고정)</option>
                         </select>
                       </div>
@@ -605,7 +670,11 @@ export default function AssignPage() {
                             <div className="pname">{label}</div>
                             {role.multi && counselorIdx === counselorCount - 1 && canEdit && (
                               <div className="assign-counselor-actions">
-                                <button className="btn tiny" disabled={isSaving} onClick={addCounselor}>
+                                <button
+                                  className="btn tiny"
+                                  disabled={isSaving}
+                                  onClick={addCounselor}
+                                >
                                   + 상담사
                                 </button>
                                 {counselorCount > 1 && (
@@ -626,29 +695,63 @@ export default function AssignPage() {
                             if (isPm) {
                               return (
                                 <td key={d}>
-                                  <select className="assign-select" value={pmCandidate?.userId ?? ''} disabled>
+                                  <select
+                                    className="assign-select"
+                                    value={pmCandidate?.userId ?? ''}
+                                    disabled
+                                  >
                                     <option value={pmCandidate?.userId ?? ''}>{pmLabel}</option>
                                   </select>
                                 </td>
                               );
                             }
+                            const avail = availableCandidatesForCell(role, d);
+                            // 가용 후보 0 + 현재 선택 없음 → 배정 불가일(세션) → 셀 비활성·불가 표기
+                            const blocked = avail.length === 0 && !selectedId;
+                            const diff = cellDiff(rowKey, d);
+                            const tdClass = [
+                              blocked ? 'assign-cell--unavailable' : '',
+                              diff === 'new' ? 'assign-cell--new' : '',
+                              diff === 'modified' ? 'assign-cell--modified' : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ');
                             return (
-                              <td key={d}>
+                              <td
+                                key={d}
+                                className={tdClass || undefined}
+                                title={
+                                  diff === 'new'
+                                    ? '신규 배정'
+                                    : diff === 'modified'
+                                      ? '수정됨'
+                                      : undefined
+                                }
+                              >
                                 <select
                                   className="assign-select"
                                   value={selectedId ?? ''}
-                                  disabled={controlsDisabled}
+                                  disabled={controlsDisabled || blocked}
                                   onChange={(e) =>
-                                    setCell(rowKey, d, e.target.value ? Number(e.target.value) : undefined)
+                                    setCell(
+                                      rowKey,
+                                      d,
+                                      e.target.value ? Number(e.target.value) : undefined,
+                                    )
                                   }
                                 >
-                                  <option value="">—</option>
+                                  <option value="">{blocked ? '불가' : '—'}</option>
                                   {cellOptions(role, d, selectedId).map((s) => (
                                     <option key={s.userId} value={s.userId}>
                                       {s.name}
                                     </option>
                                   ))}
                                 </select>
+                                <span
+                                  className={`assign-cell__count${avail.length === 0 ? ' is-zero' : ''}`}
+                                >
+                                  {avail.length === 0 ? '불가' : `가용 ${avail.length}`}
+                                </span>
                               </td>
                             );
                           })}
@@ -661,7 +764,15 @@ export default function AssignPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginTop: '10px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '12px',
+              marginTop: '10px',
+            }}
+          >
             <span className="muted" style={{ fontSize: '12.5px' }}>
               인원 일괄 적용 후 저장해야 강의회차에 정상 배정됩니다.
             </span>
@@ -729,15 +840,38 @@ export default function AssignPage() {
             detail: `${c.courseName} · ${c.staffRole}`,
           }))}
           actions={[
-            { label: '현재 회차로 이동 저장', primary: true, onClick: () => { setSaveConflict(null); confirmSaveMove(); } },
+            {
+              label: '현재 회차로 이동 저장',
+              primary: true,
+              onClick: () => {
+                setSaveConflict(null);
+                confirmSaveMove();
+              },
+            },
             { label: '취소', onClick: () => setSaveConflict(null) },
           ]}
         />
       )}
 
+      {/* 근무 불가일 배정 불가(하드 블록) — override 없이 확인만 */}
+      {unavailableBlock && (
+        <ConflictModal
+          title="근무 불가일 배정 불가"
+          description="아래 인력은 해당 날짜·시간대에 근무 불가로 등록되어 배정할 수 없습니다. 배정을 수정한 뒤 다시 저장하세요."
+          detailHeader="시간대"
+          rows={unavailableBlock.map((u) => ({
+            date: u.scheduleDate,
+            name: u.name,
+            detail: sessionLabel(u.sessionType),
+          }))}
+          actions={[{ label: '확인', primary: true, onClick: () => setUnavailableBlock(null) }]}
+        />
+      )}
+
       <p className="note">
         ※ 셀 선택지는 해당 날짜에 근무 가능하고 다른 회차에 중복되지 않는 직원만 표시됩니다.
-        상담사는 1명 이상 등록할 수 있으며 일괄 적용과 수가 연동됩니다. PM은 {pmLabel}으로 고정됩니다.
+        상담사는 1명 이상 등록할 수 있으며 일괄 적용과 수가 연동됩니다. PM은 {pmLabel}으로
+        고정됩니다.
       </p>
     </section>
   );
@@ -751,29 +885,47 @@ function ConflictModal({
   description,
   rows,
   actions,
+  detailHeader = '기존 배정(회차 · 역할)',
 }: {
   title: string;
   description: string;
   rows: ConflictRow[];
   actions: ConflictAction[];
+  detailHeader?: string;
 }) {
   return (
     <div
       style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
-        alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.4)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
       }}
     >
-      <div className="card" style={{ maxWidth: '520px', width: '92%', maxHeight: '80vh', overflow: 'auto', padding: '18px 20px' }}>
+      <div
+        className="card"
+        style={{
+          maxWidth: '520px',
+          width: '92%',
+          maxHeight: '80vh',
+          overflow: 'auto',
+          padding: '18px 20px',
+        }}
+      >
         <h3 style={{ margin: '0 0 6px' }}>{title}</h3>
-        <p className="muted" style={{ fontSize: '13px', marginTop: 0 }}>{description}</p>
+        <p className="muted" style={{ fontSize: '13px', marginTop: 0 }}>
+          {description}
+        </p>
         <div className="tbl-wrap" style={{ margin: '8px 0 14px' }}>
           <table className="att-table">
             <thead>
               <tr>
                 <th>날짜</th>
                 <th>인력</th>
-                <th>기존 배정(회차 · 역할)</th>
+                <th>{detailHeader}</th>
               </tr>
             </thead>
             <tbody>
@@ -789,11 +941,7 @@ function ConflictModal({
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
           {actions.map((a) => (
-            <button
-              key={a.label}
-              className={a.primary ? 'btn primary' : 'btn'}
-              onClick={a.onClick}
-            >
+            <button key={a.label} className={a.primary ? 'btn primary' : 'btn'} onClick={a.onClick}>
               {a.label}
             </button>
           ))}
