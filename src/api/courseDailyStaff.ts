@@ -3,12 +3,7 @@ import type { ApiResponse } from './courses';
 
 // 회차 배정 역할(StaffRole) — BE enum 과 동일
 export type StaffRoleValue =
-  | 'LECTURER'
-  | 'COUNSELOR'
-  | 'STAFF'
-  | 'PROJECT_MANAGER'
-  | 'PROJECT_LEADER'
-  | 'ADMIN_STAFF';
+  'LECTURER' | 'COUNSELOR' | 'STAFF' | 'PROJECT_MANAGER' | 'PROJECT_LEADER' | 'ADMIN_STAFF';
 
 export type SessionTypeValue = 'AM' | 'PM' | 'FULL';
 
@@ -51,6 +46,15 @@ export type AssignConflict = {
   courseId: number;
   courseName: string;
   staffRole: StaffRoleValue;
+};
+
+// 저장 시 근무 불가일과 겹쳐 거부된 항목(409 ASSIGN_ON_UNAVAILABLE_DATE 응답 data).
+// AssignConflict 와 달리 courseName 이 없다(override 없는 하드 블록) → 409 분기 판별자로 사용.
+export type AssignUnavailable = {
+  userId: number;
+  name: string;
+  scheduleDate: string;
+  sessionType: SessionTypeValue;
 };
 
 // GET /api/course-daily-staffs/candidates?courseId — 역할별·날짜별 가용 후보 직원

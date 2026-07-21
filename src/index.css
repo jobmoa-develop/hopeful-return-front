@@ -2055,6 +2055,39 @@ table.data tbody tr:hover {
     cursor: not-allowed
 }
 
+/* 근무 불가일(가용 후보 0) 셀 — 비활성·불가 표기 */
+.assign-cell--unavailable {
+    background: #f6f7f9
+}
+
+.assign-cell--unavailable .assign-select {
+    color: var(--muted-2);
+    border-style: dashed
+}
+
+/* 신규/수정 배정 셀 표기(로드 시점 대비) */
+.assign-cell--new {
+    box-shadow: inset 3px 0 0 var(--info)
+}
+
+.assign-cell--modified {
+    box-shadow: inset 3px 0 0 var(--warn)
+}
+
+/* 셀 가용 인원 수 배지 */
+.assign-cell__count {
+    display: block;
+    font-size: 10px;
+    color: var(--muted-2);
+    margin-top: 2px;
+    line-height: 1.2
+}
+
+.assign-cell__count.is-zero {
+    color: var(--danger);
+    font-weight: 600
+}
+
 .assign-table td {
     text-align: center;
     padding: 6px 8px
