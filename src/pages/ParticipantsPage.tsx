@@ -13,6 +13,7 @@ import {
   ParticipantRegisterModal,
   CounselorEditModal,
   BulkCompletionModal,
+  BulkImportModal,
 } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 
@@ -61,6 +62,7 @@ export default function ParticipantsPage() {
   const [selectedStatus, setSelectedStatus] = useState('전체');
 
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
   const [counselorEditTarget, setCounselorEditTarget] = useState<ParticipantListItem | null>(null);
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -234,10 +236,20 @@ export default function ParticipantsPage() {
 
         {roleConfig.can.register === 1 && (
           <button
+            className="btn"
+            id="btn-bulk-import"
+            onClick={() => setIsBulkImportOpen(true)}
+            style={{ marginLeft: '10px' }}
+          >
+            ⬆ 일괄 등록
+          </button>
+        )}
+        {roleConfig.can.register === 1 && (
+          <button
             className="btn primary"
             id="btn-add-participant"
             onClick={() => setIsRegisterOpen(true)}
-            style={{ marginLeft: '10px' }}
+            style={{ marginLeft: '8px' }}
           >
             + 참여자 등록
           </button>
@@ -441,6 +453,11 @@ export default function ParticipantsPage() {
       <ParticipantRegisterModal
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
+        onSaved={fetchList}
+      />
+      <BulkImportModal
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
         onSaved={fetchList}
       />
       {counselorEditTarget?.latestEnrollment && (
