@@ -12,6 +12,7 @@ import LoginPage from '../pages/LoginPage';
 import { useAuth } from '../context/AuthContext';
 import ProtectedRoute from './ProtectedRoute';
 import CourseCalendarPage from '../pages/CourseCalendarPage';
+import StaffScheduleManagePage from '../pages/StaffScheduleManagePage';
 
 function LoginRoute() {
   const { isAuthenticated } = useAuth();
@@ -112,6 +113,14 @@ export default function AppRoutes() {
           }
         />
       </Route>
+      <Route
+        path="/staff-schedules"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR']}>
+            <StaffScheduleManagePage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
