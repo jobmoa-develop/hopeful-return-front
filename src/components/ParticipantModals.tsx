@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRole } from '../context/RoleContext';
 import { getRegions } from '../api/regions';
@@ -14,12 +14,18 @@ import {
   bulkCompleteCourseParticipants,
   changeCounselors,
   changeCourseParticipantStatus,
+  commitBulkImport,
   completeCourseParticipant,
   getAssignableCounselors,
+  previewBulkImport,
   recordCounselingSession,
 } from '../api/courseParticipants';
 import type {
   AssignableCounselor,
+  BulkImportCommitItem,
+  BulkImportParsedRow,
+  BulkImportPreview,
+  BulkImportResult,
   CounselingType,
   CounselorSummary,
   CourseParticipantStatus,
@@ -1523,5 +1529,528 @@ export function SlotCounselorAssignModal({
         {counselorOnly ? ' · 상담사는 본인 담당 다음 단계의 상담사만 지정할 수 있습니다.' : ''}
       </p>
     </ApiModal>
+  );
+}
+
+// 7. 참여자 XLSX 일괄 등록 모달 — 업로드 → 과정명별 회차 매핑 → 확정 → 결과 리포트
+interface BulkImportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function courseLabel(c: CourseSummary): string {
+  const round = c.localCourseNumber ?? c.courseNumber;
+  const parts = [c.regionName, c.courseName].filter(Boolean).join(' · ');
+  const roundText = round != null ? ` (${round}회차)` : '';
+  return `${parts || `#${c.courseId}`}${roundText}`;
+}
+
+export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalProps) {
+  const { roleConfig } = useRole();
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<BulkImportPreview | null>(null);
+  // 교육과정명 → 대상 courseId(빈 문자열이면 건너뛰기)
+  const [mappings, setMappings] = useState<Record<string, number | ''>>({});
+  // 그룹별 편집된 행(미리보기 후 확인·수정) + 그룹 펼침 상태
+  const [editedRows, setEditedRows] = useState<Record<string, BulkImportParsedRow[]>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [courses, setCourses] = useState<CourseSummary[]>([]);
+  const [result, setResult] = useState<BulkImportResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setFile(null);
+    setPreview(null);
+    setMappings({});
+    setEditedRows({});
+    setExpanded({});
+    setResult(null);
+    setError(null);
+    setBusy(false);
+    getCourses({ size: 200 })
+      .then((res) => setCourses(res.data.data?.content ?? []))
+      .catch(() => setCourses([]));
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (isOpen) window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // 회차 드롭다운을 지역별 그룹(optgroup)으로 나눈다.
+  const coursesByRegion = useMemo(() => {
+    const map = new Map<string, CourseSummary[]>();
+    for (const c of courses) {
+      const key = c.regionName ?? '기타';
+      const list = map.get(key) ?? [];
+      list.push(c);
+      map.set(key, list);
+    }
+    return Array.from(map.entries());
+  }, [courses]);
+
+  // 매핑된 그룹의 등록 예정 인원(오류 없는 편집 행 기준)
+  const plannedCount = useMemo(() => {
+    if (!preview) return 0;
+    return preview.groups
+      .filter((g) => mappings[g.sourceCourseName])
+      .reduce((sum, g) => {
+        const rows = editedRows[g.sourceCourseName] ?? g.rows;
+        return sum + rows.filter((r) => !r.error).length;
+      }, 0);
+  }, [preview, mappings, editedRows]);
+
+  const STATUS_OPTIONS: CourseParticipantStatus[] = ['APPLIED', 'CONFIRMED', 'CANCELED'];
+
+  // 편집 행의 한 필드를 갱신한다(빈 문자열은 null, birthYear 는 숫자로).
+  const updateRow = (
+    groupKey: string,
+    index: number,
+    field: keyof BulkImportParsedRow,
+    value: string,
+  ) => {
+    setEditedRows((prev) => {
+      const rows = (prev[groupKey] ?? []).map((r, i) => {
+        if (i !== index) return r;
+        if (field === 'birthYear') {
+          return { ...r, birthYear: value === '' ? null : Number(value) };
+        }
+        if (field === 'status') {
+          return { ...r, status: value };
+        }
+        return { ...r, [field]: value === '' ? null : value };
+      });
+      return { ...prev, [groupKey]: rows };
+    });
+  };
+
+  const toggleExpand = (groupKey: string) =>
+    setExpanded((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFile(e.target.files?.[0] ?? null);
+    setPreview(null);
+    setResult(null);
+    setError(null);
+  };
+
+  const handlePreview = async () => {
+    if (!file) {
+      alert('엑셀(.xlsx) 파일을 선택해주세요.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await previewBulkImport(file);
+      const data = res.data.data;
+      setPreview(data);
+      const init: Record<string, number | ''> = {};
+      const rowsByGroup: Record<string, BulkImportParsedRow[]> = {};
+      for (const g of data.groups) {
+        init[g.sourceCourseName] = g.suggestedCourseId ?? '';
+        rowsByGroup[g.sourceCourseName] = g.rows.map((r) => ({ ...r }));
+      }
+      setMappings(init);
+      setEditedRows(rowsByGroup);
+      setExpanded({});
+    } catch (err) {
+      setError(apiErrorMessage(err, '미리보기에 실패했습니다. 파일 형식을 확인해주세요.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCommit = async () => {
+    if (!preview) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const items: BulkImportCommitItem[] = [];
+      for (const g of preview.groups) {
+        const target = mappings[g.sourceCourseName];
+        const rows = editedRows[g.sourceCourseName] ?? g.rows;
+        for (const r of rows) {
+          items.push({
+            rowNumber: r.rowNumber,
+            sourceCourseName: g.sourceCourseName,
+            targetCourseId: target === '' || target == null ? null : Number(target),
+            name: r.name,
+            phone: r.phone,
+            birthYear: r.birthYear,
+            applyDate: r.applyDate,
+            receptionDate: r.receptionDate,
+            status: r.status,
+          });
+        }
+      }
+      const res = await commitBulkImport(items);
+      setResult(res.data.data);
+    } catch (err) {
+      setError(apiErrorMessage(err, '일괄 등록에 실패했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (result) onSaved();
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  const step: 'upload' | 'map' | 'result' = result ? 'result' : preview ? 'map' : 'upload';
+
+  return (
+    <div
+      className="modal-overlay open"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose();
+      }}
+    >
+      <div className="modal" style={{ maxWidth: '760px', width: '92%' }}>
+        <div className="modal-h">
+          <h3>참여자 일괄 등록</h3>
+          <span className="badge-role">
+            {roleConfig.nm} · {roleConfig.role}
+          </span>
+          <button className="x" onClick={handleClose}>
+            ✕
+          </button>
+        </div>
+
+        <div className="modal-b">
+          {error && (
+            <div
+              className="card"
+              style={{ padding: '10px 12px', marginBottom: '10px', color: 'var(--danger)' }}
+            >
+              {error}
+            </div>
+          )}
+
+          {step === 'upload' && (
+            <div className="form-grid">
+              <div className="field full">
+                <label>엑셀 파일 (.xlsx)</label>
+                <input type="file" accept=".xlsx" onChange={handleFileChange} />
+              </div>
+              <p className="muted" style={{ fontSize: '12px' }}>
+                희망리턴패키지 참여자 엑셀을 업로드한 뒤 미리보기에서 교육과정명별로 등록할 회차를
+                지정합니다. 회차를 지정하지 않은 과정과 중복·오류 행은 등록에서 제외됩니다.
+              </p>
+            </div>
+          )}
+
+          {step === 'map' && preview && (
+            <>
+              <p style={{ fontSize: '13px', marginBottom: '6px' }}>
+                총 <strong>{preview.totalRows}</strong>행 · 정상 {preview.validRows} · 오류{' '}
+                {preview.invalidRows} — 과정명별로 등록할 회차를 선택하세요.
+              </p>
+              <p className="muted" style={{ fontSize: '12px', marginBottom: '10px' }}>
+                💡 회차를 선택하면 「▸ 확인·수정」을 눌러 업로드된 데이터를 확인하고 수정할 수
+                있습니다.
+              </p>
+              <div className="tbl-wrap" style={{ maxHeight: '380px', overflow: 'auto' }}>
+                <table className="data">
+                  <thead>
+                    <tr>
+                      <th>교육과정명 (지역 · 회차)</th>
+                      <th style={{ width: '60px' }}>인원</th>
+                      <th style={{ width: '220px' }}>등록할 회차</th>
+                      <th style={{ width: '96px' }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.groups.map((g) => {
+                      const rows = editedRows[g.sourceCourseName] ?? g.rows;
+                      const isExpanded = expanded[g.sourceCourseName] ?? false;
+                      return (
+                        <Fragment key={g.sourceCourseName}>
+                          <tr>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>{g.sourceCourseName}</div>
+                              <div className="cell-sub">
+                                {[g.sigungu, g.roundNumber != null ? `${g.roundNumber}회차` : null]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </div>
+                            </td>
+                            <td>
+                              {g.participantCount}
+                              {g.invalidCount > 0 && (
+                                <span className="muted" style={{ fontSize: '11px' }}>
+                                  {' '}
+                                  (오류 {g.invalidCount})
+                                </span>
+                              )}
+                            </td>
+                            <td>
+                              <select
+                                value={mappings[g.sourceCourseName] ?? ''}
+                                onChange={(e) =>
+                                  setMappings((prev) => ({
+                                    ...prev,
+                                    [g.sourceCourseName]:
+                                      e.target.value === '' ? '' : Number(e.target.value),
+                                  }))
+                                }
+                                style={{ width: '100%' }}
+                              >
+                                <option value="">건너뛰기 (등록 안 함)</option>
+                                {coursesByRegion.map(([region, list]) => (
+                                  <optgroup key={region} label={region}>
+                                    {list.map((c) => (
+                                      <option key={c.courseId} value={c.courseId}>
+                                        {courseLabel(c)}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                ))}
+                              </select>
+                            </td>
+                            <td>
+                              <button
+                                className="btn"
+                                style={{ padding: '3px 8px', fontSize: '11px' }}
+                                onClick={() => toggleExpand(g.sourceCourseName)}
+                              >
+                                {isExpanded ? '▾ 접기' : '▸ 확인·수정'}
+                              </button>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr>
+                              <td colSpan={4} style={{ background: '#f7f9fc', padding: '8px' }}>
+                                <div
+                                  className="tbl-wrap"
+                                  style={{ maxHeight: '220px', overflow: 'auto' }}
+                                >
+                                  <table className="data" style={{ fontSize: '12px' }}>
+                                    <thead>
+                                      <tr>
+                                        <th style={{ width: '38px' }}>행</th>
+                                        <th>이름</th>
+                                        <th>휴대폰</th>
+                                        <th style={{ width: '70px' }}>출생연도</th>
+                                        <th style={{ width: '124px' }}>신청일</th>
+                                        <th style={{ width: '124px' }}>선정일</th>
+                                        <th style={{ width: '84px' }}>상태</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((r, idx) => (
+                                        <tr
+                                          key={r.rowNumber}
+                                          style={r.error ? { background: '#fff2f2' } : undefined}
+                                        >
+                                          <td>{r.rowNumber}</td>
+                                          <td>
+                                            <input
+                                              value={r.name ?? ''}
+                                              onChange={(e) =>
+                                                updateRow(
+                                                  g.sourceCourseName,
+                                                  idx,
+                                                  'name',
+                                                  e.target.value,
+                                                )
+                                              }
+                                              style={{ width: '100%' }}
+                                            />
+                                          </td>
+                                          <td>
+                                            <input
+                                              value={r.phone ?? ''}
+                                              onChange={(e) =>
+                                                updateRow(
+                                                  g.sourceCourseName,
+                                                  idx,
+                                                  'phone',
+                                                  e.target.value,
+                                                )
+                                              }
+                                              style={{ width: '100%' }}
+                                            />
+                                          </td>
+                                          <td>
+                                            <input
+                                              value={r.birthYear ?? ''}
+                                              onChange={(e) =>
+                                                updateRow(
+                                                  g.sourceCourseName,
+                                                  idx,
+                                                  'birthYear',
+                                                  e.target.value,
+                                                )
+                                              }
+                                              style={{ width: '100%' }}
+                                            />
+                                          </td>
+                                          <td>
+                                            <input
+                                              type="date"
+                                              value={r.applyDate ?? ''}
+                                              onChange={(e) =>
+                                                updateRow(
+                                                  g.sourceCourseName,
+                                                  idx,
+                                                  'applyDate',
+                                                  e.target.value,
+                                                )
+                                              }
+                                              style={{ width: '100%' }}
+                                            />
+                                          </td>
+                                          <td>
+                                            <input
+                                              type="date"
+                                              value={r.receptionDate ?? ''}
+                                              onChange={(e) =>
+                                                updateRow(
+                                                  g.sourceCourseName,
+                                                  idx,
+                                                  'receptionDate',
+                                                  e.target.value,
+                                                )
+                                              }
+                                              style={{ width: '100%' }}
+                                            />
+                                          </td>
+                                          <td>
+                                            <select
+                                              value={r.status}
+                                              onChange={(e) =>
+                                                updateRow(
+                                                  g.sourceCourseName,
+                                                  idx,
+                                                  'status',
+                                                  e.target.value,
+                                                )
+                                              }
+                                              style={{ width: '100%' }}
+                                            >
+                                              {STATUS_OPTIONS.map((s) => (
+                                                <option key={s} value={s}>
+                                                  {CP_STATUS_LABELS[s]}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                {rows.some((r) => r.error) && (
+                                  <p
+                                    style={{
+                                      fontSize: '11px',
+                                      marginTop: '6px',
+                                      color: 'var(--danger)',
+                                    }}
+                                  >
+                                    빨간 행은 필수값(이름·휴대폰) 오류입니다. 수정하면 등록됩니다.
+                                  </p>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ fontSize: '13px', marginTop: '10px' }}>
+                등록 예정 <strong>{plannedCount}</strong>명 (중복·오류 행은 확정 시 자동 스킵)
+              </p>
+            </>
+          )}
+
+          {step === 'result' && result && (
+            <>
+              <div className="card" style={{ padding: '12px 14px', marginBottom: '10px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 700, marginBottom: '6px' }}>
+                  등록 완료 — {result.registeredCount}명
+                </div>
+                <div className="muted" style={{ fontSize: '12.5px', lineHeight: 1.7 }}>
+                  신규 참여자 {result.createdParticipantCount} · 기존 재사용{' '}
+                  {result.reusedParticipantCount}
+                  <br />
+                  중복 스킵 {result.skippedDuplicateCount} · 미매핑 스킵{' '}
+                  {result.skippedUnmappedCount} · 오류 {result.invalidRowCount}
+                </div>
+              </div>
+              {result.details.length > 0 && (
+                <div className="tbl-wrap" style={{ maxHeight: '260px', overflow: 'auto' }}>
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '50px' }}>행</th>
+                        <th>이름</th>
+                        <th>사유</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.details.map((d) => (
+                        <tr key={`${d.rowNumber}-${d.outcome}`}>
+                          <td>{d.rowNumber}</td>
+                          <td>{d.name ?? '—'}</td>
+                          <td className="muted" style={{ fontSize: '12px' }}>
+                            {d.reason ?? d.outcome}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="modal-f">
+          <span className="modal-note">※ 관리 롤(ADMIN·본부장·지역담당·PM·PL) 전용 기능입니다</span>
+          {step === 'upload' && (
+            <>
+              <button className="btn" onClick={handleClose} disabled={busy}>
+                취소
+              </button>
+              <button className="btn primary" onClick={handlePreview} disabled={busy || !file}>
+                {busy ? '분석 중…' : '미리보기'}
+              </button>
+            </>
+          )}
+          {step === 'map' && (
+            <>
+              <button className="btn" onClick={() => setPreview(null)} disabled={busy}>
+                다시 선택
+              </button>
+              <button
+                className="btn primary"
+                onClick={handleCommit}
+                disabled={busy || plannedCount === 0}
+              >
+                {busy ? '등록 중…' : `${plannedCount}명 등록`}
+              </button>
+            </>
+          )}
+          {step === 'result' && (
+            <button className="btn primary" onClick={handleClose}>
+              닫기
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

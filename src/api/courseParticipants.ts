@@ -220,6 +220,97 @@ export function bulkCompleteCourseParticipants(payload: {
   );
 }
 
+// ── 참여자 XLSX 일괄 등록 (bulk import) ──────────────────────────────────
+
+// 미리보기 파싱 행 (BE BulkImportParsedRow)
+export type BulkImportParsedRow = {
+  rowNumber: number;
+  sourceCourseName: string | null;
+  sido: string | null;
+  sigungu: string | null;
+  name: string | null;
+  phone: string | null;
+  birthYear: number | null;
+  applyDate: string | null;
+  receptionDate: string | null;
+  status: string; // 선정→CONFIRMED, 미선정→CANCELED, 그 외→APPLIED
+  error: string | null;
+};
+
+// 교육과정명별 그룹 (BE BulkImportCourseGroup)
+export type BulkImportCourseGroup = {
+  sourceCourseName: string;
+  sido: string | null;
+  sigungu: string | null;
+  roundNumber: number | null;
+  participantCount: number;
+  invalidCount: number;
+  suggestedCourseId: number | null;
+  rows: BulkImportParsedRow[];
+};
+
+// 미리보기 응답 (BE BulkImportPreviewResponse)
+export type BulkImportPreview = {
+  totalRows: number;
+  validRows: number;
+  invalidRows: number;
+  groups: BulkImportCourseGroup[];
+};
+
+// 커밋 요청 행 (BE BulkImportCommitRequest.Item) — 미리보기 후 편집된 행. targetCourseId=null 이면 건너뛰기
+export type BulkImportCommitItem = {
+  rowNumber: number;
+  sourceCourseName: string | null;
+  targetCourseId: number | null;
+  name: string | null;
+  phone: string | null;
+  birthYear: number | null;
+  applyDate: string | null;
+  receptionDate: string | null;
+  status: string;
+};
+
+// 커밋 리포트 행 (BE BulkImportRowResult)
+export type BulkImportRowResult = {
+  rowNumber: number;
+  name: string | null;
+  sourceCourseName: string | null;
+  outcome: 'SKIPPED_UNMAPPED' | 'SKIPPED_DUPLICATE' | 'INVALID' | string;
+  reason: string | null;
+};
+
+// 커밋 결과 (BE BulkImportResultResponse)
+export type BulkImportResult = {
+  registeredCount: number;
+  skippedDuplicateCount: number;
+  skippedUnmappedCount: number;
+  invalidRowCount: number;
+  createdParticipantCount: number;
+  reusedParticipantCount: number;
+  details: BulkImportRowResult[];
+};
+
+// 일괄 등록 미리보기 — XLSX 업로드 후 교육과정명별 그룹 반환(DB 쓰기 없음)
+// 권한: ADMIN, HEAD_OFFICE, REGIONAL_MANAGER, PROJECT_MANAGER, PROJECT_LEADER
+export function previewBulkImport(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return apiClient.post<ApiResponse<BulkImportPreview>>(
+    '/api/course-participants/bulk-import/preview',
+    form,
+    // Content-Type 을 제거해 브라우저가 multipart 경계(boundary)를 자동 설정하게 한다.
+    { headers: { 'Content-Type': undefined } },
+  );
+}
+
+// 일괄 등록 커밋 — 미리보기 후 확인·수정한 행 목록(대상 회차 포함)을 JSON 으로 전송
+export function commitBulkImport(items: BulkImportCommitItem[]) {
+  return apiClient.post<ApiResponse<BulkImportResult>>(
+    '/api/course-participants/bulk-import/commit',
+    { items },
+  );
+}
+
 export type AssignableCounselor = { counselorId: number; name: string | null };
 
 // 배정 가능 상담사 조회 — 해당 수강건 회차에 인력 배치된 상담사
