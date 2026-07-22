@@ -112,7 +112,7 @@ function buildGridFromAssignments(assignments: CourseDailyStaffItem[]): {
 
 export default function AssignPage() {
   const { roleConfig } = useRole();
-  const canEdit = ASSIGN_EDIT_ROLES.includes(roleConfig.role);
+  const canEdit = roleConfig.roles.some((r) => ASSIGN_EDIT_ROLES.includes(r));
 
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [candidates, setCandidates] = useState<StaffCandidate[]>([]);
@@ -468,11 +468,11 @@ export default function AssignPage() {
   const rowDefs = ASSIGN_ROLES.flatMap((role) =>
     role.multi
       ? Array.from({ length: counselorCount }, (_, i) => ({
-          role,
-          rowKey: counselorRowKey(i),
-          label: counselorCount > 1 ? `${role.label} ${i + 1}` : role.label,
-          counselorIdx: i,
-        }))
+        role,
+        rowKey: counselorRowKey(i),
+        label: counselorCount > 1 ? `${role.label} ${i + 1}` : role.label,
+        counselorIdx: i,
+      }))
       : [{ role, rowKey: role.key, label: role.label, counselorIdx: -1 }],
   );
 

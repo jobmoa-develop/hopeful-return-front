@@ -15,12 +15,16 @@ export default function ProtectedRoute({ allowedRoles, children }: ProtectedRout
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user?.role as AppRole)) {
-    return (
-      <section className="card ph">
-        <h2>권한이 없습니다.</h2>
-      </section>
-    );
+  if (allowedRoles) {
+    const userRoles = user?.roles ?? [];
+    const hasAccess = userRoles.some((r) => allowedRoles.includes(r as AppRole));
+    if (!hasAccess) {
+      return (
+        <section className="card ph">
+          <h2>권한이 없습니다.</h2>
+        </section>
+      );
+    }
   }
 
   return children;

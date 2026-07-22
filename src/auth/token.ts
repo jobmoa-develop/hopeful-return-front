@@ -7,7 +7,7 @@ export type AuthUser = {
   userId: number;
   loginId: string;
   name: string;
-  role: string;
+  roles: string[];
 };
 
 export const tokenStore = {

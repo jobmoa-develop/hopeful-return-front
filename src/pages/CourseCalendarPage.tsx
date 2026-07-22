@@ -66,8 +66,8 @@ export default function CourseCalendarPage() {
     const [memo, setMemo] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
-    const isRestricted = Boolean(user?.role && RESTRICTED_ROLES.includes(user.role));
-    const canManageStaffSchedules = Boolean(user?.role && SCHEDULE_MANAGE_ROLES.includes(user.role));
+    const isRestricted = Boolean(user?.roles?.some((r) => RESTRICTED_ROLES.includes(r)));
+    const canManageStaffSchedules = Boolean(user?.roles?.some((r) => SCHEDULE_MANAGE_ROLES.includes(r)));
 
     // 1) 강좌는 한 번만 넉넉히 받아와서 클라이언트에서 월별로 필터링
     useEffect(() => {
