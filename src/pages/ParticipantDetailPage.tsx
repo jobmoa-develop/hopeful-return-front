@@ -28,6 +28,7 @@ import type { ParticipantMemoItem } from '../api/participantMemos';
 import {
   CounselorEditModal,
   CounselingSessionModal,
+  ParticipantEditModal,
   ParticipantMemoModal,
   StatusChangeModal,
 } from '../components/ParticipantModals';
@@ -65,7 +66,7 @@ export default function ParticipantDetailPage() {
   const [memos, setMemos] = useState<ParticipantMemoItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<
-    'counselor' | 'session' | 'memo' | 'status' | null
+    'counselor' | 'session' | 'memo' | 'status' | 'edit' | null
   >(null);
   const [sessionType, setSessionType] = useState<CounselingType>('PRE_SESSION');
 
@@ -219,6 +220,11 @@ export default function ParticipantDetailPage() {
           </div>
         </div>
         <div className="actions">
+          {roleConfig.can.editP === 1 && (
+            <button className="btn" title="참여자 정보 수정" onClick={() => setActiveModal('edit')}>
+              정보 수정
+            </button>
+          )}
           {canChangeStatus && (
             <button className="btn" title="진행상태 변경" onClick={() => setActiveModal('status')}>
               진행상태 변경 · {statusLabel}
@@ -624,6 +630,12 @@ export default function ParticipantDetailPage() {
         currentStatus={detail.status}
         riskStatus={riskInfo?.riskStatus}
         attendanceRate={riskInfo?.attendanceRate}
+        onSaved={fetchAll}
+      />
+      <ParticipantEditModal
+        isOpen={activeModal === 'edit'}
+        onClose={() => setActiveModal(null)}
+        detail={detail}
         onSaved={fetchAll}
       />
     </section>

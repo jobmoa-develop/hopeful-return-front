@@ -6,11 +6,12 @@ import type { RegionSummary } from '../api/regions';
 import { getCourses } from '../api/courses';
 import type { CourseSummary } from '../api/courses';
 import { getUserRoles } from '../api/userRoles';
-import { createParticipant } from '../api/participants';
+import { createParticipant, updateParticipant } from '../api/participants';
 import {
   COUNSELING_TYPE_LABELS,
   CP_STATUS_LABELS,
   assignSlotCounselor,
+  bulkAssignCounselors,
   bulkCompleteCourseParticipants,
   changeCounselors,
   changeCourseParticipantStatus,
@@ -19,6 +20,7 @@ import {
   getAssignableCounselors,
   previewBulkImport,
   recordCounselingSession,
+  updateCourseParticipant,
 } from '../api/courseParticipants';
 import type {
   AssignableCounselor,
@@ -28,6 +30,7 @@ import type {
   BulkImportResult,
   CounselingType,
   CounselorSummary,
+  CourseParticipantDetail,
   CourseParticipantStatus,
 } from '../api/courseParticipants';
 import { createParticipantMemo } from '../api/participantMemos';
@@ -963,6 +966,121 @@ export function BulkCompletionModal({
   );
 }
 
+// 5-1. 상담사 슬롯 일괄 배정 모달 (참여자 관리 메인) — 선택 수강건들에 동일 슬롯·상담사 지정
+interface BulkCounselorAssignModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  courseParticipantIds: number[];
+  // 배정 가능 상담사 옵션을 불러올 대표 수강건(선택 건이 동일 회차라는 가정)
+  sampleCourseParticipantId: number;
+  onSaved: () => void;
+}
+
+export function BulkCounselorAssignModal({
+  isOpen,
+  onClose,
+  courseParticipantIds,
+  sampleCourseParticipantId,
+  onSaved,
+}: BulkCounselorAssignModalProps) {
+  const [counselingType, setCounselingType] = useState<CounselingType>('PRE_SESSION');
+  const [counselorId, setCounselorId] = useState<number | ''>('');
+  const [options, setOptions] = useState<AssignableCounselor[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCounselingType('PRE_SESSION');
+    setCounselorId('');
+    getAssignableCounselors(sampleCourseParticipantId)
+      .then((res) => setOptions(res.data.data?.counselors ?? []))
+      .catch(() => setOptions([]));
+  }, [isOpen, sampleCourseParticipantId]);
+
+  const handleSave = async () => {
+    if (counselorId === '') {
+      alert('배정할 상담사를 선택하세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await bulkAssignCounselors({
+        courseParticipantIds,
+        counselingType,
+        counselorId: Number(counselorId),
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '상담사 일괄 배정에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="상담사 일괄 배정"
+      onSave={handleSave}
+      saving={saving}
+      note={`※ 선택한 ${courseParticipantIds.length}건에 동일하게 반영됩니다`}
+    >
+      <div className="form-grid">
+        <div className="field full">
+          <label>대상 건수</label>
+          <input
+            value={`${courseParticipantIds.length}건`}
+            disabled
+            style={{ background: '#f4f6f9', color: '#69768a' }}
+          />
+        </div>
+        <div className="field full">
+          <label>
+            상담 구분<span className="req">*</span>
+          </label>
+          <select
+            value={counselingType}
+            onChange={(e) => setCounselingType(e.target.value as CounselingType)}
+          >
+            {COUNSELING_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {COUNSELING_TYPE_LABELS[type]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field full">
+          <label>
+            상담사<span className="req">*</span>
+          </label>
+          <select
+            value={counselorId}
+            onChange={(e) => setCounselorId(e.target.value === '' ? '' : Number(e.target.value))}
+          >
+            <option value="">상담사 선택</option>
+            {options.map((c) => (
+              <option key={c.counselorId} value={c.counselorId}>
+                {c.name ?? `#${c.counselorId}`}
+              </option>
+            ))}
+          </select>
+        </div>
+        {options.length === 0 && (
+          <div className="field full muted" style={{ fontSize: '12px' }}>
+            대표 수강건 회차에 배치된 상담사가 없습니다. 인력배정에서 상담사를 먼저 배치하세요.
+          </div>
+        )}
+      </div>
+      <p className="muted" style={{ fontSize: '11.5px', marginTop: '10px' }}>
+        · 지정 대상은 회차에 배치된 상담사여야 하며, 선택 건 중 배치되지 않은 회차가 있으면 전체가
+        반영되지 않습니다. · 상담사 교체 시 이전 세션 기록은 초기화됩니다.
+      </p>
+    </ApiModal>
+  );
+}
+
 // 6. 진행상태 변경 모달 (참여자 상세) — 수료 시 수료일, 미수료 시 사유 입력
 interface StatusChangeModalProps {
   isOpen: boolean;
@@ -1528,6 +1646,174 @@ export function SlotCounselorAssignModal({
         기록은 초기화됩니다.
         {counselorOnly ? ' · 상담사는 본인 담당 다음 단계의 상담사만 지정할 수 있습니다.' : ''}
       </p>
+    </ApiModal>
+  );
+}
+
+// 6-1. 참여자 정보 수정 모달 (참여자 상세) — 기본정보(participant) + 수강/운영정보(course_participant)
+interface ParticipantEditModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  detail: CourseParticipantDetail;
+  onSaved: () => void;
+}
+
+export function ParticipantEditModal({
+  isOpen,
+  onClose,
+  detail,
+  onSaved,
+}: ParticipantEditModalProps) {
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [birthYear, setBirthYear] = useState('');
+  const [basicEducation, setBasicEducation] = useState('');
+  const [inflowType, setInflowType] = useState('');
+  const [applyDate, setApplyDate] = useState('');
+  const [receptionDate, setReceptionDate] = useState('');
+  const [contactAttempt, setContactAttempt] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(detail.participantName ?? '');
+    setPhone(detail.phone ?? '');
+    setBirthYear(detail.birthYear != null ? String(detail.birthYear) : '');
+    setBasicEducation(detail.basicEducation ?? '');
+    setInflowType(detail.inflowType ?? '');
+    setApplyDate(detail.applyDate ?? '');
+    setReceptionDate(detail.receptionDate ?? '');
+    setContactAttempt(detail.contactAttempt != null ? String(detail.contactAttempt) : '');
+  }, [isOpen, detail]);
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      alert('이름을 입력하세요.');
+      return;
+    }
+    if (!phone.trim()) {
+      alert('전화번호를 입력하세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      // 기본정보(participant) 수정 — matchKey는 서버가 재생성
+      await updateParticipant(detail.participantId, {
+        name: name.trim(),
+        birthYear: birthYear.trim() === '' ? null : Number(birthYear),
+        phone: phone.trim(),
+      });
+      // 수강/운영정보(course_participant) 수정 — 빈 값은 미변경(undefined)
+      await updateCourseParticipant(detail.courseParticipantId, {
+        basicEducation: basicEducation === '' ? undefined : basicEducation,
+        inflowType: inflowType === '' ? undefined : inflowType,
+        applyDate: applyDate === '' ? undefined : applyDate,
+        receptionDate: receptionDate === '' ? undefined : receptionDate,
+        contactAttempt: contactAttempt.trim() === '' ? undefined : Number(contactAttempt),
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '참여자 정보 수정에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="참여자 정보 수정"
+      onSave={handleSave}
+      saving={saving}
+    >
+      <div className="form-grid">
+        <div
+          className="field full"
+          style={{ fontWeight: 600, fontSize: '12.5px', color: '#69768a' }}
+        >
+          기본정보
+        </div>
+        <div className="field">
+          <label>
+            이름<span className="req">*</span>
+          </label>
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>
+            전화번호<span className="req">*</span>
+          </label>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="010-0000-0000"
+          />
+        </div>
+        <div className="field">
+          <label>출생연도</label>
+          <input
+            type="number"
+            value={birthYear}
+            onChange={(e) => setBirthYear(e.target.value)}
+            placeholder="예: 1978"
+          />
+        </div>
+
+        <div
+          className="field full"
+          style={{ fontWeight: 600, fontSize: '12.5px', color: '#69768a', marginTop: '6px' }}
+        >
+          수강 · 운영정보
+        </div>
+        <div className="field">
+          <label>기초교육</label>
+          <select value={basicEducation} onChange={(e) => setBasicEducation(e.target.value)}>
+            <option value="">미지정</option>
+            {basicEducation !== '' && basicEducation !== 'Y' && basicEducation !== 'N' && (
+              <option value={basicEducation}>{basicEducation}</option>
+            )}
+            <option value="Y">이수(Y)</option>
+            <option value="N">미이수(N)</option>
+          </select>
+        </div>
+        <div className="field">
+          <label>유입경로</label>
+          <select value={inflowType} onChange={(e) => setInflowType(e.target.value)}>
+            <option value="">미지정</option>
+            {inflowType !== '' && !INFLOW_OPTS.includes(inflowType) && (
+              <option value={inflowType}>{inflowType}</option>
+            )}
+            {INFLOW_OPTS.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label>신청일</label>
+          <input type="date" value={applyDate} onChange={(e) => setApplyDate(e.target.value)} />
+        </div>
+        <div className="field">
+          <label>접수일</label>
+          <input
+            type="date"
+            value={receptionDate}
+            onChange={(e) => setReceptionDate(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>연락 시도</label>
+          <input
+            type="number"
+            min={0}
+            value={contactAttempt}
+            onChange={(e) => setContactAttempt(e.target.value)}
+          />
+        </div>
+      </div>
     </ApiModal>
   );
 }

@@ -115,6 +115,27 @@ export function changeCourseParticipantStatus(courseParticipantId: number, statu
   );
 }
 
+// 수강 정보 부분 수정 — null/미포함 필드는 미변경. 운영 필드(신청일·접수일·연락시도) 포함
+// 권한: ADMIN, HEAD_OFFICE, REGIONAL_MANAGER, PROJECT_MANAGER, PROJECT_LEADER, OPERATOR
+export type UpdateCourseParticipantRequest = {
+  counselors?: CounselorAssignment[];
+  basicEducation?: string | null;
+  inflowType?: string | null;
+  applyDate?: string | null; // "YYYY-MM-DD"
+  receptionDate?: string | null;
+  contactAttempt?: number | null;
+};
+
+export function updateCourseParticipant(
+  courseParticipantId: number,
+  payload: UpdateCourseParticipantRequest,
+) {
+  return apiClient.put<ApiResponse<{ updated: boolean }>>(
+    `/api/course-participants/${courseParticipantId}`,
+    payload,
+  );
+}
+
 // 상담사 3슬롯 전체 교체 — 같은 슬롯 중복 시 400 COUNSELING_SLOT_DUPLICATED
 export function changeCounselors(courseParticipantId: number, counselors: CounselorAssignment[]) {
   return apiClient.patch<
@@ -216,6 +237,19 @@ export function bulkCompleteCourseParticipants(payload: {
 }) {
   return apiClient.patch<ApiResponse<{ updatedCount: number; updatedIds: number[] }>>(
     '/api/course-participants/completion/bulk',
+    payload,
+  );
+}
+
+// 상담 슬롯 상담사 일괄 배정 — 선택 수강건들에 동일 슬롯·상담사 지정(관리 롤 전용)
+// 대상 상담사는 각 수강건 회차 배치 상담사여야 함(BE 검증, 불일치 시 전체 롤백)
+export function bulkAssignCounselors(payload: {
+  courseParticipantIds: number[];
+  counselingType: CounselingType;
+  counselorId: number;
+}) {
+  return apiClient.patch<ApiResponse<{ updatedCount: number; updatedIds: number[] }>>(
+    '/api/course-participants/counselors/bulk',
     payload,
   );
 }

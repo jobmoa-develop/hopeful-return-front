@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useRole } from '../context/RoleContext';
 import { getParticipants } from '../api/participants';
 import type { ParticipantListItem } from '../api/participants';
+import { getRegions } from '../api/regions';
+import type { RegionSummary } from '../api/regions';
 import {
   COUNSELING_TYPE_LABELS,
   CP_STATUS_CHIP,
@@ -13,6 +15,7 @@ import {
   ParticipantRegisterModal,
   CounselorEditModal,
   BulkCompletionModal,
+  BulkCounselorAssignModal,
   BulkImportModal,
 } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
@@ -58,7 +61,10 @@ export default function ParticipantsPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchName, setSearchName] = useState('');
-  const [selectedRegion, setSelectedRegion] = useState('전체');
+  const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const [selectedRegionId, setSelectedRegionId] = useState<number | ''>('');
+  const [courseNumberQuery, setCourseNumberQuery] = useState('');
+  const [courseNumber, setCourseNumber] = useState<number | ''>('');
   const [selectedStatus, setSelectedStatus] = useState('전체');
 
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -67,12 +73,24 @@ export default function ParticipantsPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<'COMPLETED' | 'INCOMPLETE' | null>(null);
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
   const canBulkComplete = roleConfig.can.complete === 1;
+  // 상담사 일괄 배정 — editP(참여자 정보 수정) 롤 집합이 BE 일괄 배정 인가와 일치
+  const canBulkAssignCounselor = roleConfig.can.editP === 1;
+  // 체크박스 선택 UI는 일괄 처리 권한 중 하나라도 있으면 노출
+  const canSelect = canBulkComplete || canBulkAssignCounselor;
 
   const fetchList = useCallback(() => {
     setLoading(true);
     setError(null);
-    getParticipants({ name: searchName || undefined, page, size: PAGE_SIZE })
+    // 지역·회차는 서버 필터(최신 수강건 기준). 상태는 아래 filteredList 에서 클라이언트 필터.
+    getParticipants({
+      name: searchName || undefined,
+      regionId: selectedRegionId === '' ? undefined : selectedRegionId,
+      courseNumber: courseNumber === '' ? undefined : courseNumber,
+      page,
+      size: PAGE_SIZE,
+    })
       .then((res) => {
         const data = res.data.data;
         setItems(data?.content ?? []);
@@ -81,11 +99,18 @@ export default function ParticipantsPage() {
       })
       .catch((err) => setError(apiErrorMessage(err, '참여자 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, page]);
+  }, [searchName, selectedRegionId, courseNumber, page]);
 
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  // 지역 목록 로드(회차 필터 드롭다운)
+  useEffect(() => {
+    getRegions()
+      .then((res) => setRegions(res.data.data ?? []))
+      .catch(() => setRegions([]));
+  }, []);
 
   // 검색어 디바운스 — 입력 후 잠시 멈추면 서버 검색(name) 실행
   useEffect(() => {
@@ -96,25 +121,24 @@ export default function ParticipantsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const regionOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const p of items) {
-      if (p.latestEnrollment?.regionName) names.add(p.latestEnrollment.regionName);
-    }
-    return Array.from(names);
-  }, [items]);
+  // 회차번호 디바운스 — 숫자만 반영, 빈 값이면 필터 해제
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmed = courseNumberQuery.trim();
+      setCourseNumber(trimmed === '' ? '' : Number(trimmed));
+      setPage(0);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [courseNumberQuery]);
 
-  // 지역·진행상태는 현재 페이지 데이터 기준 클라이언트 필터
+  // 진행상태는 현재 페이지 데이터 기준 클라이언트 필터(서버 미지원 — 범위 밖)
   const filteredList = useMemo(() => {
     let list = items;
-    if (selectedRegion !== '전체') {
-      list = list.filter((p) => p.latestEnrollment?.regionName === selectedRegion);
-    }
     if (selectedStatus !== '전체') {
       list = list.filter((p) => statusLabel(p.latestEnrollment?.status) === selectedStatus);
     }
     return list;
-  }, [items, selectedRegion, selectedStatus]);
+  }, [items, selectedStatus]);
 
   const handleRowClick = (p: ParticipantListItem) => {
     if (!p.latestEnrollment) {
@@ -180,8 +204,11 @@ export default function ParticipantsPage() {
           <div className="select">
             <span className="ico">지역</span>
             <select
-              value={selectedRegion}
-              onChange={(e) => setSelectedRegion(e.target.value)}
+              value={selectedRegionId}
+              onChange={(e) => {
+                setSelectedRegionId(e.target.value === '' ? '' : Number(e.target.value));
+                setPage(0);
+              }}
               style={{
                 border: 'none',
                 background: 'transparent',
@@ -190,13 +217,23 @@ export default function ParticipantsPage() {
                 cursor: 'pointer',
               }}
             >
-              <option value="전체">전체 ▾</option>
-              {regionOptions.map((r) => (
-                <option key={r} value={r}>
-                  {r}
+              <option value="">전체 ▾</option>
+              {regions.map((r) => (
+                <option key={r.regionId} value={r.regionId}>
+                  {r.regionName}
                 </option>
               ))}
             </select>
+          </div>
+          <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
+            <input
+              type="number"
+              min={1}
+              placeholder="회차번호"
+              value={courseNumberQuery}
+              onChange={(e) => setCourseNumberQuery(e.target.value)}
+              style={{ fontSize: '12px' }}
+            />
           </div>
           <div className="select">
             <span className="ico">진행상태</span>
@@ -256,7 +293,7 @@ export default function ParticipantsPage() {
         )}
       </div>
 
-      {canBulkComplete && selectedIds.size > 0 && (
+      {canSelect && selectedIds.size > 0 && (
         <div
           className="card"
           style={{
@@ -268,12 +305,21 @@ export default function ParticipantsPage() {
           }}
         >
           <strong style={{ fontSize: '13px' }}>{selectedIds.size}건 선택됨</strong>
-          <button className="btn primary" onClick={() => setBulkStatus('COMPLETED')}>
-            일괄 수료
-          </button>
-          <button className="btn" onClick={() => setBulkStatus('INCOMPLETE')}>
-            일괄 미수료
-          </button>
+          {canBulkComplete && (
+            <>
+              <button className="btn primary" onClick={() => setBulkStatus('COMPLETED')}>
+                일괄 수료
+              </button>
+              <button className="btn" onClick={() => setBulkStatus('INCOMPLETE')}>
+                일괄 미수료
+              </button>
+            </>
+          )}
+          {canBulkAssignCounselor && (
+            <button className="btn" onClick={() => setIsBulkAssignOpen(true)}>
+              상담사 일괄 배정
+            </button>
+          )}
           <button className="btn" onClick={clearSelection} style={{ marginLeft: 'auto' }}>
             선택 해제
           </button>
@@ -294,7 +340,7 @@ export default function ParticipantsPage() {
           <table className="data">
             <thead>
               <tr>
-                {canBulkComplete && (
+                {canSelect && (
                   <th style={{ width: '36px' }}>
                     <input
                       type="checkbox"
@@ -320,7 +366,7 @@ export default function ParticipantsPage() {
                 const cpId = e?.courseParticipantId;
                 return (
                   <tr key={p.participantId} onClick={() => handleRowClick(p)}>
-                    {canBulkComplete && (
+                    {canSelect && (
                       <td onClick={(ev) => ev.stopPropagation()}>
                         <input
                           type="checkbox"
@@ -407,7 +453,7 @@ export default function ParticipantsPage() {
               {!loading && filteredList.length === 0 && (
                 <tr>
                   <td
-                    colSpan={canBulkComplete ? 8 : 7}
+                    colSpan={canSelect ? 8 : 7}
                     style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
                   >
                     조건에 일치하는 참여자가 없습니다.
@@ -475,6 +521,15 @@ export default function ParticipantsPage() {
           onClose={() => setBulkStatus(null)}
           courseParticipantIds={Array.from(selectedIds)}
           status={bulkStatus}
+          onSaved={handleBulkSaved}
+        />
+      )}
+      {isBulkAssignOpen && selectedIds.size > 0 && (
+        <BulkCounselorAssignModal
+          isOpen={true}
+          onClose={() => setIsBulkAssignOpen(false)}
+          courseParticipantIds={Array.from(selectedIds)}
+          sampleCourseParticipantId={Array.from(selectedIds)[0]}
           onSaved={handleBulkSaved}
         />
       )}

@@ -31,6 +31,8 @@ export type ParticipantListItem = {
 export type ParticipantListParams = {
   name?: string;
   phone?: string;
+  regionId?: number; // 최신 수강건 기준 회차 필터(지역)
+  courseNumber?: number; // 최신 수강건 기준 회차 필터(회차번호)
   page?: number;
   size?: number;
 };
@@ -62,6 +64,21 @@ export function getParticipants(params: ParticipantListParams) {
 
 export function createParticipant(payload: CreateParticipantRequest) {
   return apiClient.post<ApiResponse<ParticipantCreatedResponse>>('/api/participants', payload);
+}
+
+// 참여자 기본정보 수정 — 이름·전화 필수, 출생연도 선택(matchKey는 서버가 재생성)
+// 권한: ADMIN, HEAD_OFFICE, REGIONAL_MANAGER, PROJECT_MANAGER, PROJECT_LEADER, OPERATOR
+export type UpdateParticipantRequest = {
+  name: string;
+  birthYear?: number | null;
+  phone: string;
+};
+
+export function updateParticipant(participantId: number, payload: UpdateParticipantRequest) {
+  return apiClient.put<ApiResponse<{ participantId: number; updated: boolean }>>(
+    `/api/participants/${participantId}`,
+    payload,
+  );
 }
 
 // 전화번호 중복 확인
