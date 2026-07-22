@@ -29,13 +29,16 @@ function getErrorMessage(error: unknown) {
     return '요청 처리 중 오류가 발생했습니다.';
 }
 
+const toggleRole = (list: UserRoleNameValue[], role: UserRoleNameValue): UserRoleNameValue[] =>
+    list.includes(role) ? list.filter((r) => r !== role) : [...list, role];
+
 type CreateFormState = {
     loginId: string;
     password: string;
     name: string;
     phone: string;
     email: string;
-    roleName: UserRoleNameValue;
+    roleNames: UserRoleNameValue[];
 };
 
 const EMPTY_CREATE_FORM: CreateFormState = {
@@ -44,23 +47,21 @@ const EMPTY_CREATE_FORM: CreateFormState = {
     name: '',
     phone: '',
     email: '',
-    roleName: 'OPERATOR',
+    roleNames: [],
 };
 
 type EditFormState = {
     name: string;
     phone: string;
     email: string;
-    roleName: UserRoleNameValue;
+    roleNames: UserRoleNameValue[];
     enabled: boolean;
     locked: boolean;
 };
 
 export default function UserManagementPage() {
     const { roleConfig } = useRole();
-    // 목록/상세 조회는 ADMIN, HEAD_OFFICE 모두 가능(라우트 가드에서 처리),
-    // 등록/수정/삭제는 ADMIN 전용이라 버튼 노출 여부만 여기서 한 번 더 제어한다.
-    const canWrite = roleConfig.role === 'ADMIN';
+    const canWrite = roleConfig.roles.includes('ADMIN');
 
     const [users, setUsers] = useState<UserListItem[]>([]);
     const [page, setPage] = useState(0);
@@ -117,17 +118,22 @@ export default function UserManagementPage() {
     }, [page]);
 
     const handleSearch = () => {
-        setPage(0);
-        // page 가 이미 0이면 useEffect 가 안 돌기 때문에 명시적으로 한 번 더 호출
-        if (page === 0) void loadUsers();
+        if (page === 0) {
+            void loadUsers();
+        } else {
+            setPage(0);
+        }
     };
 
     const resetFilters = () => {
         setNameFilter('');
         setRoleFilter('');
         setEnabledFilter('');
-        setPage(0);
-        if (page === 0) void loadUsers();
+        if (page === 0) {
+            void loadUsers();
+        } else {
+            setPage(0);
+        }
     };
 
     // ===== 등록 =====
@@ -160,6 +166,10 @@ export default function UserManagementPage() {
             setCreateError('비밀번호는 8자 이상이어야 합니다.');
             return;
         }
+        if (createForm.roleNames.length === 0) {
+            setCreateError('역할을 1개 이상 선택하세요.');
+            return;
+        }
         if (loginIdCheck === 'dup') {
             setCreateError('이미 사용 중인 로그인 ID입니다.');
             return;
@@ -170,14 +180,17 @@ export default function UserManagementPage() {
             name: createForm.name.trim(),
             phone: createForm.phone.trim() || undefined,
             email: createForm.email.trim() || undefined,
-            roleName: createForm.roleName,
+            roleNames: createForm.roleNames,
         };
         setCreateSaving(true);
         try {
             await createUser(payload);
             setCreateOpen(false);
-            setPage(0);
-            if (page === 0) void loadUsers();
+            if (page === 0) {
+                void loadUsers();
+            } else {
+                setPage(0);
+            }
         } catch (error) {
             setCreateError(getErrorMessage(error));
         } finally {
@@ -197,7 +210,7 @@ export default function UserManagementPage() {
                 name: detail.name,
                 phone: detail.phone ?? '',
                 email: detail.email ?? '',
-                roleName: detail.roleName,
+                roleNames: detail.roleNames,
                 enabled: detail.enabled,
                 locked: detail.locked,
             });
@@ -219,11 +232,15 @@ export default function UserManagementPage() {
             setEditError('이름은 필수입니다.');
             return;
         }
+        if (editForm.roleNames.length === 0) {
+            setEditError('역할을 1개 이상 선택하세요.');
+            return;
+        }
         const payload: UpdateUserRequest = {
             name: editForm.name.trim(),
             phone: editForm.phone.trim() || undefined,
             email: editForm.email.trim() || undefined,
-            roleName: editForm.roleName,
+            roleNames: editForm.roleNames,
             enabled: editForm.enabled,
             locked: editForm.locked,
         };
@@ -363,7 +380,11 @@ export default function UserManagementPage() {
                                         <td className="pname">{u.loginId}</td>
                                         <td>{u.name}</td>
                                         <td>
-                                            <span className="chip info">{roleNameLabel(u.roleName)}</span>
+                                            {u.roleNames.map((rn) => (
+                                                <span className="chip info" key={rn} style={{ marginRight: 4 }}>
+                                                    {roleNameLabel(rn)}
+                                                </span>
+                                            ))}
                                         </td>
                                         <td>
                                             <span className={`chip ${u.enabled ? 'ok' : 'neutral'}`}>
@@ -481,21 +502,6 @@ export default function UserManagementPage() {
                                     />
                                 </div>
                                 <div className="field">
-                                    <label>역할</label>
-                                    <select
-                                        value={createForm.roleName}
-                                        onChange={(e) =>
-                                            setCreateForm((f) => ({ ...f, roleName: e.target.value as UserRoleNameValue }))
-                                        }
-                                    >
-                                        {ROLE_NAME_OPTIONS.map((r) => (
-                                            <option key={r.value} value={r.value}>
-                                                {r.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="field">
                                     <label>전화번호</label>
                                     <input
                                         value={createForm.phone}
@@ -510,6 +516,25 @@ export default function UserManagementPage() {
                                         onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
                                         placeholder="name@jobmoa.com"
                                     />
+                                </div>
+                                <div className="field full">
+                                    <label>
+                                        역할<span className="req">*</span>
+                                    </label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px' }}>
+                                        {ROLE_NAME_OPTIONS.map((r) => (
+                                            <label className="chk" key={r.value}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={createForm.roleNames.includes(r.value)}
+                                                    onChange={() =>
+                                                        setCreateForm((f) => ({ ...f, roleNames: toggleRole(f.roleNames, r.value) }))
+                                                    }
+                                                />
+                                                {r.label}
+                                            </label>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -550,22 +575,6 @@ export default function UserManagementPage() {
                                     />
                                 </div>
                                 <div className="field">
-                                    <label>역할</label>
-                                    <select
-                                        value={editForm.roleName}
-                                        disabled={!canWrite}
-                                        onChange={(e) =>
-                                            setEditForm((f) => (f ? { ...f, roleName: e.target.value as UserRoleNameValue } : f))
-                                        }
-                                    >
-                                        {ROLE_NAME_OPTIONS.map((r) => (
-                                            <option key={r.value} value={r.value}>
-                                                {r.label}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="field">
                                     <label>전화번호</label>
                                     <input
                                         value={editForm.phone}
@@ -585,7 +594,25 @@ export default function UserManagementPage() {
                                     <label>생성일시</label>
                                     <input value={editTarget.createdAt} disabled />
                                 </div>
-                                <div className="field">
+                                <div className="field full">
+                                    <label>역할</label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 16px' }}>
+                                        {ROLE_NAME_OPTIONS.map((r) => (
+                                            <label className="chk" key={r.value}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={editForm.roleNames.includes(r.value)}
+                                                    disabled={!canWrite}
+                                                    onChange={() =>
+                                                        setEditForm((f) => (f ? { ...f, roleNames: toggleRole(f.roleNames, r.value) } : f))
+                                                    }
+                                                />
+                                                {r.label}
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="field full">
                                     <label>계정 상태</label>
                                     <div style={{ display: 'flex', gap: 16 }}>
                                         <label className="chk">

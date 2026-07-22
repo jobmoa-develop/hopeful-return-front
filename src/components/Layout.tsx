@@ -250,7 +250,7 @@ export default function Layout() {
                 {roleConfig.nm}
               </div>
               <div className="u-role" id="u-role">
-                {roleConfig.role}
+                {roleConfig.roles.join(' · ')}
               </div>
             </div>
           </div>

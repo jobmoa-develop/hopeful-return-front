@@ -12,29 +12,26 @@ export type UserRoleNameValue =
     | 'PROJECT_MANAGER'
     | 'PROJECT_LEADER';
 
-// GET /api/users/{userId} 응답 (UserResponse.java 대응)
 export type UserDetail = {
     userId: number;
     loginId: string;
     name: string;
     phone: string | null;
     email: string | null;
-    roleName: UserRoleNameValue;
+    roleNames: UserRoleNameValue[];
     enabled: boolean;
     locked: boolean;
     createdAt: string;
 };
 
-// GET /api/users 목록 항목 (UserListResponse.Item 대응)
 export type UserListItem = {
     userId: number;
     loginId: string;
     name: string;
-    roleName: UserRoleNameValue;
+    roleNames: UserRoleNameValue[];
     enabled: boolean;
 };
 
-// GET /api/users 응답 (UserListResponse 대응)
 export type UserListResponse = {
     content: UserListItem[];
     page: number;
@@ -51,27 +48,24 @@ export type UserListParams = {
     enabled?: boolean;
 };
 
-// POST /api/users 요청 (CreateUserRequest.java 대응)
 export type CreateUserRequest = {
     loginId: string;
     password: string;
     name: string;
     phone?: string;
     email?: string;
-    roleName: string;
+    roleNames: string[];
 };
 
-// PUT /api/users/{userId} 요청 (UpdateUserRequest.java 대응)
 export type UpdateUserRequest = {
     name: string;
     phone?: string;
     email?: string;
-    roleName: string;
+    roleNames: string[];
     enabled: boolean;
     locked: boolean;
 };
 
-// GET /api/users/check-login-id 응답 (CheckLoginIdResponse.java 대응)
 export type CheckLoginIdResponse = {
     duplicate: boolean;
 };
@@ -122,4 +116,8 @@ export const ROLE_NAME_OPTIONS: { value: UserRoleNameValue; label: string }[] = 
 
 export function roleNameLabel(roleName: string): string {
     return ROLE_NAME_OPTIONS.find((r) => r.value === roleName)?.label ?? roleName;
+}
+
+export function roleNamesLabel(roleNames: string[]): string {
+    return roleNames.map(roleNameLabel).join(' · ');
 }
