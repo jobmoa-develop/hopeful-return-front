@@ -85,7 +85,7 @@ export default function RoundsPage() {
   const [expandedParentId, setExpandedParentId] = useState<number | null>(null);
 
   const canCreate = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(roleConfig.role);
-  const isRestricted = Boolean(user?.role && RESTRICTED_ROLES.includes(user.role));
+  const isRestricted = Boolean(user?.roles?.some((r) => RESTRICTED_ROLES.includes(r)));
 
   // 담당자로 배정된 회차만 남기는 필터 (제한 대상 역할 전용)
   const filterToMyCourses = async (list: CourseSummary[]): Promise<CourseSummary[]> => {
