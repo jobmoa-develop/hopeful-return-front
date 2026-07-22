@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import ProtectedRoute from './ProtectedRoute';
 import CourseCalendarPage from '../pages/CourseCalendarPage';
 import StaffScheduleManagePage from '../pages/StaffScheduleManagePage';
+import UserManagementPage from '../pages/UserManagementPage';
 
 function LoginRoute() {
   const { isAuthenticated } = useAuth();
@@ -109,6 +110,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute>
               <CourseCalendarPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'HEAD_OFFICE']}>
+              <UserManagementPage />
             </ProtectedRoute>
           }
         />

@@ -54,7 +54,7 @@ export const ROLE_MENU_RULES: Record<string, AppRole[]> = {
   consulting: ['ADMIN', 'OPERATOR', 'COUNSELOR'],
   attendance: ['ADMIN', 'OPERATOR', 'STAFF'],
   followUp: ['ADMIN', 'COUNSELOR'],
-  userManagement: ['ADMIN'],
+  userManagement: ['ADMIN', 'HEAD_OFFICE'],
 };
 
 // TODO:
