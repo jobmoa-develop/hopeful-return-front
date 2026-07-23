@@ -19,6 +19,37 @@ import { ParticipantEnrollModal } from '../components/ParticipantModals';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
+// 휴게시간 입력용 시간/분 드롭다운 옵션 (실제 저장/전송 값은 이 둘을 합산한 총 분(breakMinutes))
+const BREAK_HOUR_OPTIONS = ['0', '1', '2', '3', '4'];
+const BREAK_MINUTE_OPTIONS = ['0', '10', '20', '30', '40', '50'];
+
+// 총 분(breakMinutes) <-> {hour, minute} 문자열 상호 변환 헬퍼
+function minutesToParts(totalMinutes: number): { hour: string; minute: string } {
+  const safe = Number.isFinite(totalMinutes) && totalMinutes >= 0 ? totalMinutes : 0;
+  const hour = Math.floor(safe / 60);
+  const minute = safe % 60;
+  return {
+    hour: BREAK_HOUR_OPTIONS.includes(String(hour)) ? String(hour) : '0',
+    minute: BREAK_MINUTE_OPTIONS.includes(String(minute)) ? String(minute) : '0',
+  };
+}
+
+function partsToMinutes(hour: string, minute: string): number {
+  return Number(hour) * 60 + Number(minute);
+}
+
+// 휴게시간(분)을 사람이 읽기 좋은 "N시간 N분"으로 표시
+function formatBreakMinutesLabel(totalMinutes?: number): string {
+  if (totalMinutes === undefined || totalMinutes === null) return '-';
+  const { hour, minute } = minutesToParts(totalMinutes);
+  const h = Number(hour);
+  const m = Number(minute);
+  if (h === 0 && m === 0) return '0분';
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}시간`);
+  if (m > 0) parts.push(`${m}분`);
+  return parts.join(' ');
+}
 
 function statusLabel(status?: string) {
   const labels: Record<string, string> = {
@@ -49,6 +80,7 @@ function getErrorMessage(error: unknown) {
 }
 
 // 입력 컨트롤은 문자열로 다루고, 제출 시 빈 값은 "미변경"으로 간주해 payload에서 제외한다.
+// breakMinutes도 다른 숫자 필드와 동일하게 문자열로 들고 있다가 제출 시 숫자로 변환한다.
 type EditFormState = {
   regionId: string;
   courseNumber: string;
@@ -63,6 +95,7 @@ type EditFormState = {
   day5Date: string;
   educationStartTime: string;
   educationEndTime: string;
+  breakMinutes: string;
   capacity: string;
   minimumCapacity: string;
   location: string;
@@ -83,13 +116,21 @@ const EMPTY_EDIT_FORM: EditFormState = {
   day5Date: '',
   educationStartTime: '',
   educationEndTime: '',
+  breakMinutes: '',
   capacity: '',
   minimumCapacity: '',
   location: '',
   planSubmitDate: '',
 };
 
-const NUMERIC_EDIT_FIELDS: Array<keyof EditFormState> = ['regionId', 'courseNumber', 'localCourseNumber', 'capacity', 'minimumCapacity'];
+const NUMERIC_EDIT_FIELDS: Array<keyof EditFormState> = [
+  'regionId',
+  'courseNumber',
+  'localCourseNumber',
+  'capacity',
+  'minimumCapacity',
+  'breakMinutes',
+];
 
 // 백엔드 LocalTime이 "HH:mm:ss"로 내려와도 <input type="time">이 기대하는 "HH:mm"으로 맞춰준다.
 function normalizeTimeInput(value?: string | null): string {
@@ -166,6 +207,10 @@ export default function RoundDetailPage() {
         day5Date: response.data.day5Date ?? '',
         educationStartTime: normalizeTimeInput(response.data.educationStartTime),
         educationEndTime: normalizeTimeInput(response.data.educationEndTime),
+        breakMinutes:
+          response.data.breakMinutes === undefined || response.data.breakMinutes === null
+            ? ''
+            : String(response.data.breakMinutes),
         capacity: String(response.data.capacity ?? ''),
         minimumCapacity: String(response.data.minimumCapacity ?? ''),
         location: response.data.location ?? '',
@@ -249,6 +294,15 @@ export default function RoundDetailPage() {
 
   const handleSelectEditRegion = (regionId: number) => {
     setEditForm((prev) => ({ ...prev, regionId: String(regionId) }));
+  };
+
+  // 휴게시간 시/분 각각 변경 시, 나머지 값은 유지한 채 총 분(breakMinutes)으로 재계산해 저장
+  const { hour: editBreakHour, minute: editBreakMinute } = minutesToParts(Number(editForm.breakMinutes) || 0);
+  const handleEditBreakHourChange = (hour: string) => {
+    updateEditForm('breakMinutes', String(partsToMinutes(hour, editBreakMinute)));
+  };
+  const handleEditBreakMinuteChange = (minute: string) => {
+    updateEditForm('breakMinutes', String(partsToMinutes(editBreakHour, minute)));
   };
 
   useEffect(() => {
@@ -499,6 +553,25 @@ export default function RoundDetailPage() {
               <label>교육 종료시간</label>
               <input type="time" value={editForm.educationEndTime} onChange={(event) => updateEditForm('educationEndTime', event.target.value)} />
             </div>
+            <div className="field">
+              <label>휴게시간</label>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <select value={editBreakHour} onChange={(event) => handleEditBreakHourChange(event.target.value)}>
+                  {BREAK_HOUR_OPTIONS.map((h) => (
+                    <option key={h} value={h}>
+                      {h}시간
+                    </option>
+                  ))}
+                </select>
+                <select value={editBreakMinute} onChange={(event) => handleEditBreakMinuteChange(event.target.value)}>
+                  {BREAK_MINUTE_OPTIONS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}분
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             <div className="field">
               <label>정원</label>
@@ -563,6 +636,10 @@ export default function RoundDetailPage() {
               <span className="v tnum">
                 {course.educationStartTime ?? '-'} ~ {course.educationEndTime ?? '-'}
               </span>
+            </div>
+            <div className="kv">
+              <span className="k">휴게시간</span>
+              <span className="v tnum">{formatBreakMinutesLabel(course.breakMinutes)}</span>
             </div>
             <div className="kv">
               <span className="k">수행계획서 제출일</span>
