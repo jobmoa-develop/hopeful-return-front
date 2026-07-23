@@ -24,6 +24,8 @@ export type CourseSummary = {
   day5Date?: string;
   educationStartTime?: string;
   educationEndTime?: string;
+  // 휴게시간(분 단위). 예: 60 = 1시간, 30 = 30분.
+  breakMinutes?: number;
   currentParticipants?: number;
 };
 
@@ -79,6 +81,8 @@ export type CourseCreateRequest = {
   day5Date: string;
   educationStartTime: string;
   educationEndTime: string;
+  // 휴게시간(분 단위). 예: 60 = 1시간, 30 = 30분.
+  breakMinutes: number;
   capacity: number;
   minimumCapacity: number;
   location: string;
@@ -99,6 +103,8 @@ export type CourseUpdateRequest = {
   day5Date?: string;
   educationStartTime?: string;
   educationEndTime?: string;
+  // 휴게시간(분 단위). 예: 60 = 1시간, 30 = 30분.
+  breakMinutes?: number;
   capacity?: number;
   minimumCapacity?: number;
   location?: string;

@@ -14,6 +14,10 @@ const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED',
 // 이 역할들은 본인이 담당자로 배정된 회차만 목록에 노출
 const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
 
+// 휴게시간 입력용 시간/분 드롭다운 옵션 (실제 저장/전송 값은 이 둘을 합산한 총 분(breakMinutes))
+const BREAK_HOUR_OPTIONS = ['0', '1', '2', '3', '4'];
+const BREAK_MINUTE_OPTIONS = ['0', '10', '20', '30', '40', '50'];
+
 const EMPTY_FORM: CourseCreateRequest = {
   regionId: 0,
   courseNumber: 1,
@@ -28,6 +32,7 @@ const EMPTY_FORM: CourseCreateRequest = {
   day5Date: '',
   educationStartTime: '09:00',
   educationEndTime: '18:00',
+  breakMinutes: 30,
   capacity: 40,
   minimumCapacity: 15,
   location: '',
@@ -60,6 +65,21 @@ function getErrorMessage(error: unknown) {
     return data?.error ?? data?.message ?? '요청 처리 중 오류가 발생했습니다.';
   }
   return '요청 처리 중 오류가 발생했습니다.';
+}
+
+// 총 분(breakMinutes) <-> {hour, minute} 문자열 상호 변환 헬퍼
+function minutesToParts(totalMinutes: number): { hour: string; minute: string } {
+  const safe = Number.isFinite(totalMinutes) && totalMinutes >= 0 ? totalMinutes : 0;
+  const hour = Math.floor(safe / 60);
+  const minute = safe % 60;
+  return {
+    hour: BREAK_HOUR_OPTIONS.includes(String(hour)) ? String(hour) : '0',
+    minute: BREAK_MINUTE_OPTIONS.includes(String(minute)) ? String(minute) : '0',
+  };
+}
+
+function partsToMinutes(hour: string, minute: string): number {
+  return Number(hour) * 60 + Number(minute);
 }
 
 export default function RoundsPage() {
@@ -186,6 +206,15 @@ export default function RoundsPage() {
       ...prev,
       [key]: numericKeys.includes(key) ? Number(value) : value,
     }));
+  };
+
+  // 휴게시간 시/분 각각 변경 시, 나머지 값은 유지한 채 총 분(breakMinutes)으로 재계산해 저장
+  const { hour: breakHour, minute: breakMinute } = minutesToParts(form.breakMinutes);
+  const handleBreakHourChange = (hour: string) => {
+    setForm((prev) => ({ ...prev, breakMinutes: partsToMinutes(hour, breakMinute) }));
+  };
+  const handleBreakMinuteChange = (minute: string) => {
+    setForm((prev) => ({ ...prev, breakMinutes: partsToMinutes(breakHour, minute) }));
   };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -385,6 +414,25 @@ export default function RoundsPage() {
             <div className="field">
               <label>교육 종료시간</label>
               <input type="time" value={form.educationEndTime} onChange={(event) => updateForm('educationEndTime', event.target.value)} required />
+            </div>
+            <div className="field">
+              <label>휴게시간</label>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <select value={breakHour} onChange={(event) => handleBreakHourChange(event.target.value)}>
+                  {BREAK_HOUR_OPTIONS.map((h) => (
+                    <option key={h} value={h}>
+                      {h}시간
+                    </option>
+                  ))}
+                </select>
+                <select value={breakMinute} onChange={(event) => handleBreakMinuteChange(event.target.value)}>
+                  {BREAK_MINUTE_OPTIONS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}분
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <div className="field">
               <label>정원</label>
