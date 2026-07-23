@@ -14,6 +14,7 @@ import ProtectedRoute from './ProtectedRoute';
 import CourseCalendarPage from '../pages/CourseCalendarPage';
 import StaffScheduleManagePage from '../pages/StaffScheduleManagePage';
 import UserManagementPage from '../pages/UserManagementPage';
+import FollowUpPage from '../pages/FollowUpPage';
 
 function LoginRoute() {
   const { isAuthenticated } = useAuth();
@@ -42,8 +43,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute
               allowedRoles={[
-                'ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR', 'STAFF',
-                'PROJECT_MANAGER', 'PROJECT_LEADER',
+                'ADMIN',
+                'HEAD_OFFICE',
+                'REGIONAL_MANAGER',
+                'OPERATOR',
+                'COUNSELOR',
+                'STAFF',
+                'PROJECT_MANAGER',
+                'PROJECT_LEADER',
               ]}
             >
               <ParticipantsPage />
@@ -55,8 +62,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute
               allowedRoles={[
-                'ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'OPERATOR', 'COUNSELOR', 'STAFF',
-                'PROJECT_MANAGER', 'PROJECT_LEADER',
+                'ADMIN',
+                'HEAD_OFFICE',
+                'REGIONAL_MANAGER',
+                'OPERATOR',
+                'COUNSELOR',
+                'STAFF',
+                'PROJECT_MANAGER',
+                'PROJECT_LEADER',
               ]}
             >
               <ParticipantDetailPage />
@@ -110,6 +123,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute>
               <CourseCalendarPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/follow-up"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'COUNSELOR']}>
+              <FollowUpPage />
             </ProtectedRoute>
           }
         />
