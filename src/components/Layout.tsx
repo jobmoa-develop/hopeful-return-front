@@ -56,6 +56,7 @@ const PAGE_META = [
   { match: (path: string) => path === '/assign', crumb: '단계 관리', title: '인력 배정' },
   { match: (path: string) => path === '/consulting', crumb: '단계 관리', title: '상담 관리' },
   { match: (path: string) => path === '/attendance', crumb: '단계 관리', title: '출결 · 현장' },
+  { match: (path: string) => path === '/follow-up', crumb: '관리', title: '사후관리' },
   { match: (path: string) => path === '/users', crumb: '관리', title: '직원 관리' },
 ];
 
@@ -82,6 +83,7 @@ export default function Layout() {
     if (view === 'assign' && path === '/assign') return true;
     if (view === 'consulting' && path === '/consulting') return true;
     if (view === 'attendance' && path === '/attendance') return true;
+    if (view === 'followUp' && path.startsWith('/follow-up')) return true;
     if (view === 'userManagement' && path === '/users') return true;
     return false;
   };
@@ -208,9 +210,13 @@ export default function Layout() {
 
           {showAdminGroup && <div className="nav-group">관리</div>}
           {roleConfig.menu.includes('followUp') && (
-            <div className="nav-item soon">
-              <span className="ic">🔄</span>사후관리<span className="tag">준비중</span>
-            </div>
+            <Link
+              to="/follow-up"
+              className={`nav-item ${isNavActive('followUp') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              <span className="ic">🔄</span>사후관리
+            </Link>
           )}
           {roleConfig.menu.includes('userManagement') && (
             <Link
@@ -263,6 +269,6 @@ export default function Layout() {
           <Outlet />
         </div>
       </div>
-    </div >
+    </div>
   );
 }
