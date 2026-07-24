@@ -22,7 +22,14 @@ export function getDashboardRegionStats() {
 }
 
 export type CalendarItemKind = 'TASK' | 'ALERT';
-export type CalendarTaskType = 'RECRUIT_START' | 'RECRUIT_END' | 'PLAN_SUBMIT' | null;
+export type CalendarTaskType =
+    | 'RECRUIT_START'
+    | 'RECRUIT_END'
+    | 'PLAN_SUBMIT'
+    | 'ATTENDANCE_INPUT'
+    | 'COMPLETION_PROCESS'
+    | 'REPORT_SUBMIT'
+    | null;
 
 export type DashboardCalendarItem = {
     id: string;
