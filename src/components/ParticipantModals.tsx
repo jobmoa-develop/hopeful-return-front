@@ -104,7 +104,7 @@ interface ApiModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  onSave: () => void;
+  onSave?: () => void;
   saving: boolean;
   note?: string;
   children: ReactNode;
@@ -149,9 +149,11 @@ function ApiModal({ isOpen, onClose, title, onSave, saving, note, children }: Ap
           <button className="btn" onClick={onClose} disabled={saving}>
             취소
           </button>
-          <button className="btn primary" onClick={onSave} disabled={saving}>
-            {saving ? '저장 중…' : '저장'}
-          </button>
+          {onSave && (
+            <button className="btn primary" onClick={onSave} disabled={saving}>
+              {saving ? '저장 중…' : '저장'}
+            </button>
+          )}
         </div>
       </div>
     </div>
