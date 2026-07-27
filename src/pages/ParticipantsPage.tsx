@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { getParticipants } from '../api/participants';
 import type { ParticipantListItem } from '../api/participants';

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { getCourses, getCourseStaffs } from '../api/courses';
 import type { CourseSummary } from '../api/courses';
 import { useAuth } from '../context/AuthContext';
