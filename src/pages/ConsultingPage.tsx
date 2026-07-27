@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import { getCourseParticipants, CP_STATUS_CHIP, CP_STATUS_LABELS } from '../api/courseParticipants';

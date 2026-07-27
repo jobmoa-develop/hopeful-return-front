@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { isAxiosError } from 'axios';
 import { createCourse, getCourses, getCourseStaffs } from '../api/courses';
 import type { CourseCreateRequest, CourseStatus, CourseSummary } from '../api/courses';

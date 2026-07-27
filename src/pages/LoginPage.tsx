@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { isAxiosError } from 'axios';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router';
 import { login as requestLogin } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 
