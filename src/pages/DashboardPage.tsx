@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { getDashboardRegionStats } from '../api/dashboard';
 import type { DashboardRegionStatItem } from '../api/dashboard';
 import { getDashboardCalendar } from '../api/dashboard';
