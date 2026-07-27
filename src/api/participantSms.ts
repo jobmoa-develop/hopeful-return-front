@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { ApiResponse } from './courses';
+import type { ApiResponse, PageData } from './courses';
 
 // 발송 형식 — SMS(≤90B) / LMS(≤2000B) / MMS(이미지 포함)
 export type MessageFormat = 'SMS' | 'LMS' | 'MMS';
@@ -48,4 +48,58 @@ export function getParticipantSmsHistory(courseParticipantId: number) {
   return apiClient.get<ApiResponse<{ content: ParticipantSmsHistoryItem[] }>>('/api/participant-sms', {
     params: { courseParticipantId },
   });
+}
+
+// GET /api/participant-sms/history 항목 (ParticipantSmsPageResponse.Item 과 동일)
+export type SmsHistoryPageItem = {
+  smsId: number;
+  courseParticipantId: number | null;
+  participantName: string | null;
+  phone: string | null;
+  regionName: string | null;
+  courseName: string | null;
+  courseNumber: number | null;
+  messageFormat: MessageFormat | string;
+  title: string | null;
+  content: string;
+  sendStatus: string;
+  sentAt: string | null;
+  senderName: string | null;
+};
+
+export type SmsHistoryParams = {
+  keyword?: string;
+  sendStatus?: string;
+  courseNumber?: number;
+  regionId?: number;
+  sentDateFrom?: string; // YYYY-MM-DD(포함)
+  sentDateTo?: string; // YYYY-MM-DD(포함)
+  page?: number;
+  size?: number;
+};
+
+// 전역 발송내역 조회(페이지·필터) — 역할 스코프는 서버에서 강제(ADMIN/HEAD_OFFICE 전체, 그 외 본인).
+export function getSmsHistoryPage(params: SmsHistoryParams) {
+  return apiClient.get<ApiResponse<PageData<SmsHistoryPageItem>>>('/api/participant-sms/history', {
+    params,
+  });
+}
+
+// GET /api/participant-sms/{smsId} (ParticipantSmsDetailResponse 와 동일) — 상세 팝오버용
+export type ParticipantSmsDetailItem = {
+  smsId: number;
+  courseParticipantId: number | null;
+  messageFormat: MessageFormat | string;
+  title: string | null;
+  content: string;
+  sendStatus: string;
+  sentBy: number | null;
+  senderName: string | null;
+  sentAt: string | null;
+  createdAt: string | null;
+  imageUrls: string[];
+};
+
+export function getParticipantSmsDetail(smsId: number) {
+  return apiClient.get<ApiResponse<ParticipantSmsDetailItem>>(`/api/participant-sms/${smsId}`);
 }

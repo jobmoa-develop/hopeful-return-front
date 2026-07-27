@@ -9,7 +9,8 @@ import {
   updateSmsTemplate,
 } from '../api/smsTemplates';
 import type { SmsTemplateItem, SmsTemplateScope } from '../api/smsTemplates';
-import { sendParticipantSms } from '../api/participantSms';
+import { sendParticipantSms, getParticipantSmsHistory } from '../api/participantSms';
+import type { ParticipantSmsHistoryItem } from '../api/participantSms';
 import { prepareMmsImage } from '../utils/imageBase64';
 import type { PreparedMmsImage } from '../utils/imageBase64';
 import {
@@ -21,6 +22,25 @@ import {
 } from '../utils/smsBytes';
 
 const NAME_PLACEHOLDER = '{name}';
+
+// 발송 상태·형식 칩(전송내역 표시용)
+const SMS_STATUS_LABELS: Record<string, string> = { SUCCESS: '성공', FAIL: '실패', PENDING: '대기' };
+function smsStatusLabel(status: string): string {
+  return SMS_STATUS_LABELS[status] ?? status;
+}
+function smsStatusChip(status: string): string {
+  if (status === 'SUCCESS') return 'ok';
+  if (status === 'FAIL') return 'warn';
+  return 'neutral';
+}
+function smsFormatChip(format: string): string {
+  if (format === 'MMS') return 'ok';
+  if (format === 'LMS') return 'warn';
+  return 'info';
+}
+function fmtDateTime(iso: string | null): string {
+  return iso ? iso.replace('T', ' ').slice(0, 16) : '—';
+}
 
 interface SmsSendModalProps {
   isOpen: boolean;
@@ -60,6 +80,11 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
   const [templateForm, setTemplateForm] = useState<TemplateForm | null>(null);
   const [templateSaving, setTemplateSaving] = useState(false);
 
+  // 선택자 전송내역(4번째 컬럼) — 좌측 수신자 클릭 시 해당 참여자 이력 조회
+  const [selectedCpId, setSelectedCpId] = useState<number | null>(null);
+  const [history, setHistory] = useState<ParticipantSmsHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
 
   // 모달 열릴 때 선택 인원·입력 초기화
@@ -70,7 +95,22 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
     setContent('');
     setImages([]);
     setTemplateForm(null);
+    setSelectedCpId(null);
+    setHistory([]);
   }, [isOpen, recipients]);
+
+  // 선택자 전송내역 조회 — 좌측 수신자 클릭 시(모든 SMS_SEND 사용자에게 전체 이력 노출)
+  useEffect(() => {
+    if (!isOpen || selectedCpId == null) {
+      setHistory([]);
+      return;
+    }
+    setHistoryLoading(true);
+    getParticipantSmsHistory(selectedCpId)
+      .then((res) => setHistory(res.data.data?.content ?? []))
+      .catch(() => setHistory([]))
+      .finally(() => setHistoryLoading(false));
+  }, [isOpen, selectedCpId]);
 
   // 템플릿 목록 로드
   useEffect(() => {
@@ -278,24 +318,33 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
               </div>
               <div className="sms-recipient-list">
                 {targets.length === 0 && <p className="muted">선택된 참여자가 없습니다.</p>}
-                {targets.map((t) => (
-                  <div key={t.participantId} className="sms-recipient">
-                    <div className="sms-recipient-info">
-                      <b>{t.name}</b>
-                      <span className="muted">{t.phone}</span>
-                      <span className="muted" style={{ fontSize: 12 }}>
-                        {roundLabel(t)}
-                      </span>
+                {targets.map((t) => {
+                  const cpId = t.latestEnrollment?.courseParticipantId ?? null;
+                  const selected = cpId != null && cpId === selectedCpId;
+                  return (
+                    <div key={t.participantId} className={`sms-recipient${selected ? ' selected' : ''}`}>
+                      <div
+                        className="sms-recipient-info"
+                        style={{ cursor: cpId != null ? 'pointer' : 'default' }}
+                        title={cpId != null ? '전송내역 보기' : ''}
+                        onClick={() => cpId != null && setSelectedCpId(cpId)}
+                      >
+                        <b>{t.name}</b>
+                        <span className="muted">{t.phone}</span>
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          {roundLabel(t)}
+                        </span>
+                      </div>
+                      <button
+                        className="x-sm"
+                        title="대상에서 제외"
+                        onClick={() => removeTarget(t.participantId)}
+                      >
+                        ✕
+                      </button>
                     </div>
-                    <button
-                      className="x-sm"
-                      title="대상에서 제외"
-                      onClick={() => removeTarget(t.participantId)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
@@ -443,6 +492,36 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
                   </div>
                 ))}
               </div>
+            </section>
+
+            {/* 우: 선택자 전송내역 */}
+            <section className="sms-col">
+              <div className="sms-col-h">선택자 전송내역</div>
+              {selectedCpId == null ? (
+                <p className="muted">좌측에서 수신자를 클릭하면 전송내역이 표시됩니다.</p>
+              ) : historyLoading ? (
+                <p className="muted">불러오는 중…</p>
+              ) : history.length === 0 ? (
+                <p className="muted">발송 내역이 없습니다.</p>
+              ) : (
+                <div className="sms-history-list">
+                  {history.map((h) => (
+                    <div key={h.smsId} className="sms-history-item">
+                      <div className="sms-history-meta">
+                        <span className={`chip ${smsFormatChip(h.messageFormat)}`}>{h.messageFormat}</span>
+                        <span className={`chip ${smsStatusChip(h.sendStatus)}`}>
+                          {smsStatusLabel(h.sendStatus)}
+                        </span>
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          {fmtDateTime(h.sentAt)}
+                        </span>
+                      </div>
+                      {h.title && <b style={{ fontSize: 12 }}>{h.title}</b>}
+                      <div className="muted sms-history-content">{h.content}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           </div>
         </div>

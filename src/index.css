@@ -2115,12 +2115,12 @@ table.data tbody tr:hover {
 }
 
 .modal.sms-modal {
-    width: min(1080px, 100%)
+    width: min(1320px, 100%)
 }
 
 .sms-grid {
     display: grid;
-    grid-template-columns: 1fr 1.5fr 1.1fr;
+    grid-template-columns: 1fr 1.4fr 1fr 1.1fr;
     gap: 16px
 }
 
@@ -2167,6 +2167,44 @@ table.data tbody tr:hover {
     padding: 7px 9px;
     border: 1px solid var(--line);
     border-radius: 8px
+}
+
+.sms-recipient.selected {
+    border-color: var(--navy-600);
+    background: var(--navy-50)
+}
+
+.sms-history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 420px;
+    overflow-y: auto
+}
+
+.sms-history-item {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 8px
+}
+
+.sms-history-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap
+}
+
+.sms-history-content {
+    font-size: 12px;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden
 }
 
 .sms-recipient-info {

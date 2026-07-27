@@ -42,6 +42,11 @@ const PAGE_META = [
   { match: (path: string) => path === '/', crumb: '운영', title: '대시보드' },
   { match: (path: string) => path === '/participants', crumb: '운영', title: '참여자 관리' },
   {
+    match: (path: string) => path === '/participants/sms-history',
+    crumb: '운영 · 참여자',
+    title: '문자 발송 내역',
+  },
+  {
     match: (path: string) => path.startsWith('/participants/'),
     crumb: '운영 · 참여자',
     title: '참여자 상세',
@@ -61,7 +66,7 @@ const PAGE_META = [
 ];
 
 export default function Layout() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const { roleConfig } = useRole();
   const location = useLocation();
   const navigate = useNavigate();
@@ -77,7 +82,9 @@ export default function Layout() {
   const isNavActive = (view: string) => {
     const path = location.pathname;
     if (view === 'dashboard' && path === '/') return true;
-    if (view === 'participants' && path.startsWith('/participants')) return true;
+    if (view === 'participants' && path.startsWith('/participants') && path !== '/participants/sms-history')
+      return true;
+    if (view === 'smsHistory' && path === '/participants/sms-history') return true;
     if (view === 'rounds' && path.startsWith('/rounds')) return true;
     if (view === 'calendar' && path === '/calendar') return true;
     if (view === 'assign' && path === '/assign') return true;
@@ -158,6 +165,15 @@ export default function Layout() {
               onClick={() => setIsSidebarOpen(false)}
             >
               <span className="ic">👤</span>참여자 관리
+            </Link>
+          )}
+          {roleConfig.menu.includes('participants') && user?.canSendSms && (
+            <Link
+              to="/participants/sms-history"
+              className={`nav-item ${isNavActive('smsHistory') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              <span className="ic">✉</span>문자 발송 내역
             </Link>
           )}
           {roleConfig.menu.includes('rounds') && (
