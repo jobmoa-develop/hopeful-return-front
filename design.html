@@ -1,0 +1,2862 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>희리패 통합관리시스템 — 디자인 시안 v0.2</title>
+    <link rel="stylesheet" as="style" crossorigin
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+    <style>
+        :root {
+            --ink: #142a40;
+            --navy: #1b3a5b;
+            --navy-600: #2c5a86;
+            --navy-50: #eef3f8;
+            --bg: #f1f4f8;
+            --surface: #ffffff;
+            --line: #e2e8f0;
+            --line-soft: #edf1f6;
+            --text: #1f2a37;
+            --muted: #69768a;
+            --muted-2: #97a2b3;
+            --ok: #1f8a52;
+            --ok-bg: #e7f4ec;
+            --warn: #bd7611;
+            --warn-bg: #fbf0dc;
+            --danger: #c0392b;
+            --danger-bg: #fbe9e7;
+            --info: #2c5a86;
+            --info-bg: #e9f0f7;
+            --radius: 11px;
+            --radius-sm: 7px;
+            --shadow: 0 1px 2px rgba(20, 42, 64, .04), 0 4px 16px rgba(20, 42, 64, .05);
+            --sidebar-w: 236px;
+            --font: "Pretendard", "Pretendard Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html {
+            -webkit-text-size-adjust: 100%
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.5;
+            font-feature-settings: "tnum" on;
+            -webkit-font-smoothing: antialiased
+        }
+
+        .tnum {
+            font-variant-numeric: tabular-nums
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none
+        }
+
+        button {
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+            background: none
+        }
+
+        :focus-visible {
+            outline: 2px solid var(--navy-600);
+            outline-offset: 2px;
+            border-radius: 4px
+        }
+
+        /* ===== Layout ===== */
+        .app {
+            display: flex;
+            min-height: 100vh
+        }
+
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--ink);
+            color: #cdd8e6;
+            position: fixed;
+            inset: 0 auto 0 0;
+            display: flex;
+            flex-direction: column;
+            z-index: 30
+        }
+
+        .brand {
+            padding: 20px 20px 16px;
+            display: flex;
+            gap: 11px;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, .07)
+        }
+
+        .brand .mark {
+            width: 34px;
+            height: 34px;
+            flex: none;
+            border-radius: 9px;
+            background: linear-gradient(150deg, #2c5a86, #1b3a5b);
+            display: grid;
+            place-items: center
+        }
+
+        .brand .mark svg {
+            width: 20px;
+            height: 20px
+        }
+
+        .brand .name {
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: -.01em;
+            line-height: 1.25
+        }
+
+        .brand .sub {
+            font-size: 11px;
+            color: #7e91a8;
+            font-weight: 500;
+            margin-top: 1px
+        }
+
+        .nav {
+            padding: 10px 12px;
+            flex: 1;
+            overflow: auto
+        }
+
+        .nav-group {
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: .06em;
+            color: #6a7d96;
+            text-transform: uppercase;
+            padding: 14px 12px 6px
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8.5px 12px;
+            border-radius: 8px;
+            color: #bcc9d9;
+            font-size: 13.5px;
+            font-weight: 500;
+            width: 100%;
+            text-align: left;
+            transition: background .12s, color .12s;
+            position: relative
+        }
+
+        .nav-item:hover {
+            background: rgba(255, 255, 255, .06);
+            color: #fff
+        }
+
+        .nav-item.active {
+            background: var(--navy-600);
+            color: #fff;
+            font-weight: 600
+        }
+
+        .nav-item .ic {
+            width: 17px;
+            height: 17px;
+            flex: none;
+            opacity: .92
+        }
+
+        .nav-item .badge {
+            margin-left: auto;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10.5px;
+            font-weight: 700;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            display: grid;
+            place-items: center;
+            padding: 0 5px
+        }
+
+        .nav-item.soon {
+            opacity: .5
+        }
+
+        .nav-item.soon .tag {
+            margin-left: auto;
+            font-size: 9.5px;
+            color: #7e91a8;
+            font-weight: 600;
+            border: 1px solid #3a4d63;
+            padding: 1px 6px;
+            border-radius: 20px
+        }
+
+        .sidebar-foot {
+            padding: 13px 18px;
+            border-top: 1px solid rgba(255, 255, 255, .07);
+            font-size: 11px;
+            color: #67798f
+        }
+
+        .main {
+            flex: 1;
+            margin-left: var(--sidebar-w);
+            display: flex;
+            flex-direction: column;
+            min-width: 0
+        }
+
+        .topbar {
+            height: 60px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 0 26px;
+            position: sticky;
+            top: 0;
+            z-index: 20
+        }
+
+        .crumb {
+            font-size: 12px;
+            color: var(--muted-2);
+            font-weight: 500
+        }
+
+        .topbar h1 {
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: -.02em;
+            color: var(--ink)
+        }
+
+        .topbar .spacer {
+            flex: 1
+        }
+
+        .searchbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 7px 12px;
+            width: 280px;
+            color: var(--muted)
+        }
+
+        .searchbox input {
+            border: none;
+            background: none;
+            outline: none;
+            font: inherit;
+            font-size: 13px;
+            width: 100%;
+            color: var(--text)
+        }
+
+        .user {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding-left: 4px
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: var(--navy-600);
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font-size: 13px;
+            font-weight: 700
+        }
+
+        .user .u-name {
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.2
+        }
+
+        .user .u-role {
+            font-size: 11px;
+            color: var(--muted)
+        }
+
+        .content {
+            padding: 26px;
+            max-width: 1280px;
+            width: 100%
+        }
+
+        .view {
+            display: none;
+            animation: fade .25s ease
+        }
+
+        .view.active {
+            display: block
+        }
+
+        @keyframes fade {
+            from {
+                opacity: 0;
+                transform: translateY(4px)
+            }
+
+            to {
+                opacity: 1;
+                transform: none
+            }
+        }
+
+        @media (prefers-reduced-motion:reduce) {
+            * {
+                animation: none !important;
+                transition: none !important
+            }
+        }
+
+        /* ===== Bits ===== */
+        .eyebrow {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--muted-2)
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink);
+            letter-spacing: -.01em
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow)
+        }
+
+        .card-h {
+            padding: 15px 18px;
+            border-bottom: 1px solid var(--line-soft);
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .card-h .more {
+            margin-left: auto;
+            font-size: 12px;
+            color: var(--navy-600);
+            font-weight: 600
+        }
+
+        .card-b {
+            padding: 18px
+        }
+
+        .grid {
+            display: grid;
+            gap: 18px
+        }
+
+        .muted {
+            color: var(--muted)
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 3px 9px;
+            border-radius: 20px;
+            white-space: nowrap
+        }
+
+        .chip.ok {
+            background: var(--ok-bg);
+            color: var(--ok)
+        }
+
+        .chip.warn {
+            background: var(--warn-bg);
+            color: var(--warn)
+        }
+
+        .chip.danger {
+            background: var(--danger-bg);
+            color: var(--danger)
+        }
+
+        .chip.info {
+            background: var(--info-bg);
+            color: var(--info)
+        }
+
+        .chip.neutral {
+            background: #eef1f5;
+            color: #5a6678
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex: none
+        }
+
+        .dot.ok {
+            background: var(--ok)
+        }
+
+        .dot.warn {
+            background: var(--warn)
+        }
+
+        .dot.danger {
+            background: var(--danger)
+        }
+
+        .dot.idle {
+            background: #c4cdda
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            background: var(--surface);
+            color: var(--text);
+            transition: .12s
+        }
+
+        .btn:hover {
+            border-color: var(--navy-600);
+            color: var(--navy)
+        }
+
+        .btn.primary {
+            background: var(--navy);
+            color: #fff;
+            border-color: var(--navy)
+        }
+
+        .btn.primary:hover {
+            background: var(--navy-600);
+            color: #fff
+        }
+
+        .dday {
+            font-size: 11.5px;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            padding: 2px 7px;
+            border-radius: 6px
+        }
+
+        .dday.today {
+            background: var(--danger);
+            color: #fff
+        }
+
+        .dday.soon {
+            background: var(--warn-bg);
+            color: var(--warn)
+        }
+
+        .dday.ok {
+            background: var(--navy-50);
+            color: var(--navy-600)
+        }
+
+        /* KPI */
+        .kpis {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 18px
+        }
+
+        .kpi {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden
+        }
+
+        .kpi .lab {
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 600
+        }
+
+        .kpi .val {
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: -.03em;
+            margin-top: 7px;
+            line-height: 1;
+            color: var(--ink)
+        }
+
+        .kpi .val small {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--muted);
+            margin-left: 3px
+        }
+
+        .kpi .sub {
+            font-size: 11.5px;
+            margin-top: 8px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 5px
+        }
+
+        .kpi .rail {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 4px
+        }
+
+        .kpi.r-navy .rail {
+            background: var(--navy-600)
+        }
+
+        .kpi.r-warn .rail {
+            background: var(--warn)
+        }
+
+        .kpi.r-danger .rail {
+            background: var(--danger)
+        }
+
+        .kpi.r-ok .rail {
+            background: var(--ok)
+        }
+
+        /* dashboard layout */
+        .dash-cols {
+            display: grid;
+            grid-template-columns: 1.55fr 1fr;
+            gap: 18px;
+            align-items: start
+        }
+
+        /* task list */
+        .task {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            padding: 13px 18px;
+            border-bottom: 1px solid var(--line-soft)
+        }
+
+        .task:last-child {
+            border-bottom: none
+        }
+
+        .task .when {
+            width: 62px;
+            flex: none;
+            text-align: center
+        }
+
+        .task .ttl {
+            font-size: 13.5px;
+            font-weight: 600
+        }
+
+        .task .meta {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 2px
+        }
+
+        .task .who {
+            margin-left: auto;
+            text-align: right
+        }
+
+        .task .who .nm {
+            font-size: 12.5px;
+            font-weight: 600
+        }
+
+        .task .who .rl {
+            font-size: 11px;
+            color: var(--muted-2)
+        }
+
+        .task:hover {
+            background: #fafcfe
+        }
+
+        /* alerts */
+        .alert {
+            display: flex;
+            gap: 11px;
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--line-soft);
+            align-items: flex-start
+        }
+
+        .alert:last-child {
+            border-bottom: none
+        }
+
+        .alert .ai {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            flex: none;
+            display: grid;
+            place-items: center
+        }
+
+        .alert .ai.danger {
+            background: var(--danger-bg);
+            color: var(--danger)
+        }
+
+        .alert .ai.warn {
+            background: var(--warn-bg);
+            color: var(--warn)
+        }
+
+        .alert .at {
+            font-size: 13px;
+            font-weight: 600
+        }
+
+        .alert .as {
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-top: 1px
+        }
+
+        .alert .cnt {
+            margin-left: auto;
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--ink)
+        }
+
+        /* region cards */
+        .regions {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-top: 2px
+        }
+
+        .region {
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+            padding: 13px 14px;
+            background: var(--surface)
+        }
+
+        .region .rn {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink)
+        }
+
+        .region .rc {
+            font-size: 23px;
+            font-weight: 800;
+            margin-top: 6px;
+            letter-spacing: -.02em
+        }
+
+        .region .rl {
+            font-size: 11px;
+            color: var(--muted);
+            font-weight: 500
+        }
+
+        .region .rb {
+            margin-top: 9px;
+            display: flex;
+            gap: 4px
+        }
+
+        .pill {
+            font-size: 10.5px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 5px
+        }
+
+        /* table */
+        .tbl-wrap {
+            overflow: auto
+        }
+
+        table.data {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px
+        }
+
+        table.data th {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: .03em;
+            text-transform: uppercase;
+            color: var(--muted-2);
+            padding: 11px 14px;
+            border-bottom: 1px solid var(--line);
+            white-space: nowrap;
+            background: #fafbfd
+        }
+
+        table.data td {
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--line-soft);
+            white-space: nowrap
+        }
+
+        table.data tr:last-child td {
+            border-bottom: none
+        }
+
+        table.data tbody tr {
+            cursor: pointer;
+            transition: background .1s
+        }
+
+        table.data tbody tr:hover {
+            background: var(--navy-50)
+        }
+
+        .pname {
+            font-weight: 600;
+            color: var(--ink)
+        }
+
+        .cell-sub {
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-top: 1px
+        }
+
+        .mini-prog {
+            display: flex;
+            align-items: center;
+            gap: 7px
+        }
+
+        .mini-prog .bar {
+            width: 54px;
+            height: 6px;
+            border-radius: 3px;
+            background: #e7ecf3;
+            overflow: hidden
+        }
+
+        .mini-prog .bar span {
+            display: block;
+            height: 100%;
+            background: var(--navy-600);
+            border-radius: 3px
+        }
+
+        /* filter bar */
+        .filters {
+            display: flex;
+            gap: 9px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+            align-items: center
+        }
+
+        .select {
+            font-size: 12.5px;
+            font-weight: 600;
+            color: var(--text);
+            border: 1px solid var(--line);
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 7px 11px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px
+        }
+
+        .select .ico {
+            color: var(--muted-2)
+        }
+
+        .filters .count {
+            margin-left: auto;
+            font-size: 12.5px;
+            color: var(--muted);
+            font-weight: 500
+        }
+
+        /* ===== Participant detail / Journey rail (SIGNATURE) ===== */
+        .detail-head {
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 20px
+        }
+
+        .detail-head .pa {
+            width: 54px;
+            height: 54px;
+            border-radius: 14px;
+            background: linear-gradient(150deg, #2c5a86, #1b3a5b);
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font-size: 20px;
+            font-weight: 700;
+            flex: none
+        }
+
+        .detail-head .pn {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -.02em;
+            color: var(--ink)
+        }
+
+        .detail-head .pm {
+            font-size: 13px;
+            color: var(--muted);
+            margin-top: 3px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap
+        }
+
+        .detail-head .pm b {
+            color: var(--text);
+            font-weight: 600
+        }
+
+        .detail-head .actions {
+            margin-left: auto;
+            display: flex;
+            gap: 8px
+        }
+
+        .back {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--navy-600);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 14px
+        }
+
+        .journey {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px 26px 22px;
+            margin-bottom: 18px
+        }
+
+        .journey .jh {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            margin-bottom: 22px
+        }
+
+        .rail {
+            display: flex;
+            align-items: flex-start;
+            position: relative
+        }
+
+        .rail .step {
+            flex: 1;
+            position: relative;
+            text-align: center;
+            padding-top: 34px
+        }
+
+        .rail .step::before {
+            content: "";
+            position: absolute;
+            top: 13px;
+            left: 50%;
+            right: -50%;
+            height: 3px;
+            background: #e3e9f0;
+            z-index: 0
+        }
+
+        .rail .step:last-child::before {
+            display: none
+        }
+
+        .rail .step.done::before {
+            background: var(--navy-600)
+        }
+
+        .rail .node {
+            position: absolute;
+            top: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #fff;
+            border: 3px solid #d3dce6;
+            z-index: 1;
+            display: grid;
+            place-items: center
+        }
+
+        .rail .step.done .node {
+            border-color: var(--navy-600);
+            background: var(--navy-600)
+        }
+
+        .rail .step.done .node svg {
+            width: 13px;
+            height: 13px;
+            color: #fff
+        }
+
+        .rail .step.current .node {
+            border-color: var(--navy-600);
+            background: #fff;
+            box-shadow: 0 0 0 4px var(--navy-50)
+        }
+
+        .rail .step.current .node i {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--navy-600);
+            display: block
+        }
+
+        .rail .step .sl {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--ink)
+        }
+
+        .rail .step.idle .sl {
+            color: var(--muted-2)
+        }
+
+        .rail .step .sd {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 3px
+        }
+
+        .rail .step.current .sl {
+            color: var(--navy-600)
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+            align-items: start
+        }
+
+        .kv {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--line-soft);
+            font-size: 13px
+        }
+
+        .kv:last-child {
+            border-bottom: none
+        }
+
+        .kv .k {
+            color: var(--muted);
+            font-weight: 500
+        }
+
+        .kv .v {
+            font-weight: 600;
+            text-align: right
+        }
+
+        .att-grid {
+            display: flex;
+            gap: 8px
+        }
+
+        .att-day {
+            flex: 1;
+            text-align: center;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 9px 4px
+        }
+
+        .att-day .d {
+            font-size: 10.5px;
+            color: var(--muted-2);
+            font-weight: 600
+        }
+
+        .att-day .s {
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 4px
+        }
+
+        .att-day.ok {
+            background: var(--ok-bg);
+            border-color: #cfe7d8
+        }
+
+        .att-day.ok .s {
+            color: var(--ok)
+        }
+
+        .att-day.warn {
+            background: var(--warn-bg);
+            border-color: #f0dcb8
+        }
+
+        .att-day.warn .s {
+            color: var(--warn)
+        }
+
+        .months {
+            display: flex;
+            gap: 7px
+        }
+
+        .mo {
+            flex: 1;
+            text-align: center
+        }
+
+        .mo .mc {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-weight: 700;
+            font-size: 13px
+        }
+
+        .mo .mc.done {
+            background: var(--ok);
+            color: #fff
+        }
+
+        .mo .mc.idle {
+            background: #eef1f5;
+            color: var(--muted-2)
+        }
+
+        .mo .ml {
+            font-size: 10.5px;
+            color: var(--muted);
+            margin-top: 4px;
+            font-weight: 600
+        }
+
+        /* round detail checklist */
+        .checklist .ci {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 0;
+            border-bottom: 1px solid var(--line-soft)
+        }
+
+        .checklist .ci:last-child {
+            border-bottom: none
+        }
+
+        .checklist .cb {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            flex: none;
+            display: grid;
+            place-items: center;
+            border: 2px solid #cdd6e2
+        }
+
+        .checklist .cb.done {
+            background: var(--ok);
+            border-color: var(--ok)
+        }
+
+        .checklist .cb.done svg {
+            width: 12px;
+            color: #fff
+        }
+
+        .checklist .cb.cur {
+            border-color: var(--navy-600)
+        }
+
+        .checklist .ct {
+            font-size: 13.5px;
+            font-weight: 600
+        }
+
+        .checklist .cs {
+            font-size: 11.5px;
+            color: var(--muted);
+            margin-top: 1px
+        }
+
+        .checklist .cw {
+            margin-left: auto
+        }
+
+        .capacity {
+            display: flex;
+            align-items: flex-end;
+            gap: 18px;
+            margin: 4px 0 14px
+        }
+
+        .capacity .big {
+            font-size: 38px;
+            font-weight: 800;
+            letter-spacing: -.03em;
+            line-height: .9;
+            color: var(--ink)
+        }
+
+        .capacity .big small {
+            font-size: 17px;
+            color: var(--muted);
+            font-weight: 600
+        }
+
+        .cap-bar {
+            flex: 1;
+            height: 12px;
+            border-radius: 6px;
+            background: #e7ecf3;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 6px
+        }
+
+        .cap-bar span {
+            display: block;
+            height: 100%;
+            background: linear-gradient(90deg, #2c5a86, #1b3a5b);
+            border-radius: 6px
+        }
+
+        .cap-bar .thr {
+            position: absolute;
+            top: -4px;
+            bottom: -4px;
+            width: 2px;
+            background: var(--danger)
+        }
+
+        .assignee {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--line-soft)
+        }
+
+        .assignee:last-child {
+            border-bottom: none
+        }
+
+        .assignee .ra {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            background: var(--navy-50);
+            color: var(--navy-600);
+            display: grid;
+            place-items: center;
+            font-size: 12px;
+            font-weight: 700
+        }
+
+        .assignee .rr {
+            font-size: 11px;
+            color: var(--muted)
+        }
+
+        .assignee .rnm {
+            font-size: 13px;
+            font-weight: 600
+        }
+
+        /* memo */
+        .memo-item {
+            display: flex;
+            gap: 12px;
+            padding: 13px 18px;
+            border-bottom: 1px solid var(--line-soft)
+        }
+
+        .memo-item:last-child {
+            border-bottom: none
+        }
+
+        .memo-av {
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            flex: none;
+            background: var(--navy-50);
+            color: var(--navy-600);
+            display: grid;
+            place-items: center;
+            font-size: 13px;
+            font-weight: 700
+        }
+
+        .memo-head {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .memo-head b {
+            font-size: 13px
+        }
+
+        .memo-date {
+            margin-left: auto;
+            font-size: 11.5px;
+            color: var(--muted-2);
+            font-variant-numeric: tabular-nums
+        }
+
+        .memo-txt {
+            font-size: 13px;
+            color: var(--text);
+            margin-top: 4px;
+            line-height: 1.55
+        }
+
+        /* placeholder views */
+        .ph {
+            text-align: center;
+            padding: 64px 20px;
+            max-width: 520px;
+            margin: 30px auto
+        }
+
+        .ph .pi {
+            width: 56px;
+            height: 56px;
+            border-radius: 15px;
+            background: var(--navy-50);
+            color: var(--navy-600);
+            display: grid;
+            place-items: center;
+            margin: 0 auto 18px
+        }
+
+        .ph h2 {
+            font-size: 18px;
+            color: var(--ink);
+            font-weight: 700
+        }
+
+        .ph p {
+            color: var(--muted);
+            margin-top: 8px;
+            font-size: 13.5px
+        }
+
+        .ph .mod {
+            margin-top: 14px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--navy-600);
+            background: var(--navy-50);
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px
+        }
+
+        .note {
+            margin-top: 22px;
+            font-size: 11.5px;
+            color: var(--muted-2);
+            text-align: center;
+            line-height: 1.7
+        }
+
+        @media (max-width:1080px) {
+            .kpis {
+                grid-template-columns: repeat(2, 1fr)
+            }
+
+            .dash-cols {
+                grid-template-columns: 1fr
+            }
+
+            .regions {
+                grid-template-columns: repeat(3, 1fr)
+            }
+
+            .detail-grid {
+                grid-template-columns: 1fr
+            }
+        }
+
+        @media (max-width:760px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform .2s
+            }
+
+            .sidebar.open {
+                transform: none
+            }
+
+            .main {
+                margin-left: 0
+            }
+
+            .searchbox {
+                display: none
+            }
+
+            .kpis {
+                grid-template-columns: 1fr 1fr
+            }
+
+            .regions {
+                grid-template-columns: repeat(2, 1fr)
+            }
+
+            .rail .step .sd {
+                display: none
+            }
+
+            .menu-btn {
+                display: grid !important
+            }
+        }
+
+        .menu-btn {
+            display: none;
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            border: 1px solid var(--line);
+            place-items: center
+        }
+
+        /* role switch */
+        .role-switch {
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .role-switch label {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted-2);
+            text-transform: uppercase;
+            letter-spacing: .04em
+        }
+
+        .role-switch select {
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            border: 1px solid var(--line);
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 7px 10px;
+            cursor: pointer
+        }
+
+        .mode-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 20px;
+            white-space: nowrap
+        }
+
+        .mode-badge.admin {
+            background: var(--navy-50);
+            color: var(--navy-600)
+        }
+
+        .mode-badge.field {
+            background: var(--warn-bg);
+            color: var(--warn)
+        }
+
+        .perm-bar {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            background: var(--info-bg);
+            border: 1px solid #cfe0f0;
+            border-radius: 9px;
+            padding: 9px 14px;
+            margin-bottom: 16px;
+            font-size: 12.5px;
+            color: var(--navy-600);
+            font-weight: 600
+        }
+
+        .perm-bar .pb-ic {
+            font-size: 14px
+        }
+
+        .hide {
+            display: none !important
+        }
+
+        /* modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(20, 42, 64, .5);
+            display: none;
+            place-items: center;
+            z-index: 100;
+            padding: 20px
+        }
+
+        .modal-overlay.open {
+            display: grid;
+            animation: fade .15s ease
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: 14px;
+            width: min(700px, 100%);
+            max-height: 88vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 24px 70px rgba(0, 0, 0, .32);
+            overflow: hidden
+        }
+
+        .modal-h {
+            padding: 17px 22px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: none
+        }
+
+        .modal-h h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--ink)
+        }
+
+        .modal-h .badge-role {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--navy-600);
+            background: var(--navy-50);
+            padding: 3px 9px;
+            border-radius: 20px
+        }
+
+        .modal-h .x {
+            margin-left: auto;
+            width: 30px;
+            height: 30px;
+            border-radius: 7px;
+            display: grid;
+            place-items: center;
+            color: var(--muted);
+            font-size: 18px
+        }
+
+        .modal-h .x:hover {
+            background: var(--bg)
+        }
+
+        .modal-b {
+            padding: 20px 22px;
+            overflow: auto
+        }
+
+        .modal-f {
+            padding: 14px 22px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            flex: none;
+            background: #fafbfd
+        }
+
+        .modal-note {
+            font-size: 11.5px;
+            color: var(--muted-2);
+            margin-right: auto;
+            align-self: center
+        }
+
+        /* form */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 16px
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        .field.full {
+            grid-column: 1/-1
+        }
+
+        .field label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--muted)
+        }
+
+        .field label .req {
+            color: var(--danger);
+            margin-left: 2px
+        }
+
+        .field input,
+        .field select,
+        .field textarea {
+            font-family: inherit;
+            font-size: 13.5px;
+            padding: 9px 11px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            color: var(--text);
+            width: 100%
+        }
+
+        .field input:focus,
+        .field select:focus,
+        .field textarea:focus {
+            outline: none;
+            border-color: var(--navy-600);
+            box-shadow: 0 0 0 3px var(--navy-50)
+        }
+
+        .field textarea {
+            resize: vertical;
+            min-height: 84px;
+            line-height: 1.5
+        }
+
+        .field .hint {
+            font-size: 11px;
+            color: var(--muted-2)
+        }
+
+        .form-section {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--navy-600);
+            grid-column: 1/-1;
+            padding-top: 10px;
+            margin-top: 2px;
+            border-top: 1px dashed var(--line)
+        }
+
+        .form-section:first-child {
+            border-top: none;
+            padding-top: 0
+        }
+
+        .att-row {
+            display: grid;
+            grid-template-columns: 54px 1.1fr 1.4fr;
+            gap: 10px;
+            align-items: center
+        }
+
+        .att-row .dlab {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink)
+        }
+
+        .chk {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text);
+            padding: 8px 0
+        }
+
+        .chk input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--navy-600)
+        }
+
+        .assign-rows {
+            display: flex;
+            flex-direction: column;
+            gap: 8px
+        }
+
+        .assign-rows .ar {
+            display: grid;
+            grid-template-columns: 80px 1fr auto;
+            gap: 10px;
+            align-items: center
+        }
+
+        .assign-rows .ar .role-lab {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--muted)
+        }
+
+        .btn-add-sm {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--navy-600);
+            border: 1px dashed var(--navy-600);
+            border-radius: 7px;
+            padding: 6px 10px;
+            background: var(--navy-50)
+        }
+
+        @media(max-width:560px) {
+            .form-grid {
+                grid-template-columns: 1fr
+            }
+        }
+
+        /* attendance grid */
+        .att-tools {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px
+        }
+
+        .att-tools .select {
+            cursor: pointer
+        }
+
+        .att-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px
+        }
+
+        .att-table th {
+            background: #fafbfd;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted-2);
+            text-transform: uppercase;
+            padding: 10px 8px;
+            border-bottom: 1px solid var(--line);
+            text-align: center
+        }
+
+        .att-table th.nm-col {
+            text-align: left
+        }
+
+        .att-table td {
+            padding: 8px;
+            border-bottom: 1px solid var(--line-soft);
+            text-align: center
+        }
+
+        .att-table td.nm-col {
+            text-align: left
+        }
+
+        .att-cell {
+            display: inline-flex;
+            min-width: 50px;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer
+        }
+
+        .att-cell.출석 {
+            background: var(--ok-bg);
+            color: var(--ok)
+        }
+
+        .att-cell.지각,
+        .att-cell.외출,
+        .att-cell.조퇴 {
+            background: var(--warn-bg);
+            color: var(--warn)
+        }
+
+        .att-cell.결석 {
+            background: var(--danger-bg);
+            color: var(--danger)
+        }
+
+        .att-cell.none {
+            background: #f0f2f5;
+            color: var(--muted-2)
+        }
+
+        .att-time {
+            font-size: 10.5px;
+            color: var(--muted);
+            margin-top: 2px
+        }
+
+        /* assign board */
+        .assign-board {
+            display: grid;
+            gap: 14px
+        }
+
+        .assign-card {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            box-shadow: var(--shadow)
+        }
+
+        .assign-card .ac-h {
+            padding: 13px 16px;
+            border-bottom: 1px solid var(--line-soft);
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .assign-card .ac-h .rno {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink)
+        }
+
+        .assign-card .ac-b {
+            padding: 14px 16px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px
+        }
+
+        .assign-col .acl {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--muted-2);
+            text-transform: uppercase;
+            margin-bottom: 8px
+        }
+
+        .assign-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--navy-50);
+            color: var(--navy);
+            font-size: 12.5px;
+            font-weight: 600;
+            padding: 5px 10px;
+            border-radius: 7px;
+            margin: 0 6px 6px 0
+        }
+
+        .assign-tag .rm {
+            color: var(--muted-2);
+            font-weight: 700;
+            cursor: pointer
+        }
+
+        .assign-empty {
+            font-size: 12px;
+            color: var(--muted-2);
+            font-weight: 600;
+            border: 1px dashed var(--line);
+            border-radius: 7px;
+            padding: 5px 10px;
+            display: inline-block;
+            cursor: pointer
+        }
+
+        @media(max-width:760px) {
+            .assign-card .ac-b {
+                grid-template-columns: 1fr
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="brand">
+                <div class="mark">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M5 14a7 7 0 1 1 2.5 5.3" stroke="#fff" stroke-width="2.2" stroke-linecap="round" />
+                        <path d="M5 9v5h5" stroke="#9ec3e6" stroke-width="2.2" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </div>
+                <div>
+                    <div class="name">희망리턴패키지</div>
+                    <div class="sub">통합관리시스템</div>
+                </div>
+            </div>
+            <nav class="nav">
+                <div class="nav-group">운영</div>
+                <button class="nav-item active" data-view="dashboard"><span class="ic">📊</span>대시보드</button>
+                <button class="nav-item" data-view="participants"><span class="ic">👤</span>참여자 관리</button>
+                <button class="nav-item" data-view="rounds"><span class="ic">📅</span>회차 · 일정</button>
+                <div class="nav-group">단계 관리</div>
+                <button class="nav-item" data-view="assign"><span class="ic">🧩</span>인력 배정</button>
+                <button class="nav-item" data-view="consulting"><span class="ic">💬</span>사전상담</button>
+                <button class="nav-item" data-view="attendance"><span class="ic">✅</span>출결 · 현장</button>
+                <button class="nav-item soon"><span class="ic">💳</span>수료 · 수당 · 예산<span class="tag">2차</span></button>
+                <div class="nav-group">사후</div>
+                <button class="nav-item soon"><span class="ic">🔄</span>사후관리 · 국취<span class="tag">3차</span></button>
+            </nav>
+            <div class="sidebar-foot">디자인 시안 v0.2 · 데이터 가상</div>
+        </aside>
+
+        <!-- Main -->
+        <div class="main">
+            <header class="topbar">
+                <button class="menu-btn"
+                    onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+                <div>
+                    <div class="crumb" id="crumb">운영</div>
+                    <h1 id="page-title">대시보드</h1>
+                </div>
+                <div class="spacer"></div>
+                <div class="role-switch">
+                    <label>화면 미리보기</label>
+                    <select id="role-switch">
+                        <option value="pl">PL (이인철)</option>
+                        <option value="region">지역담당자 (이빛나라)</option>
+                        <option value="han">한준희 주임</option>
+                        <option value="counselor">상담사 (김상담)</option>
+                        <option value="facil">진행자 (이진행)</option>
+                        <option value="teacher">강사 (심영수)</option>
+                    </select>
+                    <span class="mode-badge admin" id="mode-badge">관리자 모드</span>
+                </div>
+                <div class="user">
+                    <div class="avatar" id="u-avatar">이</div>
+                    <div>
+                        <div class="u-name" id="u-name">이인철</div>
+                        <div class="u-role" id="u-role">PL · 사업총괄</div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content">
+
+                <!-- ============ DASHBOARD ============ -->
+                <section class="view active" id="view-dashboard">
+                    <div class="kpis">
+                        <div class="kpi r-navy">
+                            <div class="rail"></div>
+                            <div class="lab">진행 중 회차</div>
+                            <div class="val tnum">7<small>개</small></div>
+                            <div class="sub muted">모집 3 · 개강확정 1 · 교육중 3</div>
+                        </div>
+                        <div class="kpi r-warn">
+                            <div class="rail"></div>
+                            <div class="lab">이번 주 마감</div>
+                            <div class="val tnum">5<small>건</small></div>
+                            <div class="sub" style="color:var(--warn)"><span class="dot warn"></span>오늘 마감 1건 포함</div>
+                        </div>
+                        <div class="kpi r-danger">
+                            <div class="rail"></div>
+                            <div class="lab">경고 · 위반</div>
+                            <div class="val tnum">3<small>건</small></div>
+                            <div class="sub" style="color:var(--danger)"><span class="dot danger"></span>즉시 확인 필요</div>
+                        </div>
+                        <div class="kpi r-ok">
+                            <div class="rail"></div>
+                            <div class="lab">이번 달 수료</div>
+                            <div class="val tnum">38<small>명</small></div>
+                            <div class="sub" style="color:var(--ok)">수료율 94.2%</div>
+                        </div>
+                    </div>
+
+                    <div class="dash-cols">
+                        <div class="grid" style="gap:18px">
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">오늘 할 일 · 마감 임박</span>
+                                    <span class="chip neutral">D-6주 루틴 포함</span>
+                                </div>
+                                <div id="task-list"></div>
+                            </div>
+
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">지역별 회차 현황</span>
+                                    <span class="more">전체 보기 →</span>
+                                </div>
+                                <div class="card-b" style="padding:14px 16px 18px">
+                                    <div class="regions" id="regions"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid" style="gap:18px">
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">경고 패널</span></div>
+                                <div id="alert-list"></div>
+                            </div>
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">이번 분기 성과 요약</span></div>
+                                <div class="card-b">
+                                    <div class="kv"><span class="k">국취 연계율</span><span class="v">48% <span class="muted"
+                                                style="font-weight:500">/ 만점 50%</span></span></div>
+                                    <div class="kv"><span class="k">취업률</span><span class="v">21%</span></div>
+                                    <div class="kv"><span class="k">회차 수행도</span><span class="v tnum">12 / 50</span>
+                                    </div>
+                                    <div class="kv"><span class="k">사후관리 진행</span><span class="v">112명</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="note">※ 모든 수치·이름은 화면 설명용 가상 데이터입니다. 실제 연동·계산 로직은 개발 단계에서 구현됩니다.</p>
+                </section>
+
+                <!-- ============ PARTICIPANTS LIST ============ -->
+                <section class="view" id="view-participants">
+                    <div class="perm-bar" id="perm-participants"><span class="pb-ic">🔑</span><span
+                            id="perm-participants-txt"></span></div>
+                    <div class="filters">
+                        <span class="select"><span class="ico">지역</span> 전체 ▾</span>
+                        <span class="select"><span class="ico">회차</span> 전체 ▾</span>
+                        <span class="select"><span class="ico">진행상태</span> 전체 ▾</span>
+                        <span class="select"><span class="ico">국취</span> 전체 ▾</span>
+                        <span class="select"><span class="ico">취업</span> 전체 ▾</span>
+                        <span class="count" id="p-count"></span>
+                        <button class="btn primary" id="btn-add-participant" onclick="openModal('participant')"
+                            style="margin-left:10px">+ 참여자 등록</button>
+                    </div>
+                    <div class="card">
+                        <div class="tbl-wrap">
+                            <table class="data">
+                                <thead>
+                                    <tr>
+                                        <th>참여자</th>
+                                        <th>지역 / 회차</th>
+                                        <th>진행상태</th>
+                                        <th>사전상담</th>
+                                        <th>출결</th>
+                                        <th>수료</th>
+                                        <th>국취</th>
+                                        <th>취업</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="p-rows"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <p class="note">행을 클릭하면 참여자 상세(전체 여정)로 이동합니다.</p>
+                </section>
+
+                <!-- ============ PARTICIPANT DETAIL ============ -->
+                <section class="view" id="view-participant-detail">
+                    <button class="back" onclick="show('participants')">← 참여자 목록</button>
+                    <div class="detail-head">
+                        <div class="pa" id="d-avatar">홍</div>
+                        <div>
+                            <div class="pn" id="d-name">홍길동</div>
+                            <div class="pm">
+                                <span><b id="d-region">양천</b> · <b id="d-round">22회차</b></span>
+                                <span>참여자ID <b id="d-pid">홍길동_01000003201</b></span>
+                                <span>출생연도 <b>1975</b></span>
+                                <span>유입 <b>외부홍보(당근)</b></span>
+                            </div>
+                        </div>
+                        <div class="actions">
+                            <button class="btn" id="btn-attend" onclick="openModal('attend')">출결 입력</button>
+                            <button class="btn" id="btn-consult" onclick="openModal('consult')">상담 입력</button>
+                            <button class="btn" id="btn-complete" onclick="openModal('complete')">수료·수당</button>
+                            <button class="btn primary" id="btn-edit-participant" onclick="openModal('participant')">정보
+                                수정</button>
+                        </div>
+                    </div>
+
+                    <!-- SIGNATURE: journey rail -->
+                    <div class="journey">
+                        <div class="jh"><span class="eyebrow">참여자 여정</span><span class="chip info" id="d-status">교육
+                                중</span></div>
+                        <div class="rail">
+                            <div class="step done">
+                                <div class="node">✓</div>
+                                <div class="sl">접수</div>
+                                <div class="sd">05-12</div>
+                            </div>
+                            <div class="step done">
+                                <div class="node">✓</div>
+                                <div class="sl">선정</div>
+                                <div class="sd">소진공 선정</div>
+                            </div>
+                            <div class="step done">
+                                <div class="node">✓</div>
+                                <div class="sl">사전상담</div>
+                                <div class="sd">대면 1회 · 06-01</div>
+                            </div>
+                            <div class="step current">
+                                <div class="node"><i></i></div>
+                                <div class="sl">현장교육</div>
+                                <div class="sd">3일차 / 5일</div>
+                            </div>
+                            <div class="step idle">
+                                <div class="node"></div>
+                                <div class="sl">수료</div>
+                                <div class="sd">예정 06-27</div>
+                            </div>
+                            <div class="step idle">
+                                <div class="node"></div>
+                                <div class="sl">사후관리</div>
+                                <div class="sd">대면2·비대면6</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detail-grid">
+                        <div class="grid" style="gap:18px">
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">유입 · 자격</span></div>
+                                <div class="card-b">
+                                    <div class="kv"><span class="k">유입 경로</span><span class="v">외부홍보 (당근)</span></div>
+                                    <div class="kv"><span class="k">접수일 / 신청일</span><span class="v">05-12 / 05-15</span>
+                                    </div>
+                                    <div class="kv"><span class="k">기초교육 수료</span><span class="v"><span
+                                                class="chip ok">확인 완료</span></span></div>
+                                    <div class="kv"><span class="k">안내문자 발송</span><span class="v">✓ 선정 후 발송</span></div>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">사전상담 (대면)</span></div>
+                                <div class="card-b">
+                                    <div class="kv"><span class="k">담당 상담사</span><span class="v">김상담 <span class="muted"
+                                                style="font-weight:500">(사후 디폴트·변경가능)</span></span></div>
+                                    <div class="kv"><span class="k">사전상담 일시</span><span class="v">대면 1회 · 06-01
+                                            14:00</span></div>
+                                    <div class="kv"><span class="k">상담일지</span><span class="v"><span class="chip ok">작성
+                                                완료</span></span></div>
+                                    <div class="kv"><span class="k">연락 시도</span><span class="v">1회 (성공)</span></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid" style="gap:18px">
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">출결 현황 (일자별)</span><span
+                                        class="chip warn">2일차 외출</span></div>
+                                <div class="card-b">
+                                    <div class="att-grid">
+                                        <div class="att-day ok">
+                                            <div class="d">1일</div>
+                                            <div class="s">출석</div>
+                                        </div>
+                                        <div class="att-day warn">
+                                            <div class="d">2일</div>
+                                            <div class="s">외출</div>
+                                        </div>
+                                        <div class="att-day ok">
+                                            <div class="d">3일</div>
+                                            <div class="s">출석</div>
+                                        </div>
+                                        <div class="att-day">
+                                            <div class="d">4일</div>
+                                            <div class="s muted">—</div>
+                                        </div>
+                                        <div class="att-day">
+                                            <div class="d">5일</div>
+                                            <div class="s muted">—</div>
+                                        </div>
+                                    </div>
+                                    <div class="kv" style="margin-top:10px"><span class="k">외출·조퇴 시간 기록</span><span
+                                            class="v">2일차 외출 14:10~15:00</span></div>
+                                    <p class="muted" style="font-size:11.5px;margin-top:6px">· 외출·조퇴는 시간 기록 · 수료 기준(전 시간
+                                        이수) 충족 가능</p>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <div class="card-h"><span class="section-title">수료 · 수당</span></div>
+                                <div class="card-b">
+                                    <div class="kv"><span class="k">수료 여부</span><span class="v muted">진행 상태로 확인 (교육
+                                            중)</span></div>
+                                    <div class="kv"><span class="k">미수료 사유</span><span class="v muted">— (연락두절/시간미충족
+                                            시)</span></div>
+                                    <div class="kv"><span class="k">수료 처리일</span><span class="v muted">수료 후</span></div>
+                                    <div class="kv"><span class="k">수당 지급 / 지급일</span><span class="v muted">수료 후 · 행정
+                                            처리</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <div class="card-h"><span class="section-title">사후상담 (대면 2회) · 사후관리 (비대면 6개월)</span><span
+                                class="chip neutral">수료 후 시작</span></div>
+                        <div class="card-b">
+                            <div class="detail-grid" style="gap:18px;margin-bottom:16px">
+                                <div>
+                                    <div class="eyebrow" style="margin-bottom:8px">사후상담 · 대면 2회 (담당 상담사)</div>
+                                    <div class="kv"><span class="k">사후상담 1차</span><span class="v muted">예정</span></div>
+                                    <div class="kv"><span class="k">사후상담 2차</span><span class="v muted">예정</span></div>
+                                </div>
+                                <div>
+                                    <div class="eyebrow" style="margin-bottom:8px">사후관리 · 비대면 문자·유선 (월 1회)</div>
+                                    <div class="months">
+                                        <div class="mo">
+                                            <div class="mc idle">—</div>
+                                            <div class="ml">1월</div>
+                                        </div>
+                                        <div class="mo">
+                                            <div class="mc idle">—</div>
+                                            <div class="ml">2월</div>
+                                        </div>
+                                        <div class="mo">
+                                            <div class="mc idle">—</div>
+                                            <div class="ml">3월</div>
+                                        </div>
+                                        <div class="mo">
+                                            <div class="mc idle">—</div>
+                                            <div class="ml">4월</div>
+                                        </div>
+                                        <div class="mo">
+                                            <div class="mc idle">—</div>
+                                            <div class="ml">5월</div>
+                                        </div>
+                                        <div class="mo">
+                                            <div class="mc idle">—</div>
+                                            <div class="ml">6월</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="detail-grid" style="gap:14px">
+                                <div class="kv"><span class="k">국취 연계</span><span class="v muted">미신청 (마지막날 작성
+                                        예정)</span></div>
+                                <div class="kv"><span class="k">취업 여부 / 취업일</span><span class="v muted">추적 대기</span>
+                                </div>
+                                <div class="kv"><span class="k">숲체험 참여 / 참여일</span><span class="v"><span
+                                            class="chip ok">신청함</span> · 07-08 예정</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <div class="card-h"><span class="section-title">메모 (비고)</span><span
+                                class="chip neutral">지역담당자·한준희 주임·상담사·강사 작성</span><button class="btn" id="btn-memo"
+                                style="margin-left:auto;padding:5px 11px;font-size:12px" onclick="openModal('memo')">+
+                                메모 추가</button></div>
+                        <div id="memo-list"></div>
+                    </div>
+                    <p class="note">※ 한 참여자의 유입~취업 전 과정이 이 한 화면에 모입니다. (운영 설계 7-4 참여자 통합 총괄표)</p>
+                </section>
+
+                <!-- ============ ROUNDS LIST ============ -->
+                <section class="view" id="view-rounds">
+                    <div class="filters">
+                        <span class="select"><span class="ico">지역</span> 전체 ▾</span>
+                        <span class="select"><span class="ico">상태</span> 전체 ▾</span>
+                        <div class="spacer" style="flex:1"></div>
+                        <button class="btn primary" id="btn-add-round" onclick="openModal('round')">+ 새 회차 등록</button>
+                    </div>
+                    <div class="card">
+                        <div class="tbl-wrap">
+                            <table class="data">
+                                <thead>
+                                    <tr>
+                                        <th>회차</th>
+                                        <th>지역</th>
+                                        <th>교육 일정</th>
+                                        <th>신청 / 정원</th>
+                                        <th>상태</th>
+                                        <th>강사</th>
+                                        <th>상담사</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="r-rows"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <p class="note">행을 클릭하면 회차 상세(D-6주 등록 체크 · 인원 · 배정 인력)로 이동합니다.</p>
+                </section>
+
+                <!-- ============ ROUND DETAIL ============ -->
+                <section class="view" id="view-round-detail">
+                    <button class="back" onclick="show('rounds')">← 회차 목록</button>
+                    <div class="detail-head">
+                        <div class="pa" style="border-radius:14px">22</div>
+                        <div>
+                            <div class="pn">양천 22회차</div>
+                            <div class="pm">
+                                <span>교육 <b>2026-06-23 ~ 06-27</b> (5일 30시간)</span>
+                                <span>교육장 <b>양천 교육장 A</b></span>
+                                <span class="chip ok" style="margin-top:-2px">개강 확정</span>
+                            </div>
+                        </div>
+                        <div class="actions"><button class="btn">수행계획서</button><button class="btn primary"
+                                id="btn-edit-round" onclick="openModal('round')">회차 수정</button></div>
+                    </div>
+
+                    <div class="detail-grid">
+                        <div class="card">
+                            <div class="card-h"><span class="section-title">회차 등록 진행</span><span class="chip ok">정상
+                                    진행</span></div>
+                            <div class="card-b">
+                                <div class="checklist">
+                                    <div class="ci">
+                                        <div class="cb done">✓</div>
+                                        <div>
+                                            <div class="ct">수행계획서 제출</div>
+                                            <div class="cs">지역담당자 → 본부장 · 목 오전</div>
+                                        </div>
+                                        <div class="cw"><span class="dday ok">완료</span></div>
+                                    </div>
+                                    <div class="ci">
+                                        <div class="cb done">✓</div>
+                                        <div>
+                                            <div class="ct">소진공 등록</div>
+                                            <div class="cs">제출 후 1~2일 내 처리 (당일~익일)</div>
+                                        </div>
+                                        <div class="cw"><span class="dday ok">완료</span></div>
+                                    </div>
+                                    <div class="ci">
+                                        <div class="cb done">✓</div>
+                                        <div>
+                                            <div class="ct">모집 시작</div>
+                                            <div class="cs">모집 기간 06-09 ~ 06-20</div>
+                                        </div>
+                                        <div class="cw"><span class="dday ok">진행</span></div>
+                                    </div>
+                                </div>
+                                <p class="muted" style="font-size:11.5px;margin-top:12px">· 마지노선 D-5주 준수</p>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-h"><span class="section-title">모집 인원</span><span class="chip ok">개강 기준
+                                    충족</span></div>
+                            <div class="card-b">
+                                <div class="capacity">
+                                    <div class="big tnum">14<small> / 15명</small></div>
+                                    <div style="flex:1">
+                                        <div class="cap-bar"><span style="width:93%"></span>
+                                            <div class="thr" style="left:80%"></div>
+                                        </div>
+                                        <div
+                                            style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);font-weight:600">
+                                            <span>신청 14명</span><span style="color:var(--danger)">↑ 개강기준 12명</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="kv"><span class="k">사전상담 완료</span><span class="v">11 / 14명</span></div>
+                                <div class="kv"><span class="k">연락 두절</span><span class="v"><span class="chip warn">1명
+                                            (3회 시도)</span></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:18px">
+                        <div class="card-h"><span class="section-title">배정 인력 (역할별 1~5명)</span><span
+                                class="chip neutral">충돌 없음</span></div>
+                        <div class="card-b">
+                            <div class="detail-grid" style="gap:0 28px">
+                                <div>
+                                    <div class="assignee">
+                                        <div class="ra">강</div>
+                                        <div>
+                                            <div class="rr">강사</div>
+                                            <div class="rnm">심영수</div>
+                                        </div><span class="chip ok" style="margin-left:auto">확정</span>
+                                    </div>
+                                    <div class="assignee">
+                                        <div class="ra">강</div>
+                                        <div>
+                                            <div class="rr">강사</div>
+                                            <div class="rnm">박외부</div>
+                                        </div><span class="chip ok" style="margin-left:auto">확정</span>
+                                    </div>
+                                    <div class="assignee">
+                                        <div class="ra">상</div>
+                                        <div>
+                                            <div class="rr">상담사</div>
+                                            <div class="rnm">김상담</div>
+                                        </div><span class="chip ok" style="margin-left:auto">확정</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="assignee">
+                                        <div class="ra">상</div>
+                                        <div>
+                                            <div class="rr">상담사</div>
+                                            <div class="rnm">이상담</div>
+                                        </div><span class="chip ok" style="margin-left:auto">확정</span>
+                                    </div>
+                                    <div class="assignee">
+                                        <div class="ra">진</div>
+                                        <div>
+                                            <div class="rr">진행자</div>
+                                            <div class="rnm">이진행</div>
+                                        </div><span class="chip ok" style="margin-left:auto">확정</span>
+                                    </div>
+                                    <div class="assignee" style="opacity:.5">
+                                        <div class="ra" style="background:#eef1f5;color:#97a2b3">+</div>
+                                        <div>
+                                            <div class="rr">진행자</div>
+                                            <div class="rnm muted">미배정 (최대 5)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="note">※ 강사·상담사·진행자 각 1~5명 배정. 마스터 엑셀 선점 입력이 이 배정표로 전환되며, 중복 배정 시 자동 경고.</p>
+                </section>
+
+                <!-- ============ 인력 배정 ============ -->
+                <section class="view" id="view-assign">
+                    <div class="perm-bar"><span class="pb-ic">🧩</span>회차별 강사·상담사·진행자 배정 현황 (각 1~5명) · 중복 배정 시 자동 경고
+                    </div>
+                    <div class="assign-board" id="assign-board"></div>
+                    <p class="note">※ 같은 인력이 겹치는 날짜 회차에 동시 배정되면 경고가 표시됩니다.</p>
+                </section>
+
+                <!-- ============ 사전상담 ============ -->
+                <section class="view" id="view-consulting">
+                    <div class="perm-bar"><span class="pb-ic">💬</span><span id="perm-consulting-txt"></span></div>
+                    <div class="card">
+                        <div class="tbl-wrap">
+                            <table class="data">
+                                <thead>
+                                    <tr>
+                                        <th>참여자</th>
+                                        <th>회차</th>
+                                        <th>담당 상담사</th>
+                                        <th>사전상담</th>
+                                        <th>사후 1차</th>
+                                        <th>사후 2차</th>
+                                        <th>연락시도</th>
+                                        <th>상담일지</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="consult-rows"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <p class="note">※ 사전=사후 동일 상담사 디폴트(변경 가능) · 연락 5회 실패 시 지역담당자 보고</p>
+                </section>
+
+                <!-- ============ 출결 · 현장 ============ -->
+                <section class="view" id="view-attendance">
+                    <div class="perm-bar"><span class="pb-ic">✅</span><span id="perm-attend-txt"></span></div>
+                    <div class="att-tools">
+                        <span class="select" id="att-round-sel">회차: 양천 22회차 (교육중) ▾</span>
+                        <span class="muted" style="font-size:12.5px">· 외출·조퇴는 시간까지 기록 · 셀 클릭 시 상태 변경(시안)</span>
+                    </div>
+                    <div class="card">
+                        <div class="card-b" style="padding:6px 0">
+                            <div class="tbl-wrap">
+                                <table class="att-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="nm-col">참여자</th>
+                                            <th>1일차</th>
+                                            <th>2일차</th>
+                                            <th>3일차</th>
+                                            <th>4일차</th>
+                                            <th>5일차</th>
+                                            <th>수료 가능</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="attend-rows"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="note">※ 진행자가 당일 출결을 입력 · QR 먹통 시 수기 대체 입력 · 누적 미달 시 수료 위험 경고</p>
+                </section>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== MODAL ===== -->
+    <div class="modal-overlay" id="modal" onclick="if(event.target===this)closeModal()">
+        <div class="modal">
+            <div class="modal-h">
+                <h3 id="modal-title">제목</h3><span class="badge-role" id="modal-role"></span><button class="x"
+                    onclick="closeModal()">✕</button>
+            </div>
+            <div class="modal-b" id="modal-body"></div>
+            <div class="modal-f">
+                <span class="modal-note">※ 디자인 시안 — 실제 저장은 개발 단계에서 구현</span>
+                <button class="btn" onclick="closeModal()">취소</button>
+                <button class="btn primary" onclick="closeModal()" id="modal-save">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== modal forms (보여주기용 입력 화면) =====
+        function fld(label, inner, full, req) { return `<div class="field${full ? ' full' : ''}"><label>${label}${req ? '<span class="req">*</span>' : ''}</label>${inner}</div>` }
+        function sel(opts, val) { return `<select>${opts.map(o => `<option${o === val ? ' selected' : ''}>${o}</option>`).join("")}</select>` }
+        function inp(ph, val) { return `<input placeholder="${ph || ''}" value="${val || ''}">` }
+
+        const REGIONS = ["양천", "인천", "강북", "의정부", "천안"];
+        const INFLOW = ["소진공", "컨설턴트 연계", "사내 타사업부", "외부 홍보(당근·벼룩)"];
+        const P_STATUS = ["접수", "선정", "미선정", "사전상담완료", "교육중", "수료", "미수료", "사후관리", "종료", "취소"];
+        const R_STATUS = ["예정", "모집중", "개강확정", "교육중", "수료", "수당지급완료", "예산집행완료", "수행보고서 제출완료", "폐강"];
+        const ATT = ["출석", "지각", "외출", "조퇴", "결석"];
+        const FAIL = ["—", "연락두절", "교육시간 미충족"];
+        const YN3 = ["확인필요", "Y", "N"];
+
+        const FORMS = {
+            participant: {
+                title: "참여자 등록 / 수정", body: () => `
+    <div class="form-grid">
+      <div class="form-section">기본 정보</div>
+      ${fld("이름", inp("홍길동", "홍길동"), false, 1)}
+      ${fld("연락처", inp("010-0000-0000", "010-0000-3201"), false, 1)}
+      ${fld("출생연도", inp("1975", "1975"))}
+      ${fld("참여자ID (이름_연락처 · 자동)", `<input value="홍길동_01000003201" disabled style="background:#f4f6f9;color:#69768a">`)}
+      ${fld("지역", sel(REGIONS, "양천"), false, 1)}
+      ${fld("회차", sel(["22회차", "21회차", "18회차", "03회차", "24회차"], "22회차"), false, 1)}
+      <div class="form-section">유입 · 자격</div>
+      ${fld("유입 경로", sel(INFLOW, "외부 홍보(당근·벼룩)"), false, 1)}
+      ${fld("기초교육 수료", sel(YN3, "Y"), false, 1)}
+      ${fld("접수일", `<input type="date">`)}
+      ${fld("신청일", `<input type="date">`)}
+      ${fld("안내문자 발송", `<label class="chk"><input type="checkbox" checked> 선정 후 발송함</label>`)}
+      <div class="form-section">진행 · 상담</div>
+      ${fld("진행 상태", sel(P_STATUS, "교육중"), false, 1)}
+      ${fld("담당 상담사", inp("김상담", "김상담"))}
+    </div>`},
+
+            attend: {
+                title: "출결 입력 (일자별)", body: () => `
+    <p class="muted" style="font-size:12.5px;margin-bottom:14px">홍길동 · 양천 22회차 · 외출·조퇴는 시간까지 기록</p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      ${[1, 2, 3, 4, 5].map(d => `
+        <div class="att-row">
+          <span class="dlab">${d}일차</span>
+          ${sel(ATT, d === 2 ? "외출" : (d <= 3 ? "출석" : "—"))}
+          <input placeholder="외출·조퇴 시간 (예: 14:10~15:00)" value="${d === 2 ? '14:10~15:00' : ''}">
+        </div>`).join("")}
+    </div>
+    <div class="field full" style="margin-top:14px">${`<label>강사 일지 작성</label><label class="chk"><input type="checkbox"> 작성 완료</label>`}</div>`
+            },
+
+            consult: {
+                title: "상담 일시 입력", body: () => `
+    <div class="form-grid">
+      <div class="form-section">사전상담 (대면 1회)</div>
+      ${fld("담당 상담사", inp("", "김상담"))}
+      ${fld("사전상담 일시", `<input type="datetime-local">`)}
+      ${fld("상담일지 작성", `<label class="chk"><input type="checkbox" checked> 작성 완료</label>`, true)}
+      <div class="form-section">사후상담 (대면 2회 · 상담사 변경 가능)</div>
+      ${fld("사후 1차 상담사", inp("", "김상담"))}
+      ${fld("사후 1차 일시", `<input type="datetime-local">`)}
+      ${fld("사후 2차 상담사", inp("", "김상담"))}
+      ${fld("사후 2차 일시", `<input type="datetime-local">`)}
+    </div>`},
+
+            memo: {
+                title: "메모(비고) 추가", body: () => `
+    <div class="form-grid">
+      ${fld("작성자 (로그인 역할 자동)", `<input value="${ROLES[CURRENT].nm} (${ROLES[CURRENT].role})" disabled style="background:#f4f6f9;color:#69768a">`, true)}
+      ${fld("내용", `<textarea placeholder="특이사항을 입력하세요. (예: 다음 회차 이월 — 건강상 사유)"></textarea>`, true, 1)}
+    </div>
+    <p class="muted" style="font-size:11.5px;margin-top:10px">· 작성한 메모는 지역담당자·한준희 주임·상담사·강사 전원이 열람합니다.</p>`},
+
+            round: {
+                title: "회차 등록 / 수정", body: () => `
+    <div class="form-grid">
+      <div class="form-section">기본 정보</div>
+      ${fld("지역", sel(REGIONS, "양천"), false, 1)}
+      ${fld("회차 번호", inp("22", "22"), false, 1)}
+      ${fld("회차명 (자동생성 가능)", inp("양천 22회차", "양천 22회차"), true)}
+      ${fld("모집 기간 시작", `<input type="date">`)}
+      ${fld("모집 기간 종료", `<input type="date">`)}
+      ${fld("정원", inp("15", "15"), false, 1)}
+      ${fld("개강 최소인원", inp("12", "12"), false, 1)}
+      ${fld("교육장", inp("양천 교육장 A", "양천 교육장 A"), true)}
+      <div class="form-section">교육일 (1~5일차)</div>
+      ${[1, 2, 3, 4, 5].map(d => fld(d + "일차", `<input type="date">`)).join("")}
+      <div class="form-section">회차 상태</div>
+      ${fld("상태", sel(R_STATUS, "개강확정"), true)}
+    </div>
+    <div class="form-section" style="margin-top:16px">배정 인력 (역할별 1~5명)</div>
+    <div class="assign-rows">
+      <div class="ar"><span class="role-lab">강사</span><input value="심영수"><button class="btn-add-sm">+ 추가</button></div>
+      <div class="ar"><span class="role-lab">상담사</span><input value="김상담"><button class="btn-add-sm">+ 추가</button></div>
+      <div class="ar"><span class="role-lab">진행자</span><input value="이진행"><button class="btn-add-sm">+ 추가</button></div>
+    </div>`},
+
+            complete: {
+                title: "수료 · 수당 처리", body: () => `
+    <div class="form-grid">
+      ${fld("수료 여부", `<input value="진행 상태로 확인 (현재: 교육중)" disabled style="background:#f4f6f9;color:#69768a">`, true)}
+      ${fld("미수료 사유", sel(FAIL, "—"))}
+      ${fld("수료 처리일", `<input type="date">`)}
+      <div class="form-section">수당 (행정 처리)</div>
+      ${fld("수당 지급 여부", `<label class="chk"><input type="checkbox"> 지급 완료</label>`)}
+      ${fld("수당 지급일", `<input type="date">`)}
+    </div>
+    <p class="muted" style="font-size:11.5px;margin-top:10px">· 수료 판정은 진행 상태로 갈음 · 계좌번호 등 민감정보는 시스템에 저장하지 않음</p>`},
+        };
+
+        function openModal(type) {
+            const f = FORMS[type]; if (!f) return;
+            $("#modal-title").textContent = f.title;
+            $("#modal-role").textContent = ROLES[CURRENT].nm + " · " + ROLES[CURRENT].role;
+            $("#modal-body").innerHTML = f.body();
+            $("#modal").classList.add("open");
+        }
+        function closeModal() { $("#modal").classList.remove("open"); }
+        document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+
+        // ===== virtual data (전부 가상값) =====
+        const tasks = [
+            { when: ["오늘", "today"], ttl: "강북 03회차 — 소진공 등록", meta: "D-6주 루틴 · 인력 전원 지정 포함", who: ["한준희 주임", "행정허브"] },
+            { when: ["D-1", "soon"], ttl: "양천 24회차 — 수행계획서 제출", meta: "마지노선 D-5주 · 제출 후 1~2일 내 소진공 등록", who: ["이빛나라 선임", "양천 담당"] },
+            { when: ["D-2", "soon"], ttl: "인천 18회차 — 교육수당 지급", meta: "내부 목표 5영업일 · 12명 대상", who: ["장두일 팀장", "인천 담당"] },
+            { when: ["D-2", "ok"], ttl: "양천 22회차 — 사전상담 완료", meta: "개강 D-2까지 · 3명 미완료", who: ["김상담", "상담사"] },
+            { when: ["D-3", "ok"], ttl: "인천 17회차 — 사후상담 1차(대면)", meta: "수료자 대상 · 담당 상담사 배정", who: ["이상담", "상담사"] },
+        ];
+        const alerts = [
+            { ic: "danger", t: "사전상담 연락 두절", s: "5회 연락 실패 · 지역담당자 보고 필요", cnt: 2 },
+            { ic: "danger", t: "수료 처리 기한 임박", s: "교육종료 후 처리 마감 D-1", cnt: 1 },
+            { ic: "warn", t: "사후관리 2회 무응답", s: "종료 가능 검토 대상", cnt: 4 },
+        ];
+        const regions = [
+            { nm: "양천", cnt: 3, lb: "진행 회차", pills: [["모집중", "info"], ["교육중", "ok"]] },
+            { nm: "인천", cnt: 2, lb: "진행 회차", pills: [["교육중", "ok"]] },
+            { nm: "강북", cnt: 1, lb: "진행 회차", pills: [["모집중", "warn"]] },
+            { nm: "의정부", cnt: 1, lb: "준비 중", pills: [["확대예정", "neutral"]] },
+            { nm: "천안", cnt: 0, lb: "준비 중", pills: [["확대예정", "neutral"]] },
+        ];
+        const participants = [
+            { nm: "홍길동", phone: "01000003201", reg: "양천", rd: "22회차", st: ["교육 중", "info"], sang: ["완료", "ok"], att: 60, su: ["진행중", "neutral"], guk: ["대기", "neutral"], job: ["—", "neutral"] },
+            { nm: "김순자", phone: "01000007722", reg: "양천", rd: "22회차", st: ["교육 중", "info"], sang: ["완료", "ok"], att: 80, su: ["진행중", "neutral"], guk: ["대기", "neutral"], job: ["—", "neutral"] },
+            { nm: "박철수", phone: "01000001188", reg: "인천", rd: "18회차", st: ["종료", "neutral"], sang: ["완료", "ok"], att: 100, su: ["수료", "ok"], guk: ["참여", "ok"], job: ["취업", "ok"] },
+            { nm: "이영희", phone: "01000004510", reg: "인천", rd: "18회차", st: ["사후관리", "ok"], sang: ["완료", "ok"], att: 100, su: ["수료", "ok"], guk: ["신청", "info"], job: ["구직중", "warn"] },
+            { nm: "최민호", phone: "01000009033", reg: "강북", rd: "03회차", st: ["선정", "info"], sang: ["미완료", "warn"], att: 0, su: ["—", "neutral"], guk: ["—", "neutral"], job: ["—", "neutral"] },
+            { nm: "정다은", phone: "01000002247", reg: "양천", rd: "21회차", st: ["미수료", "danger"], sang: ["완료", "ok"], att: 40, su: ["미수료", "danger"], guk: ["—", "neutral"], job: ["—", "neutral"] },
+            { nm: "강현우", phone: "01000006619", reg: "인천", rd: "17회차", st: ["사후관리", "ok"], sang: ["완료", "ok"], att: 100, su: ["수료", "ok"], guk: ["참여", "ok"], job: ["구직중", "warn"] },
+            { nm: "윤서연", phone: "01000008855", reg: "양천", rd: "22회차", st: ["사전상담완료", "info"], sang: ["완료", "ok"], att: 0, su: ["—", "neutral"], guk: ["—", "neutral"], job: ["—", "neutral"] },
+            { nm: "오지훈", phone: "01000003344", reg: "강북", rd: "03회차", st: ["접수", "neutral"], sang: ["—", "neutral"], att: 0, su: ["—", "neutral"], guk: ["—", "neutral"], job: ["—", "neutral"] },
+            { nm: "한미경", phone: "01000005566", reg: "인천", rd: "18회차", st: ["미선정", "neutral"], sang: ["—", "neutral"], att: 0, su: ["—", "neutral"], guk: ["—", "neutral"], job: ["—", "neutral"] },
+        ];
+        const rounds = [
+            { no: "24회차", reg: "양천", date: "07-14 ~ 07-18", cur: 8, cap: 15, st: ["모집중", "info"], gang: "심영수", sang: "배정 전" },
+            { no: "03회차", reg: "강북", date: "07-21 ~ 07-25", cur: 6, cap: 15, st: ["모집중", "warn"], gang: "미정", sang: "배정 전" },
+            { no: "25회차", reg: "천안", date: "07-28 ~ 08-01", cur: 2, cap: 15, st: ["예정", "neutral"], gang: "미정", sang: "배정 전" },
+            { no: "22회차", reg: "양천", date: "06-23 ~ 06-27", cur: 14, cap: 15, st: ["개강확정", "ok"], gang: "심영수", sang: "김상담" },
+            { no: "18회차", reg: "인천", date: "06-16 ~ 06-20", cur: 13, cap: 15, st: ["교육중", "info"], gang: "박외부", sang: "이상담" },
+            { no: "17회차", reg: "인천", date: "06-09 ~ 06-13", cur: 14, cap: 15, st: ["예산집행완료", "ok"], gang: "심영수", sang: "이상담" },
+            { no: "21회차", reg: "양천", date: "06-02 ~ 06-06", cur: 12, cap: 15, st: ["수당지급완료", "ok"], gang: "심영수", sang: "김상담" },
+            { no: "20회차", reg: "양천", date: "05-19 ~ 05-23", cur: 9, cap: 15, st: ["폐강", "danger"], gang: "—", sang: "—" },
+        ];
+        const memos = [
+            { who: "한준희 주임", role: "행정", date: "06-02", txt: "외부 유입(당근) — 기초교육 수료 확인 완료. 심화 진행 가능." },
+            { who: "김상담", role: "상담사", date: "06-01", txt: "사전상담 시 재취업 의지 높음. 사무·회계 직무 희망, 컴활 자격 보유." },
+            { who: "심영수", role: "강사", date: "06-25", txt: "2일차 가정 사정으로 외출(14:10~15:00). 외출 시간 기록함, 수료 기준 영향 없음." },
+        ];
+
+        // ===== role engine =====
+        const ROLES = {
+            pl: { nm: "이인철", role: "PL · 사업총괄", mode: "admin", scope: "all", phone: true, perm: "전체 조회·수정·승인 가능", menu: ["dashboard", "participants", "rounds", "assign", "consulting", "attendance"], can: { editP: 1, attend: 1, consult: 1, memo: 1, editR: 1, complete: 1 } },
+            region: { nm: "이빛나라", role: "지역담당자 · 양천", mode: "admin", scope: "region", region: "양천", phone: true, perm: "담당지역(양천) 회차·참여자 입력·수정 가능", menu: ["dashboard", "participants", "rounds", "assign", "consulting", "attendance"], can: { editP: 1, attend: 1, consult: 1, memo: 1, editR: 1, complete: 1 } },
+            han: { nm: "한준희", role: "한준희 주임 · 행정", mode: "admin", scope: "all", phone: true, perm: "전체 조회 · 출결/수료/수당 입력 (회차는 조회만)", menu: ["dashboard", "participants", "rounds", "assign", "consulting", "attendance"], can: { editP: 1, attend: 1, consult: 0, memo: 1, editR: 0, complete: 1 } },
+            counselor: { nm: "김상담", role: "상담사", mode: "field", scope: "rounds", rounds: ["22회차", "21회차"], phone: true, perm: "배정 회차 참여자 조회 · 사전/사후 상담 입력 가능", menu: ["dashboard", "participants", "consulting"], can: { editP: 0, attend: 0, consult: 1, memo: 1, editR: 0, complete: 0 } },
+            facil: { nm: "이진행", role: "진행자", mode: "field", scope: "rounds", rounds: ["22회차"], phone: true, perm: "배정 회차 참여자 조회 · 출결 입력 가능 (연락처 확인 가능)", menu: ["dashboard", "participants", "attendance"], can: { editP: 0, attend: 1, consult: 0, memo: 1, editR: 0, complete: 0 } },
+            teacher: { nm: "심영수", role: "강사", mode: "field", scope: "rounds", rounds: ["22회차", "21회차", "17회차"], phone: false, perm: "배정 회차 참여자 조회 · 메모 작성만 (연락처 비공개)", menu: ["dashboard", "participants"], can: { editP: 0, attend: 0, consult: 0, memo: 1, editR: 0, complete: 0 } },
+        };
+        let CURRENT = "pl";
+
+        function maskPhone(p) { return p.slice(0, 3) + "****" + p.slice(-4); }
+        function pidLabel(p) { const r = ROLES[CURRENT]; return p.nm + "_" + (r.phone ? p.phone : maskPhone(p.phone)); }
+        function visibleParticipants() {
+            const r = ROLES[CURRENT];
+            if (r.scope === "all") return participants;
+            if (r.scope === "region") return participants.filter(p => p.reg === r.region);
+            if (r.scope === "rounds") return participants.filter(p => r.rounds.includes(p.rd));
+            return participants;
+        }
+        function visibleRounds() {
+            const r = ROLES[CURRENT];
+            if (r.scope === "all") return rounds;
+            if (r.scope === "region") return rounds.filter(x => x.reg === r.region);
+            if (r.scope === "rounds") return rounds.filter(x => r.rounds.includes(x.no));
+            return rounds;
+        }
+
+        // ===== render =====
+        const $ = s => document.querySelector(s);
+        function chip(arr) { return `<span class="chip ${arr[1]}">${arr[0]}</span>` }
+
+        function renderParticipants() {
+            const list = visibleParticipants();
+            $("#p-count").textContent = `총 ${list.length}명 (가상)`;
+            $("#p-rows").innerHTML = list.map(p => `
+    <tr onclick="openParticipant('${p.nm}','${p.phone}','${p.reg}','${p.rd}',${JSON.stringify(p.st).replace(/"/g, '&quot;')})">
+      <td><div class="pname">${p.nm}</div><div class="cell-sub">${pidLabel(p)}</div></td>
+      <td>${p.reg} · ${p.rd}</td>
+      <td>${chip(p.st)}</td>
+      <td>${chip(p.sang)}</td>
+      <td><div class="mini-prog"><div class="bar"><span style="width:${p.att}%"></span></div><span class="muted tnum" style="font-size:11.5px">${p.att}%</span></div></td>
+      <td>${chip(p.su)}</td>
+      <td>${chip(p.guk)}</td>
+      <td>${chip(p.job)}</td>
+    </tr>`).join("");
+        }
+        function renderRounds() {
+            const list = visibleRounds();
+            $("#r-rows").innerHTML = list.map(r => {
+                const okCap = r.cur >= 12;
+                return `<tr onclick="show('round-detail')">
+      <td class="pname">${r.no}</td><td>${r.reg}</td><td class="tnum">${r.date}</td>
+      <td><span class="tnum" style="font-weight:600;color:${okCap ? 'var(--ink)' : 'var(--warn)'}">${r.cur}</span><span class="muted tnum"> / ${r.cap}</span></td>
+      <td>${chip(r.st)}</td><td>${r.gang}</td><td>${r.sang}</td>
+    </tr>`}).join("");
+        }
+
+        // 인력 배정 데이터 (가상)
+        const ASSIGN = [
+            { no: "22회차", reg: "양천", date: "06-23~27", gang: ["심영수", "박외부"], sang: ["김상담"], jin: ["이진행"], warn: "" },
+            { no: "18회차", reg: "인천", date: "06-16~20", gang: ["박외부"], sang: ["이상담"], jin: ["최진행"], warn: "박외부 — 22회차와 날짜 근접 확인" },
+            { no: "24회차", reg: "양천", date: "07-14~18", gang: ["심영수"], sang: [], jin: [], warn: "" },
+            { no: "03회차", reg: "강북", date: "07-21~25", gang: [], sang: [], jin: [], warn: "" },
+        ];
+        function tagList(arr, role) {
+            let h = arr.map(n => `<span class="assign-tag">${n}<span class="rm">✕</span></span>`).join("");
+            if (arr.length < 5) h += `<span class="assign-empty" onclick="openModal('round')">+ ${role} 배정</span>`;
+            return h;
+        }
+        function renderAssign() {
+            const list = ASSIGN.filter(a => { const r = ROLES[CURRENT]; if (r.scope === "all") return 1; if (r.scope === "region") return a.reg === r.region; return r.rounds.includes(a.no); });
+            $("#assign-board").innerHTML = list.map(a => `
+    <div class="assign-card">
+      <div class="ac-h"><span class="rno">${a.reg} ${a.no}</span><span class="muted tnum" style="font-size:12.5px">${a.date}</span>
+        ${a.warn ? `<span class="chip warn" style="margin-left:auto">⚠ ${a.warn}</span>` : `<span class="chip ok" style="margin-left:auto">충돌 없음</span>`}</div>
+      <div class="ac-b">
+        <div class="assign-col"><div class="acl">강사 (1~5)</div>${tagList(a.gang, "강사")}</div>
+        <div class="assign-col"><div class="acl">상담사 (1~5)</div>${tagList(a.sang, "상담사")}</div>
+        <div class="assign-col"><div class="acl">진행자 (1~5)</div>${tagList(a.jin, "진행자")}</div>
+      </div>
+    </div>`).join("");
+        }
+
+        function renderConsulting() {
+            const list = visibleParticipants().filter(p => !["접수", "미선정", "취소"].includes(p.st[0]));
+            const cons = ROLES[CURRENT].can.consult;
+            $("#consult-rows").innerHTML = list.map(p => {
+                const done = p.sang[0] === "완료";
+                return `<tr>
+      <td><div class="pname">${p.nm}</div><div class="cell-sub">${pidLabel(p)}</div></td>
+      <td>${p.rd}</td><td>김상담</td>
+      <td>${done ? chip(["완료", "ok"]) : chip(["미완료", "warn"])}</td>
+      <td>${p.st[0] === "사후관리" || p.st[0] === "종료" ? chip(["완료", "ok"]) : chip(["—", "neutral"])}</td>
+      <td>${p.st[0] === "종료" ? chip(["완료", "ok"]) : chip(["—", "neutral"])}</td>
+      <td class="tnum">${done ? "1회" : "3회"}</td>
+      <td>${done ? chip(["작성", "ok"]) : chip(["—", "neutral"])}</td>
+      <td>${cons ? `<button class="btn" style="padding:5px 11px;font-size:12px" onclick="openModal('consult')">상담 입력</button>` : `<span class="muted" style="font-size:11.5px">조회</span>`}</td>
+    </tr>`}).join("");
+        }
+
+        function renderAttendance() {
+            // 22회차 교육중 참여자 가상
+            const roster = [
+                { nm: "홍길동", days: ["출석", "외출", "출석", "none", "none"], time: "2일 14:10~15:00", risk: "가능" },
+                { nm: "김순자", days: ["출석", "출석", "출석", "none", "none"], time: "", risk: "가능" },
+                { nm: "윤서연", days: ["출석", "지각", "출석", "none", "none"], time: "2일 지각 10분", risk: "가능" },
+                { nm: "오현석", days: ["출석", "결석", "출석", "none", "none"], time: "2일 결석(연락두절)", risk: "위험" },
+            ];
+            const canEdit = ROLES[CURRENT].can.attend;
+            $("#attend-rows").innerHTML = roster.map(r => `
+    <tr>
+      <td class="nm-col"><div class="pname">${r.nm}</div>${r.time ? `<div class="att-time">${r.time}</div>` : ''}</td>
+      ${r.days.map(d => `<td><span class="att-cell ${d}" ${canEdit ? 'onclick="openModal(\'attend\')"' : ''}>${d === "none" ? "—" : d}</span></td>`).join("")}
+      <td>${r.risk === "위험" ? chip(["수료 위험", "danger"]) : chip(["가능", "ok"])}</td>
+    </tr>`).join("");
+        }
+
+        function applyRole(key) {
+            CURRENT = key; const r = ROLES[key];
+            $("#u-name").textContent = r.nm; $("#u-avatar").textContent = r.nm[0]; $("#u-role").textContent = r.role;
+            const mb = $("#mode-badge"); mb.textContent = r.mode === "admin" ? "관리자 모드" : "현장 모드"; mb.className = "mode-badge " + r.mode;
+            // sidebar: 역할별 menu에 포함된 항목만 표시
+            document.querySelectorAll('.nav-item[data-view]').forEach(n =>
+                n.classList.toggle("hide", !r.menu.includes(n.dataset.view)));
+            document.querySelectorAll('.nav-item.soon').forEach(n => n.classList.toggle("hide", r.mode !== "admin"));
+            // nav-group: 그룹 내 보이는 항목이 없으면 그룹 숨김
+            document.querySelectorAll('.nav-group').forEach(g => {
+                let vis = false, el = g.nextElementSibling;
+                while (el && el.classList.contains('nav-item')) { if (!el.classList.contains('hide')) vis = true; el = el.nextElementSibling; }
+                g.classList.toggle("hide", !vis);
+            });
+            // permission bars
+            $("#perm-participants-txt").textContent = r.perm;
+            $("#perm-consulting-txt").textContent = r.can.consult ? "배정 참여자 상담 입력 가능 · 사전(대면1)·사후(대면2)" : "상담 현황 조회만 가능";
+            $("#perm-attend-txt").textContent = r.can.attend ? "배정 회차 출결 입력 가능 (진행자)" : "출결 현황 조회만 가능";
+            // 입력 버튼 권한 토글
+            const can = r.can, tog = (id, ok) => { const el = document.getElementById(id); if (el) el.classList.toggle("hide", !ok); };
+            tog("btn-add-participant", can.editP); tog("btn-edit-participant", can.editP);
+            tog("btn-attend", can.attend); tog("btn-consult", can.consult); tog("btn-complete", can.complete);
+            tog("btn-memo", can.memo); tog("btn-add-round", can.editR); tog("btn-edit-round", can.editR);
+            renderParticipants(); renderRounds(); renderAssign(); renderConsulting(); renderAttendance();
+            // 접근 불가 화면 보고 있으면 대시보드로
+            const av = document.querySelector(".view.active");
+            if (av) {
+                const id = av.id.replace("view-", "").replace("-detail", "");
+                const allow = [...r.menu, "participant", "round"];
+                if (!allow.includes(id) && !r.menu.includes(id)) show("dashboard");
+            }
+        }
+
+        $("#task-list").innerHTML = tasks.map(t => `
+  <div class="task">
+    <div class="when"><span class="dday ${t.when[1]}">${t.when[0]}</span></div>
+    <div><div class="ttl">${t.ttl}</div><div class="meta">${t.meta}</div></div>
+    <div class="who"><div class="nm">${t.who[0]}</div><div class="rl">${t.who[1]}</div></div>
+  </div>`).join("");
+
+        $("#alert-list").innerHTML = alerts.map(a => `
+  <div class="alert">
+    <div class="ai ${a.ic}">!</div>
+    <div><div class="at">${a.t}</div><div class="as">${a.s}</div></div>
+    <div class="cnt tnum">${a.cnt}</div>
+  </div>`).join("");
+
+        $("#regions").innerHTML = regions.map(r => `
+  <div class="region"><div class="rn">${r.nm}</div>
+    <div class="rc tnum">${r.cnt}<span class="rl"> ${r.lb}</span></div>
+    <div class="rb">${r.pills.map(p => `<span class="pill chip ${p[1]}">${p[0]}</span>`).join("")}</div>
+  </div>`).join("");
+
+        $("#memo-list").innerHTML = memos.map(m => `
+  <div class="memo-item">
+    <div class="memo-av">${m.who[0]}</div>
+    <div class="memo-body">
+      <div class="memo-head"><b>${m.who}</b><span class="chip neutral" style="font-size:10.5px">${m.role}</span><span class="memo-date">${m.date}</span></div>
+      <div class="memo-txt">${m.txt}</div>
+    </div>
+  </div>`).join("");
+
+        // ===== navigation =====
+        const titles = {
+            dashboard: ["운영", "대시보드"], participants: ["운영", "참여자 관리"],
+            "participant-detail": ["운영 › 참여자", "참여자 상세"], rounds: ["운영", "회차 · 일정"],
+            "round-detail": ["운영 › 회차", "회차 상세"],
+            assign: ["단계 관리", "인력 배정"], consulting: ["단계 관리", "사전상담"], attendance: ["단계 관리", "출결 · 현장"]
+        };
+        const navMap = {
+            dashboard: "dashboard", participants: "participants", "participant-detail": "participants",
+            rounds: "rounds", "round-detail": "rounds", assign: "assign", consulting: "consulting", attendance: "attendance"
+        };
+        function show(view) {
+            document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+            $("#view-" + view).classList.add("active");
+            document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+            const navBtn = document.querySelector(`.nav-item[data-view="${navMap[view] || view}"]`);
+            if (navBtn) navBtn.classList.add("active");
+            $("#crumb").textContent = titles[view][0]; $("#page-title").textContent = titles[view][1];
+            window.scrollTo({ top: 0, behavior: "instant" });
+            document.getElementById('sidebar').classList.remove('open');
+        }
+        function openParticipant(nm, phone, reg, rd, st) {
+            const r = ROLES[CURRENT];
+            $("#d-name").textContent = nm; $("#d-avatar").textContent = nm[0];
+            $("#d-region").textContent = reg; $("#d-round").textContent = rd;
+            $("#d-pid").textContent = nm + "_" + (r.phone ? phone : maskPhone(phone));
+            const s = $("#d-status"); s.textContent = st[0]; s.className = "chip " + st[1];
+            show("participant-detail");
+        }
+        document.querySelectorAll(".nav-item[data-view]").forEach(n =>
+            n.addEventListener("click", () => show(n.dataset.view)));
+
+        // role switch
+        $("#role-switch").addEventListener("change", e => applyRole(e.target.value));
+        applyRole("pl"); // 초기: PL
+    </script>
+</body>
+
+</html>
