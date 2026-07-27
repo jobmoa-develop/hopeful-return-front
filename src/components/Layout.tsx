@@ -63,6 +63,7 @@ const PAGE_META = [
   { match: (path: string) => path === '/attendance', crumb: '단계 관리', title: '출결 · 현장' },
   { match: (path: string) => path === '/follow-up', crumb: '관리', title: '사후관리' },
   { match: (path: string) => path === '/users', crumb: '관리', title: '직원 관리' },
+  { match: (path: string) => path === '/users/sms-permission', crumb: '관리', title: '문자 권한 관리' },
 ];
 
 export default function Layout() {
@@ -92,6 +93,7 @@ export default function Layout() {
     if (view === 'attendance' && path === '/attendance') return true;
     if (view === 'followUp' && path.startsWith('/follow-up')) return true;
     if (view === 'userManagement' && path === '/users') return true;
+    if (view === 'smsPermission' && path === '/users/sms-permission') return true;
     return false;
   };
 
@@ -103,7 +105,7 @@ export default function Layout() {
   );
   const showAdminGroup = ['followUp', 'userManagement'].some((menu) =>
     roleConfig.menu.includes(menu),
-  );
+  ) || roleConfig.roles.some((r) => r === 'ADMIN' || r === 'HEAD_OFFICE');
   const userInitial = roleConfig.nm.charAt(0) || roleConfig.role.charAt(0);
 
   const handleLogout = async () => {
@@ -241,6 +243,15 @@ export default function Layout() {
               onClick={() => setIsSidebarOpen(false)}
             >
               <span className="ic">👥</span>사용자 관리
+            </Link>
+          )}
+          {roleConfig.roles.some((r) => r === 'ADMIN' || r === 'HEAD_OFFICE') && (
+            <Link
+              to="/users/sms-permission"
+              className={`nav-item ${isNavActive('smsPermission') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              <span className="ic">💬</span>문자 권한 관리
             </Link>
           )}
         </nav>

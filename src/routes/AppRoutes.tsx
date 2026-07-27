@@ -15,6 +15,7 @@ import ProtectedRoute from './ProtectedRoute';
 import CourseCalendarPage from '../pages/CourseCalendarPage';
 import StaffScheduleManagePage from '../pages/StaffScheduleManagePage';
 import UserManagementPage from '../pages/UserManagementPage';
+import SmsPermissionPage from '../pages/SmsPermissionPage';
 import FollowUpPage from '../pages/FollowUpPage';
 
 function LoginRoute() {
@@ -61,7 +62,7 @@ export default function AppRoutes() {
         <Route
           path="/participants/sms-history"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requireSmsPermission>
               <SmsHistoryPage />
             </ProtectedRoute>
           }
@@ -148,6 +149,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'HEAD_OFFICE']}>
               <UserManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/users/sms-permission"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'HEAD_OFFICE']}>
+              <SmsPermissionPage />
             </ProtectedRoute>
           }
         />
