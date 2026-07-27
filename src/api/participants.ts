@@ -33,6 +33,8 @@ export type ParticipantListParams = {
   phone?: string;
   regionId?: number; // 최신 수강건 기준 회차 필터(지역)
   courseNumber?: number; // 최신 수강건 기준 회차 필터(회차번호)
+  registerDateFrom?: string; // 전산 등록일 시작(YYYY-MM-DD, 포함) — 최신 수강건 created_at 기준
+  registerDateTo?: string; // 전산 등록일 종료(YYYY-MM-DD, 포함)
   page?: number;
   size?: number;
 };

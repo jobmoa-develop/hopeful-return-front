@@ -8,6 +8,8 @@ export type AuthUser = {
   loginId: string;
   name: string;
   roles: string[];
+  // 문자 발송 권한(계정 단위 플래그). 로그인 응답 user.canSendSms 로 내려온다.
+  canSendSms?: boolean;
 };
 
 export const tokenStore = {
