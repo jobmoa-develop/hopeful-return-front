@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
 import { getParticipants } from '../api/participants';
 import type { ParticipantListItem } from '../api/participants';
+import { SmsSendModal } from '../components/SmsModals';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import {
@@ -51,6 +53,8 @@ function attendancePercent(p: ParticipantListItem): number | null {
 export default function ParticipantsPage() {
   const navigate = useNavigate();
   const { roleConfig } = useRole();
+  const { user } = useAuth();
+  const canSendSms = user?.canSendSms ?? false;
 
   const [items, setItems] = useState<ParticipantListItem[]>([]);
   const [totalElements, setTotalElements] = useState(0);
@@ -66,6 +70,9 @@ export default function ParticipantsPage() {
   const [courseNumberQuery, setCourseNumberQuery] = useState('');
   const [courseNumber, setCourseNumber] = useState<number | ''>('');
   const [selectedStatus, setSelectedStatus] = useState('전체');
+  // 전산 등록일 필터(최신 수강건 created_at 기준). 빈 값이면 미적용.
+  const [registerDateFrom, setRegisterDateFrom] = useState('');
+  const [registerDateTo, setRegisterDateTo] = useState('');
 
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
@@ -74,11 +81,13 @@ export default function ParticipantsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<'COMPLETED' | 'INCOMPLETE' | null>(null);
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
+  const [isSmsOpen, setIsSmsOpen] = useState(false);
+  const [smsRecipients, setSmsRecipients] = useState<ParticipantListItem[]>([]);
   const canBulkComplete = roleConfig.can.complete === 1;
   // 상담사 일괄 배정 — editP(참여자 정보 수정) 롤 집합이 BE 일괄 배정 인가와 일치
   const canBulkAssignCounselor = roleConfig.can.editP === 1;
-  // 체크박스 선택 UI는 일괄 처리 권한 중 하나라도 있으면 노출
-  const canSelect = canBulkComplete || canBulkAssignCounselor;
+  // 체크박스 선택 UI는 일괄 처리·문자 발송 권한 중 하나라도 있으면 노출
+  const canSelect = canBulkComplete || canBulkAssignCounselor || canSendSms;
 
   const fetchList = useCallback(() => {
     setLoading(true);
@@ -88,6 +97,8 @@ export default function ParticipantsPage() {
       name: searchName || undefined,
       regionId: selectedRegionId === '' ? undefined : selectedRegionId,
       courseNumber: courseNumber === '' ? undefined : courseNumber,
+      registerDateFrom: registerDateFrom || undefined,
+      registerDateTo: registerDateTo || undefined,
       page,
       size: PAGE_SIZE,
     })
@@ -99,7 +110,7 @@ export default function ParticipantsPage() {
       })
       .catch((err) => setError(apiErrorMessage(err, '참여자 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, selectedRegionId, courseNumber, page]);
+  }, [searchName, selectedRegionId, courseNumber, registerDateFrom, registerDateTo, page]);
 
   useEffect(() => {
     fetchList();
@@ -192,6 +203,24 @@ export default function ParticipantsPage() {
     fetchList();
   };
 
+  // 선택된(현재 로드된) 참여자 중 수강 이력이 있는 대상으로 문자 모달 열기
+  const openSms = () => {
+    const recipients = items.filter((p) => {
+      const id = p.latestEnrollment?.courseParticipantId;
+      return id != null && selectedIds.has(id);
+    });
+    if (recipients.length === 0) {
+      alert('문자를 보낼 참여자를 선택하세요. (수강 이력이 있는 참여자만 발송 가능)');
+      return;
+    }
+    setSmsRecipients(recipients);
+    setIsSmsOpen(true);
+  };
+
+  const handleSmsSent = () => {
+    clearSelection();
+  };
+
   return (
     <section className="view active" id="view-participants">
       <div className="perm-bar" id="perm-participants">
@@ -265,6 +294,30 @@ export default function ParticipantsPage() {
               style={{ fontSize: '12px' }}
             />
           </div>
+          <div className="select" title="전산 등록일 기준">
+            <span className="ico">등록일</span>
+            <input
+              type="date"
+              value={registerDateFrom}
+              onChange={(e) => {
+                setRegisterDateFrom(e.target.value);
+                setPage(0);
+              }}
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
+            />
+            <span className="muted" style={{ fontSize: '12px' }}>
+              ~
+            </span>
+            <input
+              type="date"
+              value={registerDateTo}
+              onChange={(e) => {
+                setRegisterDateTo(e.target.value);
+                setPage(0);
+              }}
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
+            />
+          </div>
         </div>
 
         <span className="count" id="p-count">
@@ -318,6 +371,11 @@ export default function ParticipantsPage() {
           {canBulkAssignCounselor && (
             <button className="btn" onClick={() => setIsBulkAssignOpen(true)}>
               상담사 일괄 배정
+            </button>
+          )}
+          {canSendSms && (
+            <button className="btn primary" onClick={openSms}>
+              ✉ 문자 발송
             </button>
           )}
           <button className="btn" onClick={clearSelection} style={{ marginLeft: 'auto' }}>
@@ -531,6 +589,15 @@ export default function ParticipantsPage() {
           courseParticipantIds={Array.from(selectedIds)}
           sampleCourseParticipantId={Array.from(selectedIds)[0]}
           onSaved={handleBulkSaved}
+        />
+      )}
+      {canSendSms && (
+        <SmsSendModal
+          isOpen={isSmsOpen}
+          onClose={() => setIsSmsOpen(false)}
+          recipients={smsRecipients}
+          currentUserId={user?.userId}
+          onSent={handleSmsSent}
         />
       )}
     </section>

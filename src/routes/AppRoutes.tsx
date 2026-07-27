@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router';
 import Layout from '../components/Layout';
 import DashboardPage from '../pages/DashboardPage';
 import ParticipantsPage from '../pages/ParticipantsPage';
+import SmsHistoryPage from '../pages/SmsHistoryPage';
 import ParticipantDetailPage from '../pages/ParticipantDetailPage';
 import RoundsPage from '../pages/RoundsPage';
 import RoundDetailPage from '../pages/RoundDetailPage';
@@ -54,6 +55,14 @@ export default function AppRoutes() {
               ]}
             >
               <ParticipantsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/participants/sms-history"
+          element={
+            <ProtectedRoute>
+              <SmsHistoryPage />
             </ProtectedRoute>
           }
         />
