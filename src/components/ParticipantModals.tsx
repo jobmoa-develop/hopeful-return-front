@@ -104,7 +104,7 @@ interface ApiModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
-  onSave: () => void;
+  onSave?: () => void;
   saving: boolean;
   note?: string;
   children: ReactNode;
@@ -149,9 +149,11 @@ function ApiModal({ isOpen, onClose, title, onSave, saving, note, children }: Ap
           <button className="btn" onClick={onClose} disabled={saving}>
             취소
           </button>
-          <button className="btn primary" onClick={onSave} disabled={saving}>
-            {saving ? '저장 중…' : '저장'}
-          </button>
+          {onSave && (
+            <button className="btn primary" onClick={onSave} disabled={saving}>
+              {saving ? '저장 중…' : '저장'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -248,13 +250,13 @@ export function ParticipantRegisterModal({
         birthYear: birthYear ? Number(birthYear) : undefined,
         enrollment: hasEnrollment
           ? {
-              courseId: Number(courseId),
-              inflowType: inflowType || undefined,
-              applyDate: applyDate || undefined,
-              receptionDate: receptionDate || undefined,
-              basicEducation,
-              counselors: counselors.length > 0 ? counselors : undefined,
-            }
+            courseId: Number(courseId),
+            inflowType: inflowType || undefined,
+            applyDate: applyDate || undefined,
+            receptionDate: receptionDate || undefined,
+            basicEducation,
+            counselors: counselors.length > 0 ? counselors : undefined,
+          }
           : undefined,
       });
       onSaved();
@@ -1249,67 +1251,78 @@ export function AttendanceApiModal({
   initialAttendanceId,
 }: AttendanceApiModalProps) {
   const { roleConfig } = useRole();
-  const canEdit = roleConfig.can.attend === 1; // OPERATOR, STAFF 권한 체크
-  const isAdmin = roleConfig.role.includes('ADMIN'); // 하드 삭제 권한 체크
+  const canEdit = roleConfig.can.attend === 1;
+  const isAdmin = roleConfig.role.includes('ADMIN');
 
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 현재 모달에서 관리 중인 출석 정보
+  // 출석 정보
   const [attendanceId, setAttendanceId] = useState<number | null>(null);
   const [checkInTime, setCheckInTime] = useState('');
   const [checkOutTime, setCheckOutTime] = useState('');
-  const [currentStatus, setCurrentStatus] = useState(''); // 읽기 전용 (서버에서 계산된 상태)
-
-  // 조퇴/외출 정보 (첫 번째 요소만 사용)
-  const [leaveId, setLeaveId] = useState<number | null>(null);
-  const [leaveTime, setLeaveTime] = useState('');
-  const [returnTime, setReturnTime] = useState('');
-  const [leaveReason, setLeaveReason] = useState('');
+  const [currentStatus, setCurrentStatus] = useState('');
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'ATTEND' | 'LEAVE'>('ATTEND');
 
+  // 조퇴/외출 — 다중 기록
+  type LeaveRow = {
+    attendanceLeaveId: number | null; // null = 신규
+    leaveTime: string;
+    returnTime: string;
+    reason: string;
+    isEditing: boolean;
+    savingRow: boolean;
+  };
+  const [leaves, setLeaves] = useState<LeaveRow[]>([]);
+  const [addingNew, setAddingNew] = useState(false);
+  const [newLeave, setNewLeave] = useState({ leaveTime: '', returnTime: '', reason: '' });
+
+  const refreshAttendance = (attId: number) => {
+    setLoading(true);
+    getAttendance(attId)
+      .then((res) => {
+        const data = res.data.data;
+        if (data) {
+          setAttendanceId(data.attendanceId);
+          setCheckInTime(data.checkInTime || '');
+          setCheckOutTime(data.checkOutTime || '');
+          setCurrentStatus(data.status || '');
+          setLeaves(
+            (data.leaves ?? []).map((lv) => ({
+              attendanceLeaveId: lv.attendanceLeaveId,
+              leaveTime: lv.leaveTime || '',
+              returnTime: lv.returnTime || '',
+              reason: lv.reason || '',
+              isEditing: false,
+              savingRow: false,
+            }))
+          );
+        }
+      })
+      .catch((err) => console.error('출석 정보 불러오기 실패', err))
+      .finally(() => setLoading(false));
+  };
+
   // 데이터 초기 로딩
   useEffect(() => {
     if (!isOpen) return;
-
-    // 모달 열릴 때 상태 초기화
     setAttendanceId(null);
     setCheckInTime('');
     setCheckOutTime('');
     setCurrentStatus('');
-    setLeaveId(null);
-    setLeaveTime('');
-    setReturnTime('');
-    setLeaveReason('');
+    setLeaves([]);
+    setAddingNew(false);
+    setNewLeave({ leaveTime: '', returnTime: '', reason: '' });
     setActiveTab('ATTEND');
 
     if (initialAttendanceId) {
-      setLoading(true);
-      getAttendance(initialAttendanceId)
-        .then((res) => {
-          const data = res.data.data;
-          if (data) {
-            setAttendanceId(data.attendanceId);
-            setCheckInTime(data.checkInTime || '');
-            setCheckOutTime(data.checkOutTime || '');
-            setCurrentStatus(data.status || '');
-
-            if (data.leaves && data.leaves.length > 0) {
-              const lv = data.leaves[0];
-              setLeaveId(lv.attendanceLeaveId);
-              setLeaveTime(lv.leaveTime || '');
-              setReturnTime(lv.returnTime || '');
-              setLeaveReason(lv.reason || '');
-            }
-          }
-        })
-        .catch((err) => console.error('출석 정보 불러오기 실패', err))
-        .finally(() => setLoading(false));
+      refreshAttendance(initialAttendanceId);
     }
   }, [isOpen, initialAttendanceId]);
 
+  // 출결 저장
   const handleSaveAttendance = async () => {
     if (!canEdit) return;
     setSaving(true);
@@ -1318,15 +1331,10 @@ export function AttendanceApiModal({
         checkInTime: checkInTime || undefined,
         checkOutTime: checkOutTime || undefined,
       };
-
       if (attendanceId) {
         await updateAttendance(attendanceId, payload);
       } else {
-        await createAttendance({
-          courseParticipantId,
-          dayNo,
-          ...payload,
-        });
+        await createAttendance({ courseParticipantId, dayNo, ...payload });
       }
       onSaved();
       onClose();
@@ -1337,37 +1345,7 @@ export function AttendanceApiModal({
     }
   };
 
-  const handleSaveLeave = async () => {
-    if (!canEdit) return;
-    if (!attendanceId) {
-      alert('출석 정보가 먼저 등록되어야 조퇴/외출 기록을 남길 수 있습니다.');
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        leaveTime: leaveTime || undefined,
-        returnTime: returnTime || undefined,
-        reason: leaveReason || undefined,
-      };
-
-      if (leaveId) {
-        await updateAttendanceLeave(leaveId, payload);
-      } else {
-        await createAttendanceLeave({
-          attendanceId,
-          ...payload,
-        });
-      }
-      onSaved();
-      onClose();
-    } catch (err) {
-      alert(apiErrorMessage(err, '조퇴/외출 정보 저장에 실패했습니다.'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
+  // 출결 삭제
   const handleDeleteAttendance = async () => {
     if (!isAdmin || !attendanceId) return;
     if (!window.confirm('정말 삭제하시겠습니까? 관련 조퇴/외출 기록도 모두 삭제될 수 있습니다.'))
@@ -1384,19 +1362,73 @@ export function AttendanceApiModal({
     }
   };
 
-  const handleDeleteLeave = async () => {
-    if (!isAdmin || !leaveId) return;
-    if (!window.confirm('정말 삭제하시겠습니까?')) return;
-    setSaving(true);
+  // 조퇴/외출 개별 저장 (수정)
+  const handleSaveLeaveRow = async (idx: number) => {
+    if (!canEdit || !attendanceId) return;
+    const row = leaves[idx];
+    setLeaves((prev) => prev.map((r, i) => i === idx ? { ...r, savingRow: true } : r));
     try {
-      await deleteAttendanceLeave(leaveId);
+      if (row.attendanceLeaveId) {
+        await updateAttendanceLeave(row.attendanceLeaveId, {
+          leaveTime: row.leaveTime || undefined,
+          returnTime: row.returnTime || undefined,
+          reason: row.reason || undefined,
+        });
+      }
       onSaved();
-      onClose();
+      // 저장 후 목록 새로고침 (모달 유지)
+      refreshAttendance(attendanceId);
+    } catch (err) {
+      alert(apiErrorMessage(err, '조퇴/외출 정보 저장에 실패했습니다.'));
+      setLeaves((prev) => prev.map((r, i) => i === idx ? { ...r, savingRow: false } : r));
+    }
+  };
+
+  // 조퇴/외출 개별 삭제
+  const handleDeleteLeaveRow = async (idx: number) => {
+    if (!isAdmin) return;
+    const row = leaves[idx];
+    if (!row.attendanceLeaveId) return;
+    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+    setLeaves((prev) => prev.map((r, i) => i === idx ? { ...r, savingRow: true } : r));
+    try {
+      await deleteAttendanceLeave(row.attendanceLeaveId);
+      onSaved();
+      if (attendanceId) refreshAttendance(attendanceId);
     } catch (err) {
       alert(apiErrorMessage(err, '조퇴/외출 정보 삭제에 실패했습니다.'));
+      setLeaves((prev) => prev.map((r, i) => i === idx ? { ...r, savingRow: false } : r));
+    }
+  };
+
+  // 조퇴/외출 신규 추가
+  const handleAddNewLeave = async () => {
+    if (!canEdit || !attendanceId) return;
+    setSaving(true);
+    try {
+      await createAttendanceLeave({
+        attendanceId,
+        leaveTime: newLeave.leaveTime || undefined,
+        returnTime: newLeave.returnTime || undefined,
+        reason: newLeave.reason || undefined,
+      });
+      onSaved();
+      setAddingNew(false);
+      setNewLeave({ leaveTime: '', returnTime: '', reason: '' });
+      refreshAttendance(attendanceId);
+    } catch (err) {
+      alert(apiErrorMessage(err, '조퇴/외출 등록에 실패했습니다.'));
     } finally {
       setSaving(false);
     }
+  };
+
+  const updateLeaveField = (idx: number, field: keyof Omit<LeaveRow, 'attendanceLeaveId' | 'isEditing' | 'savingRow'>, value: string) => {
+    setLeaves((prev) => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+  };
+
+  const toggleEdit = (idx: number) => {
+    setLeaves((prev) => prev.map((r, i) => i === idx ? { ...r, isEditing: !r.isEditing } : r));
   };
 
   return (
@@ -1404,7 +1436,7 @@ export function AttendanceApiModal({
       isOpen={isOpen}
       onClose={onClose}
       title={`${participantName} - ${dayNo}일차 출결`}
-      onSave={activeTab === 'ATTEND' ? handleSaveAttendance : handleSaveLeave}
+      onSave={activeTab === 'ATTEND' ? handleSaveAttendance : undefined}
       saving={saving || loading}
       note={!canEdit ? '※ 조회 권한만 있습니다.' : undefined}
     >
@@ -1420,6 +1452,20 @@ export function AttendanceApiModal({
           onClick={() => setActiveTab('LEAVE')}
         >
           조퇴·외출 관리
+          {leaves.length > 0 && (
+            <span style={{
+              marginLeft: '6px',
+              background: 'var(--danger, #e53e3e)',
+              color: '#fff',
+              borderRadius: '10px',
+              padding: '0 7px',
+              fontSize: '11px',
+              fontWeight: 700,
+              lineHeight: '18px',
+              display: 'inline-block',
+              verticalAlign: 'middle',
+            }}>{leaves.length}</span>
+          )}
         </button>
       </div>
 
@@ -1468,46 +1514,183 @@ export function AttendanceApiModal({
       )}
 
       {!loading && activeTab === 'LEAVE' && (
-        <div className="form-grid">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {!attendanceId ? (
-            <div className="field full" style={{ color: 'var(--danger)' }}>
+            <div style={{ color: 'var(--danger)', padding: '8px 0' }}>
               출결 기록이 존재해야 조퇴/외출 기록을 남길 수 있습니다.
             </div>
           ) : (
             <>
-              <div className="field">
-                <label>조퇴·외출 시간 (HH:mm:ss)</label>
-                <input
-                  type="time"
-                  step="1"
-                  value={leaveTime}
-                  onChange={(e) => setLeaveTime(e.target.value)}
-                  disabled={!canEdit}
-                />
-              </div>
-              <div className="field">
-                <label>복귀 시간 (HH:mm:ss)</label>
-                <input
-                  type="time"
-                  step="1"
-                  value={returnTime}
-                  onChange={(e) => setReturnTime(e.target.value)}
-                  disabled={!canEdit}
-                />
-              </div>
-              <div className="field full">
-                <label>사유</label>
-                <input
-                  value={leaveReason}
-                  onChange={(e) => setLeaveReason(e.target.value)}
-                  placeholder="사유를 입력하세요"
-                  disabled={!canEdit}
-                />
-              </div>
-              {isAdmin && leaveId && (
-                <div className="field full" style={{ marginTop: '16px', textAlign: 'right' }}>
-                  <button className="btn danger" onClick={handleDeleteLeave} disabled={saving}>
-                    조퇴·외출 기록 삭제
+              {/* 기존 조퇴/외출 기록 목록 */}
+              {leaves.length === 0 && !addingNew && (
+                <div style={{ color: 'var(--muted, #888)', padding: '8px 0', fontSize: '14px' }}>
+                  등록된 조퇴·외출 기록이 없습니다.
+                </div>
+              )}
+
+              {leaves.map((row, idx) => (
+                <div
+                  key={row.attendanceLeaveId ?? `new-${idx}`}
+                  style={{
+                    border: '1px solid var(--border, #e2e8f0)',
+                    borderRadius: '8px',
+                    padding: '12px 14px',
+                    background: row.isEditing ? 'var(--bg-sub, #f8fafc)' : '#fff',
+                    position: 'relative',
+                  }}
+                >
+                  {/* 헤더 행 */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: row.isEditing ? '10px' : 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                      기록 #{idx + 1}
+                      <span style={{ marginLeft: '10px', fontWeight: 400, color: 'var(--muted, #888)', fontSize: '12px' }}>
+                        {row.leaveTime ? `외출 ${row.leaveTime.substring(0, 5)}` : '외출시간 미입력'}
+                        {row.returnTime ? ` → 복귀 ${row.returnTime.substring(0, 5)}` : ''}
+                        {row.reason ? ` · ${row.reason}` : ''}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {canEdit && (
+                        <button
+                          className={`btn${row.isEditing ? ' primary' : ''}`}
+                          style={{ padding: '3px 10px', fontSize: '12px' }}
+                          onClick={() => {
+                            if (row.isEditing) {
+                              handleSaveLeaveRow(idx);
+                            } else {
+                              toggleEdit(idx);
+                            }
+                          }}
+                          disabled={row.savingRow || saving}
+                        >
+                          {row.isEditing ? (row.savingRow ? '저장 중…' : '저장') : '수정'}
+                        </button>
+                      )}
+                      {row.isEditing && (
+                        <button
+                          className="btn"
+                          style={{ padding: '3px 10px', fontSize: '12px' }}
+                          onClick={() => toggleEdit(idx)}
+                          disabled={row.savingRow}
+                        >
+                          취소
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          className="btn danger"
+                          style={{ padding: '3px 10px', fontSize: '12px' }}
+                          onClick={() => handleDeleteLeaveRow(idx)}
+                          disabled={row.savingRow || saving}
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 수정 폼 */}
+                  {row.isEditing && (
+                    <div className="form-grid" style={{ marginTop: '4px' }}>
+                      <div className="field">
+                        <label>조퇴·외출 시간</label>
+                        <input
+                          type="time"
+                          step="1"
+                          value={row.leaveTime}
+                          onChange={(e) => updateLeaveField(idx, 'leaveTime', e.target.value)}
+                        />
+                      </div>
+                      <div className="field">
+                        <label>복귀 시간</label>
+                        <input
+                          type="time"
+                          step="1"
+                          value={row.returnTime}
+                          onChange={(e) => updateLeaveField(idx, 'returnTime', e.target.value)}
+                        />
+                      </div>
+                      <div className="field full">
+                        <label>사유</label>
+                        <input
+                          value={row.reason}
+                          onChange={(e) => updateLeaveField(idx, 'reason', e.target.value)}
+                          placeholder="사유를 입력하세요"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* 신규 추가 폼 */}
+              {addingNew && (
+                <div style={{
+                  border: '1px dashed var(--primary, #4f7df3)',
+                  borderRadius: '8px',
+                  padding: '12px 14px',
+                  background: 'var(--bg-sub, #f8fafc)',
+                }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '10px', color: 'var(--primary, #4f7df3)' }}>
+                    + 새 기록 추가
+                  </div>
+                  <div className="form-grid">
+                    <div className="field">
+                      <label>조퇴·외출 시간</label>
+                      <input
+                        type="time"
+                        step="1"
+                        value={newLeave.leaveTime}
+                        onChange={(e) => setNewLeave((p) => ({ ...p, leaveTime: e.target.value }))}
+                      />
+                    </div>
+                    <div className="field">
+                      <label>복귀 시간</label>
+                      <input
+                        type="time"
+                        step="1"
+                        value={newLeave.returnTime}
+                        onChange={(e) => setNewLeave((p) => ({ ...p, returnTime: e.target.value }))}
+                      />
+                    </div>
+                    <div className="field full">
+                      <label>사유</label>
+                      <input
+                        value={newLeave.reason}
+                        onChange={(e) => setNewLeave((p) => ({ ...p, reason: e.target.value }))}
+                        placeholder="사유를 입력하세요"
+                      />
+                    </div>
+                    <div className="field full" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <button
+                        className="btn"
+                        onClick={() => { setAddingNew(false); setNewLeave({ leaveTime: '', returnTime: '', reason: '' }); }}
+                        disabled={saving}
+                      >
+                        취소
+                      </button>
+                      <button
+                        className="btn primary"
+                        onClick={handleAddNewLeave}
+                        disabled={saving}
+                      >
+                        {saving ? '등록 중…' : '등록'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 추가 버튼 */}
+              {canEdit && !addingNew && (
+                <div>
+                  <button
+                    className="btn"
+                    style={{ fontSize: '13px' }}
+                    onClick={() => setAddingNew(true)}
+                    disabled={saving || loading}
+                  >
+                    + 조퇴·외출 기록 추가
                   </button>
                 </div>
               )}
