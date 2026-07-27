@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useRole } from '../context/RoleContext';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import {
@@ -47,6 +48,9 @@ function csvCell(value: string | number | null | undefined): string {
 }
 
 export default function SmsHistoryPage() {
+  const { roleConfig } = useRole();
+  const isAllScope = roleConfig.roles.some((r) => r === 'ADMIN' || r === 'HEAD_OFFICE');
+
   const [items, setItems] = useState<SmsHistoryPageItem[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -188,6 +192,15 @@ export default function SmsHistoryPage() {
 
   return (
     <section className="view active" id="view-sms-history">
+      <div className="perm-bar">
+        <span className="pb-ic">✉</span>
+        <span>
+          {isAllScope
+            ? '전체 발송내역 조회 중 (관리자 / 본사 권한)'
+            : '내 발송내역만 조회 중 (지정 권한)'}
+        </span>
+      </div>
+
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
           <div className="select">

@@ -22,6 +22,7 @@ export type UserDetail = {
     enabled: boolean;
     locked: boolean;
     createdAt: string;
+    canSendSms: boolean;
 };
 
 export type UserListItem = {
@@ -30,6 +31,7 @@ export type UserListItem = {
     name: string;
     roleNames: UserRoleNameValue[];
     enabled: boolean;
+    canSendSms: boolean;
 };
 
 export type UserListResponse = {
@@ -93,6 +95,14 @@ export function updateUser(userId: number, payload: UpdateUserRequest) {
 // DELETE /api/users/{userId} - 직원 삭제 (권한: ADMIN)
 export function deleteUser(userId: number) {
     return apiClient.delete<ApiResponse<unknown>>(`/api/users/${userId}`);
+}
+
+// PATCH /api/users/{userId}/sms-permission - 문자 발송 권한 변경 (권한: ADMIN, HEAD_OFFICE)
+export function updateSmsPermission(userId: number, payload: { canSendSms: boolean }) {
+    return apiClient.patch<ApiResponse<{ userId: number; canSendSms: boolean }>>(
+        `/api/users/${userId}/sms-permission`,
+        payload
+    );
 }
 
 // GET /api/users/check-login-id - 로그인 ID 중복 확인 (권한: ADMIN)
