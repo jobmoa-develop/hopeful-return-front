@@ -4,8 +4,16 @@ import { getDashboardRegionStats } from '../api/dashboard';
 import type { DashboardRegionStatItem } from '../api/dashboard';
 import { getDashboardCalendar } from '../api/dashboard';
 import type { DashboardCalendarItem } from '../api/dashboard';
+import { useRole } from '../context/RoleContext';
+import { getFollowUpStats } from '../api/followUps';
+import type { FollowUpStatsResponse } from '../api/followUps';
+import { getRegions, groupRegionsByParent } from '../api/regions';
+import type { RegionSummary } from '../api/regions';
+
+import { RegionSelect } from '../components/RegionSelect';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const STATS_DEBOUNCE_MS = 300;
 
 function ymd(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -17,6 +25,7 @@ function startOfDay(date: Date) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { roleConfig } = useRole();
 
   const [cursor, setCursor] = useState(() => new Date());
   const [highlightDate, setHighlightDate] = useState<string | null>(null);
@@ -26,6 +35,19 @@ export default function DashboardPage() {
   const [totals, setTotals] = useState<DashboardRegionStatItem | null>(null);
   const [calendarItems, setCalendarItems] = useState<DashboardCalendarItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // ── 사후관리 집계(취업률 · 숲체험 방문률 · 국취연계률) — ADMIN/HEAD_OFFICE 전용 ──
+  const canSeeFollowUpStats = roleConfig.roles.some((r) => r === 'ADMIN' || r === 'HEAD_OFFICE');
+  const [statsRegions, setStatsRegions] = useState<RegionSummary[]>([]);
+  const [statsRegionId, setStatsRegionId] = useState<number | ''>('');
+  const [statsCourseNumberInput, setStatsCourseNumberInput] = useState('');
+  const [statsCourseNumber, setStatsCourseNumber] = useState<number | ''>('');
+  const [followUpStats, setFollowUpStats] = useState<FollowUpStatsResponse | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  // 상위(서울/충청남도/경기도)는 optgroup 라벨로만 표시(선택 불가), 하위 지역만 실제 옵션
+  const statsRegionGroups = useMemo(() => groupRegionsByParent(statsRegions), [statsRegions]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth(); // 0-based
@@ -61,6 +83,50 @@ export default function DashboardPage() {
       active = false;
     };
   }, [year, month]);
+
+  // 사후관리 집계 — 지역 목록(필터 드롭다운)은 최초 1회만 로드
+  useEffect(() => {
+    if (!canSeeFollowUpStats) return;
+    getRegions()
+      .then((res) => setStatsRegions(res.data.data ?? []))
+      .catch(() => setStatsRegions([]));
+  }, [canSeeFollowUpStats]);
+
+  // 사후관리 집계 — 회차번호 입력 디바운스
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmed = statsCourseNumberInput.trim();
+      setStatsCourseNumber(trimmed === '' ? '' : Number(trimmed));
+    }, STATS_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [statsCourseNumberInput]);
+
+  // 사후관리 집계 — 지역/회차 필터가 바뀌면 재조회(빈 값이면 전체 집계)
+  useEffect(() => {
+    if (!canSeeFollowUpStats) return;
+    let active = true;
+    setStatsLoading(true);
+    setStatsError(null);
+    getFollowUpStats({
+      regionId: statsRegionId === '' ? undefined : statsRegionId,
+      courseNumber: statsCourseNumber === '' ? undefined : statsCourseNumber,
+    })
+      .then((res) => {
+        if (active) setFollowUpStats(res.data.data);
+      })
+      .catch(() => {
+        if (active) {
+          setFollowUpStats(null);
+          setStatsError('사후관리 집계를 불러오지 못했습니다.');
+        }
+      })
+      .finally(() => {
+        if (active) setStatsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [canSeeFollowUpStats, statsRegionId, statsCourseNumber]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, DashboardCalendarItem[]>();
@@ -191,6 +257,75 @@ export default function DashboardPage() {
           </table>
         </div>
       </div>
+
+      {/* 사후관리 집계(취업률 · 숲체험 방문률 · 국취연계률) — ADMIN/HEAD_OFFICE 전용 */}
+      {canSeeFollowUpStats && (
+        <div className="card">
+          <div className="card-h">
+            <span className="section-title">사후관리 현황 (수료자 기준)</span>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <RegionSelect
+                value={statsRegionId}
+                onChange={(val) => setStatsRegionId(val)}
+                groups={statsRegionGroups}
+                allLabel="전체 지역"
+              />
+              <input
+                type="number"
+                min={1}
+                placeholder="회차번호"
+                value={statsCourseNumberInput}
+                onChange={(e) => setStatsCourseNumberInput(e.target.value)}
+                style={{ fontSize: 12, padding: '4px 8px', width: 90 }}
+              />
+              {followUpStats && (
+                <span className="chip neutral">수료 {followUpStats.totalCompleted}명</span>
+              )}
+            </span>
+          </div>
+          <div className="card-b" style={{ padding: '18px 20px' }}>
+            {statsError && (
+              <p style={{ color: 'var(--danger)', fontSize: 13, margin: 0, padding: '10px 14px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: 8 }}>
+                {statsError}
+              </p>
+            )}
+            {!statsError && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                <FollowUpStatBlock
+                  label="취업률"
+                  rate={followUpStats?.employmentRate}
+                  count={followUpStats?.employedCount}
+                  total={followUpStats?.totalCompleted}
+                  loading={statsLoading}
+                  color="#2563eb"
+                  bg="linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, rgba(59, 130, 246, 0.02) 100%)"
+                  borderColor="rgba(37, 99, 235, 0.15)"
+                />
+                <FollowUpStatBlock
+                  label="숲체험 방문률"
+                  rate={followUpStats?.forestVisitRate}
+                  count={followUpStats?.forestVisitCount}
+                  total={followUpStats?.totalCompleted}
+                  loading={statsLoading}
+                  color="#059669"
+                  bg="linear-gradient(135deg, rgba(5, 150, 105, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%)"
+                  borderColor="rgba(5, 150, 105, 0.15)"
+                />
+                <FollowUpStatBlock
+                  label="국취연계률"
+                  rate={followUpStats?.nationalProgramRate}
+                  count={followUpStats?.nationalProgramCount}
+                  total={followUpStats?.totalCompleted}
+                  loading={statsLoading}
+                  color="#7c3aed"
+                  bg="linear-gradient(135deg, rgba(124, 58, 237, 0.06) 0%, rgba(139, 92, 246, 0.02) 100%)"
+                  borderColor="rgba(124, 58, 237, 0.15)"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="dash-cols">
         {/* 왼쪽: 마감 임박 달력 */}
@@ -338,5 +473,83 @@ export default function DashboardPage() {
       </div>
       <p className="note">※ 실시간 API 데이터입니다.</p>
     </section>
+  );
+}
+
+function FollowUpStatBlock({
+  label,
+  rate,
+  count,
+  total,
+  loading,
+  color = '#2563eb',
+  bg = 'rgba(37, 99, 235, 0.06)',
+  borderColor = 'rgba(37, 99, 235, 0.15)',
+}: {
+  label: string;
+  rate?: number;
+  count?: number;
+  total?: number;
+  loading?: boolean;
+  color?: string;
+  bg?: string;
+  borderColor?: string;
+}) {
+  const safeRate = Math.min(Math.max(rate ?? 0, 0), 100);
+
+  return (
+    <div
+      style={{
+        padding: '16px 18px',
+        borderRadius: 12,
+        background: bg,
+        border: `1px solid ${borderColor}`,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: 12,
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{label}</span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color,
+            padding: '3px 9px',
+            borderRadius: 20,
+            background: '#ffffff',
+            border: `1px solid ${borderColor}`,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          }}
+        >
+          {!loading && count != null && total != null ? `${count} / ${total}명` : '—'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+        <span style={{ fontSize: 30, fontWeight: 800, color: loading ? 'var(--muted)' : '#0f172a', lineHeight: 1, letterSpacing: '-0.02em' }}>
+          {loading ? '···' : rate != null ? `${rate}` : '—'}
+        </span>
+        {!loading && rate != null && (
+          <span style={{ fontSize: 18, fontWeight: 700, color: color }}>%</span>
+        )}
+      </div>
+
+      {/* 게이지 / 프로그레스 바 시각적 요소 */}
+      <div style={{ width: '100%', height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 999, overflow: 'hidden' }}>
+        <div
+          style={{
+            width: loading ? '0%' : `${safeRate}%`,
+            height: '100%',
+            background: color,
+            borderRadius: 999,
+            transition: 'width 0.4s ease-in-out',
+          }}
+        />
+      </div>
+    </div>
   );
 }

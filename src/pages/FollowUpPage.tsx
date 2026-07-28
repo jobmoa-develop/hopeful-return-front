@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRole } from '../context/RoleContext';
 import { getFollowUpList } from '../api/followUps';
 import type { FollowUpListItem } from '../api/followUps';
-import { getRegions } from '../api/regions';
+import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+import { RegionSelect } from '../components/RegionSelect';
 import { apiErrorMessage } from '../api/apiError';
 import { FollowUpDetailModal } from '../components/FollowUpModals';
 
@@ -36,6 +37,9 @@ export default function FollowUpPage() {
   const [employment, setEmployment] = useState<'전체' | '취업' | '미취업'>('전체');
   const [detailItem, setDetailItem] = useState<FollowUpListItem | null>(null);
   const canEdit = roleConfig.can.consult === 1;
+
+  // 상위(서울/충청남도/경기도)는 optgroup 라벨로만 표시(선택 불가), 하위 지역만 실제 옵션
+  const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
 
   const fetchList = useCallback(() => {
     setLoading(true);
@@ -103,30 +107,15 @@ export default function FollowUpPage() {
 
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-          <div className="select">
-            <span className="ico">지역</span>
-            <select
-              value={selectedRegionId}
-              onChange={(e) => {
-                setSelectedRegionId(e.target.value === '' ? '' : Number(e.target.value));
-                setPage(0);
-              }}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                fontWeight: 'inherit',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="">전체 ▾</option>
-              {regions.map((r) => (
-                <option key={r.regionId} value={r.regionId}>
-                  {r.regionName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <RegionSelect
+            value={selectedRegionId}
+            onChange={(val) => {
+              setSelectedRegionId(val);
+              setPage(0);
+            }}
+            groups={regionGroups}
+            allLabel="전체 지역"
+          />
           <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
             <input
               type="number"

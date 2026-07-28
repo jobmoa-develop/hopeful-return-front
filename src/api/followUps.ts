@@ -98,3 +98,24 @@ export function updateFollowUp(followUpId: number, payload: UpdateFollowUpReques
     payload,
   );
 }
+
+// ── 사후관리 집계(대시보드) ──────────────────────────────────────────────
+export type FollowUpStatsResponse = {
+  totalCompleted: number;
+  employedCount: number;
+  forestVisitCount: number;
+  nationalProgramCount: number;
+  employmentRate: number;
+  forestVisitRate: number;
+  nationalProgramRate: number;
+};
+
+export type FollowUpStatsParams = {
+  regionId?: number;
+  courseNumber?: number; // 주의: course.courseNumber(교육과정 전체 회차) 기준 — localCourseNumber 아님
+};
+
+// GET /api/follow-ups/stats — 취업률/숲체험 방문률/국취연계률 집계 (regionId/courseNumber 미지정 시 전체)
+export function getFollowUpStats(params?: FollowUpStatsParams) {
+  return apiClient.get<ApiResponse<FollowUpStatsResponse>>('/api/follow-ups/stats', { params });
+}
