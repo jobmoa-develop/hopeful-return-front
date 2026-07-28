@@ -33,6 +33,11 @@ export type ParticipantSmsHistoryItem = {
   title: string | null;
   content: string;
   sendStatus: string;
+  // 발송결과(V15/#93): PENDING 은 전달 확인 중, messageId 는 메시지 검색용, resultMessage 는 실패 사유
+  messageId: string | null;
+  resultCode: string | null;
+  resultMessage: string | null;
+  completeTime: string | null;
   sentAt: string | null;
   senderName: string | null;
   imageUrls: string[];
@@ -63,6 +68,10 @@ export type SmsHistoryPageItem = {
   title: string | null;
   content: string;
   sendStatus: string;
+  messageId: string | null;
+  resultCode: string | null;
+  resultMessage: string | null;
+  completeTime: string | null;
   sentAt: string | null;
   senderName: string | null;
 };
@@ -93,6 +102,10 @@ export type ParticipantSmsDetailItem = {
   title: string | null;
   content: string;
   sendStatus: string;
+  messageId: string | null;
+  resultCode: string | null;
+  resultMessage: string | null;
+  completeTime: string | null;
   sentBy: number | null;
   senderName: string | null;
   sentAt: string | null;
@@ -102,4 +115,9 @@ export type ParticipantSmsDetailItem = {
 
 export function getParticipantSmsDetail(smsId: number) {
   return apiClient.get<ApiResponse<ParticipantSmsDetailItem>>(`/api/participant-sms/${smsId}`);
+}
+
+// 발송결과 재조회(수동) — SENS 결과조회로 상태·messageId·결과를 갱신한 상세 반환. 권한: SMS_SEND
+export function refreshParticipantSmsStatus(smsId: number) {
+  return apiClient.post<ApiResponse<ParticipantSmsDetailItem>>(`/api/participant-sms/${smsId}/refresh`);
 }
