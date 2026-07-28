@@ -7,8 +7,10 @@ import type { DashboardCalendarItem } from '../api/dashboard';
 import { useRole } from '../context/RoleContext';
 import { getFollowUpStats } from '../api/followUps';
 import type { FollowUpStatsResponse } from '../api/followUps';
-import { getRegions } from '../api/regions';
+import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+
+import { RegionSelect } from '../components/RegionSelect';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const STATS_DEBOUNCE_MS = 300;
@@ -43,6 +45,9 @@ export default function DashboardPage() {
   const [followUpStats, setFollowUpStats] = useState<FollowUpStatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
+
+  // 상위(서울/충청남도/경기도)는 optgroup 라벨로만 표시(선택 불가), 하위 지역만 실제 옵션
+  const statsRegionGroups = useMemo(() => groupRegionsByParent(statsRegions), [statsRegions]);
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth(); // 0-based
@@ -259,18 +264,12 @@ export default function DashboardPage() {
           <div className="card-h">
             <span className="section-title">사후관리 현황 (수료자 기준)</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-              <select
+              <RegionSelect
                 value={statsRegionId}
-                onChange={(e) => setStatsRegionId(e.target.value === '' ? '' : Number(e.target.value))}
-                style={{ fontSize: 12, padding: '4px 8px' }}
-              >
-                <option value="">전체 지역</option>
-                {statsRegions.map((r) => (
-                  <option key={r.regionId} value={r.regionId}>
-                    {r.regionName}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setStatsRegionId(val)}
+                groups={statsRegionGroups}
+                allLabel="전체 지역"
+              />
               <input
                 type="number"
                 min={1}
@@ -286,7 +285,7 @@ export default function DashboardPage() {
           </div>
           <div className="card-b" style={{ padding: '18px 20px' }}>
             {statsError && (
-              <p style={{ color: 'var(--danger)', fontSize: 13, margin: 0, padding: '8px 12px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: 8 }}>
+              <p style={{ color: 'var(--danger)', fontSize: 13, margin: 0, padding: '10px 14px', background: 'rgba(239, 68, 68, 0.08)', borderRadius: 8 }}>
                 {statsError}
               </p>
             )}
@@ -299,7 +298,8 @@ export default function DashboardPage() {
                   total={followUpStats?.totalCompleted}
                   loading={statsLoading}
                   color="#2563eb"
-                  bg="rgba(37, 99, 235, 0.06)"
+                  bg="linear-gradient(135deg, rgba(37, 99, 235, 0.06) 0%, rgba(59, 130, 246, 0.02) 100%)"
+                  borderColor="rgba(37, 99, 235, 0.15)"
                 />
                 <FollowUpStatBlock
                   label="숲체험 방문률"
@@ -308,7 +308,8 @@ export default function DashboardPage() {
                   total={followUpStats?.totalCompleted}
                   loading={statsLoading}
                   color="#059669"
-                  bg="rgba(5, 150, 105, 0.06)"
+                  bg="linear-gradient(135deg, rgba(5, 150, 105, 0.06) 0%, rgba(16, 185, 129, 0.02) 100%)"
+                  borderColor="rgba(5, 150, 105, 0.15)"
                 />
                 <FollowUpStatBlock
                   label="국취연계률"
@@ -317,7 +318,8 @@ export default function DashboardPage() {
                   total={followUpStats?.totalCompleted}
                   loading={statsLoading}
                   color="#7c3aed"
-                  bg="rgba(124, 58, 237, 0.06)"
+                  bg="linear-gradient(135deg, rgba(124, 58, 237, 0.06) 0%, rgba(139, 92, 246, 0.02) 100%)"
+                  borderColor="rgba(124, 58, 237, 0.15)"
                 />
               </div>
             )}
@@ -482,6 +484,7 @@ function FollowUpStatBlock({
   loading,
   color = '#2563eb',
   bg = 'rgba(37, 99, 235, 0.06)',
+  borderColor = 'rgba(37, 99, 235, 0.15)',
 }: {
   label: string;
   rate?: number;
@@ -490,6 +493,7 @@ function FollowUpStatBlock({
   loading?: boolean;
   color?: string;
   bg?: string;
+  borderColor?: string;
 }) {
   const safeRate = Math.min(Math.max(rate ?? 0, 0), 100);
 
@@ -499,25 +503,26 @@ function FollowUpStatBlock({
         padding: '16px 18px',
         borderRadius: 12,
         background: bg,
-        border: '1px solid rgba(0, 0, 0, 0.04)',
+        border: `1px solid ${borderColor}`,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        gap: 10,
-        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+        gap: 12,
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--muted-2)' }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>{label}</span>
         <span
           style={{
             fontSize: 11,
             fontWeight: 600,
             color,
-            padding: '2px 8px',
-            borderRadius: 12,
-            background: 'rgba(255, 255, 255, 0.7)',
-            border: `1px solid ${color}33`,
+            padding: '3px 9px',
+            borderRadius: 20,
+            background: '#ffffff',
+            border: `1px solid ${borderColor}`,
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
           }}
         >
           {!loading && count != null && total != null ? `${count} / ${total}명` : '—'}
@@ -525,15 +530,15 @@ function FollowUpStatBlock({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-        <span style={{ fontSize: 28, fontWeight: 800, color: loading ? 'var(--muted)' : 'var(--fg, #1e293b)', lineHeight: 1 }}>
+        <span style={{ fontSize: 30, fontWeight: 800, color: loading ? 'var(--muted)' : '#0f172a', lineHeight: 1, letterSpacing: '-0.02em' }}>
           {loading ? '···' : rate != null ? `${rate}` : '—'}
         </span>
         {!loading && rate != null && (
-          <span style={{ fontSize: 16, fontWeight: 700, color: color }}>%</span>
+          <span style={{ fontSize: 18, fontWeight: 700, color: color }}>%</span>
         )}
       </div>
 
-      {/* Progress Bar Visual Indicator */}
+      {/* 게이지 / 프로그레스 바 시각적 요소 */}
       <div style={{ width: '100%', height: 6, background: 'rgba(0,0,0,0.06)', borderRadius: 999, overflow: 'hidden' }}>
         <div
           style={{
