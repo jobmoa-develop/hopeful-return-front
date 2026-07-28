@@ -518,6 +518,11 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
                       </div>
                       {h.title && <b style={{ fontSize: 12 }}>{h.title}</b>}
                       <div className="muted sms-history-content">{h.content}</div>
+                      {h.sendStatus === 'FAIL' && h.resultMessage && (
+                        <div style={{ fontSize: 11, color: 'var(--danger)' }}>
+                          실패 사유: {h.resultMessage}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

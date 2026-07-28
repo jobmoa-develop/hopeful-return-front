@@ -37,6 +37,17 @@
 - 응답 `{ messageFormat, totalCount, successCount, failedCount, statusName, smsIds }` → 성공/실패 요약 alert 후 선택 해제.
 - FE 사전 검증: 대상 0명·본문 공백·본문 2000바이트 초과·제목 40바이트 초과 시 차단.
 
+## 발송결과·전달상태 (실제 전달 추적) — FE 이슈 #67 · BE 대응 #93
+
+- BE가 SENS 발송결과 조회 폴링으로 실제 전달상태를 반영하면서 이력에 신규 필드가 추가됨:
+  `messageId`(메시지 검색용), `resultCode`(SENS statusCode, `0`=성공), `resultMessage`(실패 사유), `completeTime`(완료 시각).
+  발송 직후 상태는 **`PENDING`(전달 확인 중)**, 폴링/재조회로 `SUCCESS`/`FAIL` 확정.
+- **상태 칩**: `SUCCESS`=성공(ok·초록) / `FAIL`=실패(warn·주황) / `PENDING`=대기(neutral·회색). (`SmsHistoryPage.tsx`·`SmsModals.tsx` 공통 매핑)
+- **전역 발송내역 상세 모달**(`pages/SmsHistoryPage.tsx`): 메시지 ID·전달 결과(`[코드] 사유`, FAIL 은 빨강)·완료 시각을 값이 있을 때 노출. `PENDING`이면 **재조회 버튼** 노출 → `refreshParticipantSmsStatus(smsId)`(`POST /api/participant-sms/{smsId}/refresh`) 호출 후 상세·목록 갱신.
+- **CSV 내보내기**: 기존 열 + `메시지ID·결과코드·실패사유·완료시각` 4열 추가.
+- **참여자 발송 모달 전송내역**(`components/SmsModals.tsx`): `FAIL` 항목에 실패 사유(`resultMessage`) 작은 빨강 텍스트로 노출.
+- API 타입/함수: `api/participantSms.ts` 의 `SmsHistoryPageItem`·`ParticipantSmsDetailItem`·`ParticipantSmsHistoryItem` 에 신규 4필드, `refreshParticipantSmsStatus(smsId)` 추가.
+
 ## 등록일(전산 등록일) 필터
 
 - 참여자관리 목록 필터에 등록일 시작/종료(date) 추가 → `getParticipants({ registerDateFrom, registerDateTo })`.

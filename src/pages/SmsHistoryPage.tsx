@@ -5,6 +5,7 @@ import type { RegionSummary } from '../api/regions';
 import {
   getSmsHistoryPage,
   getParticipantSmsDetail,
+  refreshParticipantSmsStatus,
 } from '../api/participantSms';
 import type { SmsHistoryPageItem, ParticipantSmsDetailItem, SmsHistoryParams } from '../api/participantSms';
 import { apiErrorMessage } from '../api/apiError';
@@ -70,6 +71,7 @@ export default function SmsHistoryPage() {
 
   const [detail, setDetail] = useState<ParticipantSmsDetailItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   // 현재 필터 조건(페이지 제외) — 목록·CSV 공통
@@ -137,6 +139,21 @@ export default function SmsHistoryPage() {
       .finally(() => setDetailLoading(false));
   };
 
+  // 발송결과 재조회(수동) — SENS 결과조회로 상태·messageId·결과를 갱신하고 목록도 새로고침
+  const refreshDetail = async (smsId: number) => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await refreshParticipantSmsStatus(smsId);
+      setDetail(res.data.data);
+      fetchList();
+    } catch (err) {
+      alert(apiErrorMessage(err, '발송결과 재조회에 실패했습니다.'));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // CSV 내보내기 — 현재 필터로 전 페이지 순회 수집 후 다운로드(UTF-8 BOM)
   const exportCsv = async () => {
     if (exporting) return;
@@ -154,7 +171,10 @@ export default function SmsHistoryPage() {
         p += 1;
       } while (p < pages);
 
-      const header = ['발송일시', '수신자', '전화', '지역', '회차', '형식', '제목', '본문', '상태', '발송자'];
+      const header = [
+        '발송일시', '수신자', '전화', '지역', '회차', '형식', '제목', '본문', '상태', '발송자',
+        '메시지ID', '결과코드', '실패사유', '완료시각',
+      ];
       const lines = [header.map(csvCell).join(',')];
       for (const r of rows) {
         lines.push(
@@ -169,6 +189,10 @@ export default function SmsHistoryPage() {
             r.content ?? '',
             statusLabel(r.sendStatus),
             r.senderName ?? '',
+            r.messageId ?? '',
+            r.resultCode ?? '',
+            r.resultMessage ?? '',
+            r.completeTime ? fmtDateTime(r.completeTime) : '',
           ]
             .map(csvCell)
             .join(','),
@@ -418,10 +442,42 @@ export default function SmsHistoryPage() {
                       </ul>
                     </div>
                   )}
+                  {/* 발송결과(#93): PENDING 은 전달 확인 중, 값이 있을 때만 노출 */}
+                  {detail.sendStatus === 'PENDING' && (
+                    <p className="muted" style={{ fontSize: '12px' }}>
+                      실제 전달 결과 확인 중입니다. ‘재조회’로 최신 상태를 가져올 수 있습니다.
+                    </p>
+                  )}
+                  {detail.messageId && (
+                    <div>
+                      <div className="cell-sub">메시지 ID</div>
+                      <div style={{ fontSize: '12px', wordBreak: 'break-all' }}>{detail.messageId}</div>
+                    </div>
+                  )}
+                  {(detail.resultCode || detail.resultMessage) && (
+                    <div>
+                      <div className="cell-sub">전달 결과</div>
+                      <div style={{ fontSize: '13px', color: detail.sendStatus === 'FAIL' ? 'var(--danger)' : undefined }}>
+                        {detail.resultCode ? `[${detail.resultCode}] ` : ''}
+                        {detail.resultMessage ?? ''}
+                      </div>
+                    </div>
+                  )}
+                  {detail.completeTime && (
+                    <div>
+                      <div className="cell-sub">완료 시각</div>
+                      <div style={{ fontSize: '13px' }}>{fmtDateTime(detail.completeTime)}</div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
             <div className="modal-f">
+              {detail && detail.sendStatus === 'PENDING' && (
+                <button className="btn" disabled={refreshing} onClick={() => refreshDetail(detail.smsId)}>
+                  {refreshing ? '재조회 중…' : '재조회'}
+                </button>
+              )}
               <button className="btn" onClick={() => setDetail(null)}>
                 닫기
               </button>
