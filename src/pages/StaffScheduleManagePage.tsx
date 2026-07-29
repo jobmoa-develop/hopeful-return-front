@@ -287,6 +287,19 @@ export default function StaffScheduleManagePage() {
         setMemo('');
     };
 
+    const closeModal = () => setSelectedDate(null);
+
+    // 팝업이 열려 있는 동안 ESC 로 닫기
+    useEffect(() => {
+        if (!selectedDate) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') closeModal();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedDate]);
+
     // 날짜 패널에서 특정 사람을 눌러 그 사람 관리 모드로 전환
     const handlePickUserFromDay = (userId: number) => {
         setSelectedUserId(userId);
@@ -539,7 +552,7 @@ export default function StaffScheduleManagePage() {
                         미등록
                     </span>
                     {!selectedUserId && (
-                        <span className="muted" style={{ marginLeft: 'auto' }}>날짜를 클릭하면 그날 가능한 사람 전체 목록을 볼 수 있어요</span>
+                        <span className="muted" style={{ marginLeft: 'auto' }}>날짜를 클릭하면 그날 가능한 사람 전체 목록을 팝업으로 볼 수 있어요</span>
                     )}
                 </div>
 
@@ -637,131 +650,139 @@ export default function StaffScheduleManagePage() {
                 </div>
             </div>
 
-            {/* 날짜 클릭 패널 */}
+            {/* 날짜 클릭 팝업 (모달) */}
             {selectedDate && (
-                <div className="card" style={{ marginTop: 14 }}>
-                    <div className="card-h">
-                        <span className="section-title">{selectedDate}</span>
-                        {(eventsByDate.get(selectedDate) ?? []).length > 0 && (
-                            <span className="muted" style={{ marginLeft: 12, fontSize: 12 }}>
-                                이 날 진행 강좌: {(eventsByDate.get(selectedDate) ?? []).map((e) => e.courseName).join(', ')}
-                            </span>
-                        )}
-                    </div>
-                    <div className="card-b">
-                        {/* 전체 근무자 목록 (항상 표시, 읽기 전용 + 빠른 전환) */}
-                        <div style={{ marginBottom: selectedUserId ? 18 : 0 }}>
-                            <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
-                                {isLoadingAll ? '전 직원 일정 불러오는 중...' : `등록된 근무자 ${selectedDayStaff.length}명`}
-                            </div>
-                            {selectedDayStaff.length === 0 && (
-                                <div className="muted" style={{ fontSize: 12 }}>이 날짜에 등록된 일정이 없습니다.</div>
+                <div
+                    className="modal-overlay open"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) closeModal();
+                    }}
+                >
+                    <div className="modal" style={{ maxWidth: 640, width: '92%' }}>
+                        <div className="modal-h">
+                            <h3 style={{ margin: 0 }}>{selectedDate}</h3>
+                            {(eventsByDate.get(selectedDate) ?? []).length > 0 && (
+                                <span className="muted" style={{ marginLeft: 12, fontSize: 12 }}>
+                                    이 날 진행 강좌: {(eventsByDate.get(selectedDate) ?? []).map((e) => e.courseName).join(', ')}
+                                </span>
                             )}
-                            {selectedDayStaff.map((s) => (
-                                <div
-                                    key={s.userId}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 10,
-                                        padding: '6px 0',
-                                        borderBottom: '1px solid var(--line-soft)',
-                                    }}
-                                >
-                                    <span className={`chip ${s.available ? 'ok' : 'danger'}`}>{s.available ? '가능' : '불가'}</span>
-                                    <span style={{ fontWeight: 600, fontSize: 13 }}>{s.userName}</span>
-                                    <span className="muted" style={{ fontSize: 11.5 }}>
-                                        {s.entries.map((e) => `${SESSION_TYPE_LABELS[e.sessionType]}${e.isAvailable ? '' : '(불가)'}`).join(' · ')}
-                                    </span>
-                                    <button
-                                        className="btn"
-                                        style={{ marginLeft: 'auto', padding: '3px 8px', fontSize: 11 }}
-                                        type="button"
-                                        onClick={() => handlePickUserFromDay(s.userId)}
-                                    >
-                                        이 사람 관리
-                                    </button>
-                                </div>
-                            ))}
+                            <button className="x" onClick={closeModal} style={{ marginLeft: 'auto' }}>✕</button>
                         </div>
-
-                        {/* 대상자 선택 상태일 때만: 등록/수정 폼 */}
-                        {selectedUserId && (
-                            <>
-                                <div style={{ fontSize: 12, fontWeight: 600, margin: '4px 0 8px' }}>
-                                    {users.find((u) => u.userId === selectedUserId)?.userName} 일정 등록/수정
+                        <div className="modal-b" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                            {/* 전체 근무자 목록 (항상 표시, 읽기 전용 + 빠른 전환) */}
+                            <div style={{ marginBottom: selectedUserId ? 18 : 0 }}>
+                                <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                                    {isLoadingAll ? '전 직원 일정 불러오는 중...' : `등록된 근무자 ${selectedDayStaff.length}명`}
                                 </div>
-                                {selectedMySchedules.length > 0 && (
-                                    <div style={{ marginBottom: 14 }}>
-                                        {selectedMySchedules.map((s) => (
-                                            <div
-                                                key={s.staffScheduleId}
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: 10,
-                                                    padding: '8px 0',
-                                                    borderBottom: '1px solid var(--line-soft)',
-                                                }}
-                                            >
-                                                <button
-                                                    className={`chip ${s.isAvailable ? 'ok' : 'danger'}`}
-                                                    style={{ border: 'none', cursor: 'pointer' }}
-                                                    type="button"
-                                                    onClick={() => handleToggleAvailable(s)}
-                                                    title="클릭해서 가능/불가 전환"
-                                                >
-                                                    {s.isAvailable ? '가능' : '불가'}
-                                                </button>
-                                                <span style={{ fontWeight: 600, fontSize: 13 }}>{SESSION_TYPE_LABELS[s.sessionType]}</span>
-                                                {s.memo && <span className="muted" style={{ fontSize: 12 }}>{s.memo}</span>}
-                                                <button
-                                                    className="btn"
-                                                    style={{ marginLeft: 'auto', padding: '3px 8px', fontSize: 11 }}
-                                                    type="button"
-                                                    onClick={() => handleDeleteSchedule(s.staffScheduleId)}
-                                                >
-                                                    삭제
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
+                                {selectedDayStaff.length === 0 && (
+                                    <div className="muted" style={{ fontSize: 12 }}>이 날짜에 등록된 일정이 없습니다.</div>
                                 )}
+                                {selectedDayStaff.map((s) => (
+                                    <div
+                                        key={s.userId}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 10,
+                                            padding: '6px 0',
+                                            borderBottom: '1px solid var(--line-soft)',
+                                        }}
+                                    >
+                                        <span className={`chip ${s.available ? 'ok' : 'danger'}`}>{s.available ? '가능' : '불가'}</span>
+                                        <span style={{ fontWeight: 600, fontSize: 13 }}>{s.userName}</span>
+                                        <span className="muted" style={{ fontSize: 11.5 }}>
+                                            {s.entries.map((e) => `${SESSION_TYPE_LABELS[e.sessionType]}${e.isAvailable ? '' : '(불가)'}`).join(' · ')}
+                                        </span>
+                                        <button
+                                            className="btn"
+                                            style={{ marginLeft: 'auto', padding: '3px 8px', fontSize: 11 }}
+                                            type="button"
+                                            onClick={() => handlePickUserFromDay(s.userId)}
+                                        >
+                                            이 사람 관리
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
 
-                                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                                    <div className="field">
-                                        <label>시간대</label>
-                                        <select value={sessionType} onChange={(e) => setSessionType(e.target.value as SessionType)}>
-                                            {SESSION_TYPES.map((t) => (
-                                                <option key={t} value={t}>
-                                                    {SESSION_TYPE_LABELS[t]}
-                                                </option>
+                            {/* 대상자 선택 상태일 때만: 등록/수정 폼 */}
+                            {selectedUserId && (
+                                <>
+                                    <div style={{ fontSize: 12, fontWeight: 600, margin: '4px 0 8px' }}>
+                                        {users.find((u) => u.userId === selectedUserId)?.userName} 일정 등록/수정
+                                    </div>
+                                    {selectedMySchedules.length > 0 && (
+                                        <div style={{ marginBottom: 14 }}>
+                                            {selectedMySchedules.map((s) => (
+                                                <div
+                                                    key={s.staffScheduleId}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: 10,
+                                                        padding: '8px 0',
+                                                        borderBottom: '1px solid var(--line-soft)',
+                                                    }}
+                                                >
+                                                    <button
+                                                        className={`chip ${s.isAvailable ? 'ok' : 'danger'}`}
+                                                        style={{ border: 'none', cursor: 'pointer' }}
+                                                        type="button"
+                                                        onClick={() => handleToggleAvailable(s)}
+                                                        title="클릭해서 가능/불가 전환"
+                                                    >
+                                                        {s.isAvailable ? '가능' : '불가'}
+                                                    </button>
+                                                    <span style={{ fontWeight: 600, fontSize: 13 }}>{SESSION_TYPE_LABELS[s.sessionType]}</span>
+                                                    {s.memo && <span className="muted" style={{ fontSize: 12 }}>{s.memo}</span>}
+                                                    <button
+                                                        className="btn"
+                                                        style={{ marginLeft: 'auto', padding: '3px 8px', fontSize: 11 }}
+                                                        type="button"
+                                                        onClick={() => handleDeleteSchedule(s.staffScheduleId)}
+                                                    >
+                                                        삭제
+                                                    </button>
+                                                </div>
                                             ))}
-                                        </select>
-                                    </div>
-                                    <div className="field">
-                                        <label>가능 여부</label>
-                                        <select value={isAvailable ? '1' : '0'} onChange={(e) => setIsAvailable(e.target.value === '1')}>
-                                            <option value="1">가능</option>
-                                            <option value="0">불가</option>
-                                        </select>
-                                    </div>
-                                    <div className="field" style={{ flex: 1, minWidth: 160 }}>
-                                        <label>메모</label>
-                                        <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 오전만 가능" />
-                                    </div>
-                                    <button className="btn primary" type="button" onClick={handleSaveSchedule} disabled={isSaving}>
-                                        {isSaving ? '저장 중...' : '+ 일정 등록'}
-                                    </button>
-                                </div>
-                            </>
-                        )}
+                                        </div>
+                                    )}
 
-                        {!selectedUserId && (
-                            <p className="note" style={{ marginTop: 10 }}>
-                                위 목록에서 "이 사람 관리"를 누르거나, 상단 대상자 선택란에서 직접 골라 일정을 등록/수정할 수 있습니다.
-                            </p>
-                        )}
+                                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                        <div className="field">
+                                            <label>시간대</label>
+                                            <select value={sessionType} onChange={(e) => setSessionType(e.target.value as SessionType)}>
+                                                {SESSION_TYPES.map((t) => (
+                                                    <option key={t} value={t}>
+                                                        {SESSION_TYPE_LABELS[t]}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="field">
+                                            <label>가능 여부</label>
+                                            <select value={isAvailable ? '1' : '0'} onChange={(e) => setIsAvailable(e.target.value === '1')}>
+                                                <option value="1">가능</option>
+                                                <option value="0">불가</option>
+                                            </select>
+                                        </div>
+                                        <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                                            <label>메모</label>
+                                            <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 오전만 가능" />
+                                        </div>
+                                        <button className="btn primary" type="button" onClick={handleSaveSchedule} disabled={isSaving}>
+                                            {isSaving ? '저장 중...' : '+ 일정 등록'}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {!selectedUserId && (
+                                <p className="note" style={{ marginTop: 10 }}>
+                                    위 목록에서 "이 사람 관리"를 누르거나, 상단 대상자 선택란에서 직접 골라 일정을 등록/수정할 수 있습니다.
+                                </p>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
