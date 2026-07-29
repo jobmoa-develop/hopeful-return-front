@@ -25,6 +25,7 @@ import {
 import type { AttendanceListItem, AttendanceStatus, CompletionRiskItem } from '../api/attendances';
 import { getParticipantMemos } from '../api/participantMemos';
 import type { ParticipantMemoItem } from '../api/participantMemos';
+import { deleteParticipant } from '../api/participants';
 import {
   CounselorEditModal,
   CounselingSessionModal,
@@ -139,6 +140,25 @@ export default function ParticipantDetailPage() {
     }
   };
 
+  // 참여자 완전 삭제(ADMIN) — 회차 등록 이력이 있으면 서버가 차단(먼저 회차 등록 취소 필요).
+  const isAdmin = roleConfig.roles.includes('ADMIN');
+  const handleDeleteParticipant = async () => {
+    if (!detail) return;
+    if (
+      !window.confirm(
+        `${detail.participantName} 참여자를 완전히 삭제할까요?\n모든 회차 이력이 함께 삭제될 수 있어 되돌릴 수 없습니다.\n(회차 등록 이력이 남아 있으면 삭제가 차단됩니다.)`,
+      )
+    )
+      return;
+    try {
+      await deleteParticipant(detail.participantId);
+      alert('참여자를 삭제했습니다.');
+      navigate('/participants');
+    } catch (err) {
+      alert(apiErrorMessage(err, '참여자 삭제에 실패했습니다.'));
+    }
+  };
+
   const openSession = (type: CounselingType) => {
     setSessionType(type);
     setActiveModal('session');
@@ -242,6 +262,15 @@ export default function ParticipantDetailPage() {
               onClick={() => setActiveModal('counselor')}
             >
               상담사 변경
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              className="btn danger"
+              title="참여자 완전 삭제(회차 이력이 있으면 차단)"
+              onClick={handleDeleteParticipant}
+            >
+              참여자 삭제
             </button>
           )}
         </div>

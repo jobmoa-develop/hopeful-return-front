@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRole } from '../context/RoleContext';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+import { RegionFilterSelect } from '../components/RegionFilterSelect';
+import type { RegionFilterValue } from '../components/RegionFilterSelect';
 import {
   getSmsHistoryPage,
   getParticipantSmsDetail,
@@ -62,7 +64,8 @@ export default function SmsHistoryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [keyword, setKeyword] = useState('');
   const [regions, setRegions] = useState<RegionSummary[]>([]);
-  const [selectedRegionId, setSelectedRegionId] = useState<number | ''>('');
+  // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}.
+  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumberQuery, setCourseNumberQuery] = useState('');
   const [courseNumber, setCourseNumber] = useState<number | ''>('');
   const [statusFilter, setStatusFilter] = useState(''); // '' = 전체
@@ -79,12 +82,21 @@ export default function SmsHistoryPage() {
     (): Omit<SmsHistoryParams, 'page' | 'size'> => ({
       keyword: keyword || undefined,
       sendStatus: statusFilter || undefined,
-      regionId: selectedRegionId === '' ? undefined : selectedRegionId,
+      regionId: regionFilter.regionId,
+      parentRegionId: regionFilter.parentRegionId,
       courseNumber: courseNumber === '' ? undefined : courseNumber,
       sentDateFrom: dateFrom || undefined,
       sentDateTo: dateTo || undefined,
     }),
-    [keyword, statusFilter, selectedRegionId, courseNumber, dateFrom, dateTo],
+    [
+      keyword,
+      statusFilter,
+      regionFilter.regionId,
+      regionFilter.parentRegionId,
+      courseNumber,
+      dateFrom,
+      dateTo,
+    ],
   );
 
   const fetchList = useCallback(() => {
@@ -227,24 +239,14 @@ export default function SmsHistoryPage() {
 
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-          <div className="select">
-            <span className="ico">지역</span>
-            <select
-              value={selectedRegionId}
-              onChange={(e) => {
-                setSelectedRegionId(e.target.value === '' ? '' : Number(e.target.value));
-                setPage(0);
-              }}
-              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
-            >
-              <option value="">전체 ▾</option>
-              {regions.map((r) => (
-                <option key={r.regionId} value={r.regionId}>
-                  {r.regionName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <RegionFilterSelect
+            regions={regions}
+            value={regionFilter}
+            onChange={(v) => {
+              setRegionFilter(v);
+              setPage(0);
+            }}
+          />
           <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
             <input
               type="number"

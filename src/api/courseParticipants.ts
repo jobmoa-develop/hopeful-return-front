@@ -192,6 +192,13 @@ export function enrollParticipant(payload: EnrollParticipantRequest) {
   );
 }
 
+// 회차 등록 취소(수강건 삭제) — 해당 회차 등록만 제거하고 참여자 원본은 유지. 권한: ADMIN, OPERATOR
+export function deleteCourseParticipant(courseParticipantId: number) {
+  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(
+    `/api/course-participants/${courseParticipantId}`,
+  );
+}
+
 // ── 상담 관리(course-participants 목록) · 일괄 처리 · 상담사 지정 ──────────────
 
 // GET /api/course-participants 목록 항목 (BE CourseParticipantListResponse.Item)
@@ -266,7 +273,8 @@ export type BulkImportParsedRow = {
   phone: string | null;
   birthYear: number | null;
   applyDate: string | null;
-  receptionDate: string | null;
+  receptionDate: string | null; // 선정일시
+  selected: string | null; // 선정여부 원문(선정/미선정/공란)
   status: string; // 선정→CONFIRMED, 미선정→CANCELED, 그 외→APPLIED
   error: string | null;
 };

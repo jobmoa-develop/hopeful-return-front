@@ -31,7 +31,8 @@ export type ParticipantListItem = {
 export type ParticipantListParams = {
   name?: string;
   phone?: string;
-  regionId?: number; // 최신 수강건 기준 회차 필터(지역)
+  regionId?: number; // 최신 수강건 기준 회차 필터(하위 지역)
+  parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 조회
   courseNumber?: number; // 최신 수강건 기준 회차 필터(회차번호)
   registerDateFrom?: string; // 전산 등록일 시작(YYYY-MM-DD, 포함) — 최신 수강건 created_at 기준
   registerDateTo?: string; // 전산 등록일 종료(YYYY-MM-DD, 포함)
@@ -81,6 +82,11 @@ export function updateParticipant(participantId: number, payload: UpdateParticip
     `/api/participants/${participantId}`,
     payload,
   );
+}
+
+// 참여자 완전 삭제 — 권한: ADMIN. 회차 등록 이력이 있으면 서버가 409(PARTICIPANT_HAS_ENROLLMENTS)로 차단.
+export function deleteParticipant(participantId: number) {
+  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(`/api/participants/${participantId}`);
 }
 
 // 전화번호 중복 확인

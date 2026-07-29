@@ -80,7 +80,8 @@ export type SmsHistoryParams = {
   keyword?: string;
   sendStatus?: string;
   courseNumber?: number;
-  regionId?: number;
+  regionId?: number; // 하위 지역
+  parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 조회
   sentDateFrom?: string; // YYYY-MM-DD(포함)
   sentDateTo?: string; // YYYY-MM-DD(포함)
   page?: number;
