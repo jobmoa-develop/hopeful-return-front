@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
-import { getParticipants } from '../api/participants';
+import { getParticipants, deleteParticipant } from '../api/participants';
 import type { ParticipantListItem } from '../api/participants';
 import { SmsSendModal } from '../components/SmsModals';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+import { RegionFilterSelect } from '../components/RegionFilterSelect';
+import type { RegionFilterValue } from '../components/RegionFilterSelect';
 import {
   COUNSELING_TYPE_LABELS,
   CP_STATUS_CHIP,
   CP_STATUS_LABELS,
+  deleteCourseParticipant,
 } from '../api/courseParticipants';
 import type { CounselingType, CourseParticipantStatus } from '../api/courseParticipants';
 import {
@@ -66,7 +69,8 @@ export default function ParticipantsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchName, setSearchName] = useState('');
   const [regions, setRegions] = useState<RegionSummary[]>([]);
-  const [selectedRegionId, setSelectedRegionId] = useState<number | ''>('');
+  // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}.
+  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumberQuery, setCourseNumberQuery] = useState('');
   const [courseNumber, setCourseNumber] = useState<number | ''>('');
   const [selectedStatus, setSelectedStatus] = useState('전체');
@@ -83,6 +87,11 @@ export default function ParticipantsPage() {
   const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
   const [isSmsOpen, setIsSmsOpen] = useState(false);
   const [smsRecipients, setSmsRecipients] = useState<ParticipantListItem[]>([]);
+  // 회차 등록 취소(수강건 삭제) — 백엔드 DELETE /api/course-participants/{id} 권한(ADMIN·OPERATOR)과 일치
+  const canDeleteEnrollment =
+    roleConfig.roles.includes('ADMIN') || roleConfig.roles.includes('OPERATOR');
+  // 참여자 완전 삭제 — 백엔드 DELETE /api/participants/{id} 권한(ADMIN). 회차 이력 없는(고아) 참여자에만 노출.
+  const isAdmin = roleConfig.roles.includes('ADMIN');
   const canBulkComplete = roleConfig.can.complete === 1;
   // 상담사 일괄 배정 — editP(참여자 정보 수정) 롤 집합이 BE 일괄 배정 인가와 일치
   const canBulkAssignCounselor = roleConfig.can.editP === 1;
@@ -95,7 +104,8 @@ export default function ParticipantsPage() {
     // 지역·회차는 서버 필터(최신 수강건 기준). 상태는 아래 filteredList 에서 클라이언트 필터.
     getParticipants({
       name: searchName || undefined,
-      regionId: selectedRegionId === '' ? undefined : selectedRegionId,
+      regionId: regionFilter.regionId,
+      parentRegionId: regionFilter.parentRegionId,
       courseNumber: courseNumber === '' ? undefined : courseNumber,
       registerDateFrom: registerDateFrom || undefined,
       registerDateTo: registerDateTo || undefined,
@@ -110,7 +120,15 @@ export default function ParticipantsPage() {
       })
       .catch((err) => setError(apiErrorMessage(err, '참여자 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, selectedRegionId, courseNumber, registerDateFrom, registerDateTo, page]);
+  }, [
+    searchName,
+    regionFilter.regionId,
+    regionFilter.parentRegionId,
+    courseNumber,
+    registerDateFrom,
+    registerDateTo,
+    page,
+  ]);
 
   useEffect(() => {
     fetchList();
@@ -162,6 +180,37 @@ export default function ParticipantsPage() {
   const handleCounselorEdit = (e: React.MouseEvent, p: ParticipantListItem) => {
     e.stopPropagation();
     setCounselorEditTarget(p);
+  };
+
+  // 최신 회차 등록 취소(수강건 삭제) — 참여자 원본·타 회차 이력은 유지된다.
+  const handleDeleteEnrollment = async (e: React.MouseEvent, p: ParticipantListItem) => {
+    e.stopPropagation();
+    const cpId = p.latestEnrollment?.courseParticipantId;
+    if (cpId == null) return;
+    if (
+      !window.confirm(
+        `${p.name} 님의 최신 회차 등록을 취소(삭제)할까요?\n참여자 정보와 다른 회차 이력은 유지됩니다.`,
+      )
+    )
+      return;
+    try {
+      await deleteCourseParticipant(cpId);
+      fetchList();
+    } catch (err) {
+      alert(apiErrorMessage(err, '회차 등록 취소에 실패했습니다.'));
+    }
+  };
+
+  // 회차 이력이 없는(고아) 참여자 완전 삭제 — 이력이 있으면 서버가 차단(먼저 회차 취소 필요).
+  const handleDeleteParticipant = async (e: React.MouseEvent, p: ParticipantListItem) => {
+    e.stopPropagation();
+    if (!window.confirm(`${p.name} 참여자를 완전히 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    try {
+      await deleteParticipant(p.participantId);
+      fetchList();
+    } catch (err) {
+      alert(apiErrorMessage(err, '참여자 삭제에 실패했습니다.'));
+    }
   };
 
   // 선택 가능한(수강 이력이 있는) 행의 courseParticipantId 목록
@@ -230,30 +279,14 @@ export default function ParticipantsPage() {
 
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-          <div className="select">
-            <span className="ico">지역</span>
-            <select
-              value={selectedRegionId}
-              onChange={(e) => {
-                setSelectedRegionId(e.target.value === '' ? '' : Number(e.target.value));
-                setPage(0);
-              }}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                fontWeight: 'inherit',
-                outline: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <option value="">전체 ▾</option>
-              {regions.map((r) => (
-                <option key={r.regionId} value={r.regionId}>
-                  {r.regionName}
-                </option>
-              ))}
-            </select>
-          </div>
+          <RegionFilterSelect
+            regions={regions}
+            value={regionFilter}
+            onChange={(v) => {
+              setRegionFilter(v);
+              setPage(0);
+            }}
+          />
           <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
             <input
               type="number"
@@ -415,6 +448,7 @@ export default function ParticipantsPage() {
                 <th>출결</th>
                 <th>상담사 (사전 · 사후1 · 사후2)</th>
                 <th>수료일</th>
+                {canDeleteEnrollment && <th style={{ width: '84px' }}>관리</th>}
               </tr>
             </thead>
             <tbody id="p-rows">
@@ -505,13 +539,37 @@ export default function ParticipantsPage() {
                       )}
                     </td>
                     <td>{e?.completionDate ?? '—'}</td>
+                    {canDeleteEnrollment && (
+                      <td onClick={(ev) => ev.stopPropagation()}>
+                        {cpId != null ? (
+                          <button
+                            className="btn danger"
+                            style={{ padding: '3px 8px', fontSize: '11px' }}
+                            onClick={(ev) => handleDeleteEnrollment(ev, p)}
+                          >
+                            회차 취소
+                          </button>
+                        ) : isAdmin ? (
+                          <button
+                            className="btn danger"
+                            style={{ padding: '3px 8px', fontSize: '11px' }}
+                            title="회차 이력이 없는 참여자 완전 삭제"
+                            onClick={(ev) => handleDeleteParticipant(ev, p)}
+                          >
+                            참여자 삭제
+                          </button>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               {!loading && filteredList.length === 0 && (
                 <tr>
                   <td
-                    colSpan={canSelect ? 8 : 7}
+                    colSpan={7 + (canSelect ? 1 : 0) + (canDeleteEnrollment ? 1 : 0)}
                     style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
                   >
                     조건에 일치하는 참여자가 없습니다.

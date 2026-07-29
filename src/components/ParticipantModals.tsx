@@ -2024,6 +2024,8 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
   // 그룹별 편집된 행(미리보기 후 확인·수정) + 그룹 펼침 상태
   const [editedRows, setEditedRows] = useState<Record<string, BulkImportParsedRow[]>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // 그룹별 등록 대상으로 체크된 행 번호 집합 — 기본값은 "선정여부=선정" 행만 체크된다.
+  const [included, setIncluded] = useState<Record<string, Set<number>>>({});
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [result, setResult] = useState<BulkImportResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2036,6 +2038,7 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
     setMappings({});
     setEditedRows({});
     setExpanded({});
+    setIncluded({});
     setResult(null);
     setError(null);
     setBusy(false);
@@ -2064,16 +2067,37 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
     return Array.from(map.entries());
   }, [courses]);
 
-  // 매핑된 그룹의 등록 예정 인원(오류 없는 편집 행 기준)
+  // 매핑된 그룹의 등록 예정 인원(오류 없고 체크된 행 기준)
   const plannedCount = useMemo(() => {
     if (!preview) return 0;
     return preview.groups
       .filter((g) => mappings[g.sourceCourseName])
       .reduce((sum, g) => {
         const rows = editedRows[g.sourceCourseName] ?? g.rows;
-        return sum + rows.filter((r) => !r.error).length;
+        const inc = included[g.sourceCourseName];
+        return sum + rows.filter((r) => !r.error && inc?.has(r.rowNumber)).length;
       }, 0);
-  }, [preview, mappings, editedRows]);
+  }, [preview, mappings, editedRows, included]);
+
+  // 행 체크 토글(오류 행은 등록 불가라 체크 대상 아님).
+  const toggleRow = (groupKey: string, rowNumber: number) => {
+    setIncluded((prev) => {
+      const next = new Set(prev[groupKey] ?? []);
+      if (next.has(rowNumber)) next.delete(rowNumber);
+      else next.add(rowNumber);
+      return { ...prev, [groupKey]: next };
+    });
+  };
+
+  // 그룹 전체 선택/해제 — 오류 없는 행 전부가 이미 체크돼 있으면 해제, 아니면 전부 체크.
+  const toggleGroupAll = (groupKey: string, rows: BulkImportParsedRow[]) => {
+    const selectable = rows.filter((r) => !r.error).map((r) => r.rowNumber);
+    setIncluded((prev) => {
+      const cur = prev[groupKey] ?? new Set<number>();
+      const allChecked = selectable.length > 0 && selectable.every((n) => cur.has(n));
+      return { ...prev, [groupKey]: new Set(allChecked ? [] : selectable) };
+    });
+  };
 
   const STATUS_OPTIONS: CourseParticipantStatus[] = ['APPLIED', 'CONFIRMED', 'CANCELED'];
 
@@ -2122,12 +2146,18 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
       setPreview(data);
       const init: Record<string, number | ''> = {};
       const rowsByGroup: Record<string, BulkImportParsedRow[]> = {};
+      const incByGroup: Record<string, Set<number>> = {};
       for (const g of data.groups) {
         init[g.sourceCourseName] = g.suggestedCourseId ?? '';
         rowsByGroup[g.sourceCourseName] = g.rows.map((r) => ({ ...r }));
+        // 기본 체크: 선정여부='선정' 이고 오류 없는 행만. 담당자가 확인 후 조정 가능.
+        incByGroup[g.sourceCourseName] = new Set(
+          g.rows.filter((r) => !r.error && r.selected === '선정').map((r) => r.rowNumber),
+        );
       }
       setMappings(init);
       setEditedRows(rowsByGroup);
+      setIncluded(incByGroup);
       setExpanded({});
     } catch (err) {
       setError(apiErrorMessage(err, '미리보기에 실패했습니다. 파일 형식을 확인해주세요.'));
@@ -2145,7 +2175,10 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
       for (const g of preview.groups) {
         const target = mappings[g.sourceCourseName];
         const rows = editedRows[g.sourceCourseName] ?? g.rows;
+        const inc = included[g.sourceCourseName];
+        // 체크된(선정 대상) 행만 등록한다 — 미선정/미체크 행은 제외.
         for (const r of rows) {
+          if (!inc?.has(r.rowNumber)) continue;
           items.push({
             rowNumber: r.rowNumber,
             sourceCourseName: g.sourceCourseName,
@@ -2184,7 +2217,7 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
         if (e.target === e.currentTarget) handleClose();
       }}
     >
-      <div className="modal" style={{ maxWidth: '760px', width: '92%' }}>
+      <div className="modal" style={{ maxWidth: '1120px', width: '95%' }}>
         <div className="modal-h">
           <h3>참여자 일괄 등록</h3>
           <span className="badge-role">
@@ -2306,12 +2339,28 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
                                   <table className="data" style={{ fontSize: '12px' }}>
                                     <thead>
                                       <tr>
+                                        <th style={{ width: '34px', textAlign: 'center' }}>
+                                          <input
+                                            type="checkbox"
+                                            aria-label="전체 선택"
+                                            checked={(() => {
+                                              const selectable = rows.filter((r) => !r.error);
+                                              const inc = included[g.sourceCourseName];
+                                              return (
+                                                selectable.length > 0 &&
+                                                selectable.every((r) => inc?.has(r.rowNumber))
+                                              );
+                                            })()}
+                                            onChange={() => toggleGroupAll(g.sourceCourseName, rows)}
+                                          />
+                                        </th>
                                         <th style={{ width: '38px' }}>행</th>
                                         <th>이름</th>
                                         <th>휴대폰</th>
                                         <th style={{ width: '70px' }}>출생연도</th>
                                         <th style={{ width: '124px' }}>신청일</th>
                                         <th style={{ width: '124px' }}>선정일</th>
+                                        <th style={{ width: '60px' }}>선정여부</th>
                                         <th style={{ width: '84px' }}>상태</th>
                                       </tr>
                                     </thead>
@@ -2321,6 +2370,17 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
                                           key={r.rowNumber}
                                           style={r.error ? { background: '#fff2f2' } : undefined}
                                         >
+                                          <td style={{ textAlign: 'center' }}>
+                                            <input
+                                              type="checkbox"
+                                              aria-label={`${r.name ?? ''} 등록 대상`}
+                                              disabled={!!r.error}
+                                              checked={
+                                                included[g.sourceCourseName]?.has(r.rowNumber) ?? false
+                                              }
+                                              onChange={() => toggleRow(g.sourceCourseName, r.rowNumber)}
+                                            />
+                                          </td>
                                           <td>{r.rowNumber}</td>
                                           <td>
                                             <input
@@ -2394,6 +2454,7 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
                                               style={{ width: '100%' }}
                                             />
                                           </td>
+                                          <td style={{ textAlign: 'center' }}>{r.selected ?? '—'}</td>
                                           <td>
                                             <select
                                               value={r.status}
@@ -2440,7 +2501,8 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
                 </table>
               </div>
               <p style={{ fontSize: '13px', marginTop: '10px' }}>
-                등록 예정 <strong>{plannedCount}</strong>명 (중복·오류 행은 확정 시 자동 스킵)
+                등록 예정 <strong>{plannedCount}</strong>명 (체크된 선정 인원만 등록 · 확인·수정에서 조정 가능,
+                중복 행은 확정 시 자동 스킵)
               </p>
             </>
           )}
