@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { getCourses, getCourseStaffs } from '../api/courses';
 import type { CourseSummary } from '../api/courses';
+import { getCourseDailyStaff } from '../api/courseDailyStaff';
+import type { CourseDailyStaffItem, SessionTypeValue } from '../api/courseDailyStaff';
 import { useAuth } from '../context/AuthContext';
 import {
     getMyStaffSchedules,
@@ -15,11 +17,36 @@ const DAY_KEYS = ['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const SESSION_TYPES: SessionType[] = ['AM', 'PM', 'FULL'];
 
-// 이 역할들은 본인이 담당자로 배정된 강좌만 캘린더에 노출
+// 이 역할들은 원칙적으로 "본인이 담당자로 배정된 회차"만 캘린더에 노출
 const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
+
+// 이 역할들 중 하나라도 있으면, RESTRICTED_ROLES를 같이 갖고 있어도 전체 열람이 우선한다.
+const UNRESTRICTED_ROLES = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'PROJECT_MANAGER'];
 
 // 관리자용 근무자 일정 관리 페이지로 이동 가능한 역할
 const SCHEDULE_MANAGE_ROLES = ['ADMIN', 'OPERATOR'];
+
+// course_staff.staffRole → 화면 표시용 라벨
+const STAFF_ROLE_LABELS: Record<string, string> = {
+    LECTURER: '강사',
+    COUNSELOR: '상담사',
+    STAFF: '진행요원',
+    PROJECT_MANAGER: 'PM',
+    PROJECT_LEADER: 'PL',
+    ADMIN_STAFF: '행정',
+};
+
+// AM/PM/FULL 배지 색상
+const SESSION_BADGE_COLOR: Record<SessionTypeValue, string> = {
+    AM: '#fde68a',
+    PM: '#a5d8ff',
+    FULL: '#c3e6cb',
+};
+
+function staffRoleLabel(role?: string | null) {
+    if (!role) return null;
+    return STAFF_ROLE_LABELS[role] ?? role;
+}
 
 // 지역명 -> 고정 색상 팔레트 매핑용
 const REGION_COLOR_PALETTE = [
@@ -66,8 +93,21 @@ export default function CourseCalendarPage() {
     const [memo, setMemo] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
-    const isRestricted = Boolean(user?.roles?.some((r) => RESTRICTED_ROLES.includes(r)));
+    // 강좌별 "내 배정 역할" — 회차마다 역할이 다를 수 있으므로 courseId 단위로 저장 (getCourseStaffs 기반)
+    const [myStaffRoleByCourse, setMyStaffRoleByCourse] = useState<Map<number, string>>(new Map());
+
+    // LECTURER로 배정된 강좌에서만: `${courseId}_${scheduleDate}` -> 그 날 내 세션(오전/오후/종일) (getCourseDailyStaff 기반)
+    const [mySessionByCourseDate, setMySessionByCourseDate] = useState<Map<string, SessionTypeValue>>(new Map());
+    // course-daily-staffs 호출이 실패했는지(예: 403) 여부 — 실패 시 화면에 안내를 띄우기 위함
+    const [dailyStaffError, setDailyStaffError] = useState<string | null>(null);
+
+    // 제한 역할을 갖고 있더라도, 전체 열람 역할(ADMIN 등)을 함께 갖고 있으면 제한하지 않는다.
+    const isRestricted = Boolean(
+        user?.roles?.some((r) => RESTRICTED_ROLES.includes(r)) &&
+        !user?.roles?.some((r) => UNRESTRICTED_ROLES.includes(r)),
+    );
     const canManageStaffSchedules = Boolean(user?.roles?.some((r) => SCHEDULE_MANAGE_ROLES.includes(r)));
+    const isLecturer = Boolean(user?.roles?.includes('LECTURER'));
 
     // 1) 강좌는 한 번만 넉넉히 받아와서 클라이언트에서 월별로 필터링
     useEffect(() => {
@@ -88,17 +128,20 @@ export default function CourseCalendarPage() {
         };
     }, []);
 
-    // 2) 제한 대상 역할이면, 본인이 담당자로 배정된 강좌만 남기도록 필터링
+    // 2) 제한 대상 역할이면, 본인이 담당자로 배정된 강좌만 남기도록 필터링.
+    //    같은 응답에서 회차별 내 staffRole도 함께 뽑아 역할 뱃지에 재사용한다(추가 호출 없음).
     useEffect(() => {
         let active = true;
 
         if (!isRestricted || !user) {
             setVisibleCourses(courses);
+            setMyStaffRoleByCourse(new Map());
             return;
         }
 
         if (courses.length === 0) {
             setVisibleCourses([]);
+            setMyStaffRoleByCourse(new Map());
             return;
         }
 
@@ -107,13 +150,35 @@ export default function CourseCalendarPage() {
             courses.map((c) =>
                 c.courseId
                     ? getCourseStaffs(c.courseId)
-                        .then(({ data: res }) => (res.data.staffs ?? []).some((s) => s.userId === user.userId))
-                        .catch(() => false)
-                    : Promise.resolve(false),
+                        .then(({ data: res }) => {
+                            const mine = (res.data.staffs ?? []).find(
+                                (s) => Number(s.userId) === Number(user.userId),
+                            );
+                            return { courseId: c.courseId as number, mine };
+                        })
+                        .catch((err) => {
+                            console.error(
+                                `[CourseCalendar] getCourseStaffs(courseId=${c.courseId}) 실패`,
+                                err?.response?.status,
+                                err,
+                            );
+                            return { courseId: c.courseId as number, mine: undefined };
+                        })
+                    : Promise.resolve({ courseId: c.courseId as number, mine: undefined }),
             ),
         )
-            .then((flags) => {
-                if (active) setVisibleCourses(courses.filter((_, idx) => flags[idx]));
+            .then((results) => {
+                if (!active) return;
+                const roleMap = new Map<number, string>();
+                const assignedIds = new Set<number>();
+                results.forEach(({ courseId, mine }) => {
+                    if (mine) {
+                        assignedIds.add(courseId);
+                        if (mine.staffRole) roleMap.set(courseId, mine.staffRole);
+                    }
+                });
+                setMyStaffRoleByCourse(roleMap);
+                setVisibleCourses(courses.filter((c) => c.courseId && assignedIds.has(c.courseId)));
             })
             .finally(() => {
                 if (active) setIsFiltering(false);
@@ -123,6 +188,71 @@ export default function CourseCalendarPage() {
             active = false;
         };
     }, [courses, isRestricted, user]);
+
+    // 2-1) LECTURER로 "배정된 강좌"에서만: 날짜별 인력 배정(course-daily-staff)에서
+    //      내 담당 세션(오전/오후/종일)을 뽑아 캘린더에 표시. COUNSELOR로만 배정된 회차는 건너뛴다.
+    useEffect(() => {
+        let active = true;
+
+        const lecturerCourseIds = visibleCourses
+            .filter((c) => c.courseId && myStaffRoleByCourse.get(c.courseId) === 'LECTURER')
+            .map((c) => c.courseId as number);
+
+        if (!isLecturer || !user || lecturerCourseIds.length === 0) {
+            setMySessionByCourseDate(new Map());
+            setDailyStaffError(null);
+            return;
+        }
+
+        let anyForbidden = false;
+        let anyOtherError = false;
+
+        Promise.all(
+            lecturerCourseIds.map((courseId) =>
+                getCourseDailyStaff(courseId)
+                    .then(({ data: res }) => ({
+                        courseId,
+                        assignments: res.data.assignments ?? [],
+                    }))
+                    .catch((err) => {
+                        const status = err?.response?.status;
+                        console.error(
+                            `[CourseCalendar] getCourseDailyStaff(courseId=${courseId}) 실패`,
+                            status,
+                            err,
+                        );
+                        if (status === 403) anyForbidden = true;
+                        else anyOtherError = true;
+                        return { courseId, assignments: [] as CourseDailyStaffItem[] };
+                    }),
+            ),
+        ).then((results) => {
+            if (!active) return;
+            const map = new Map<string, SessionTypeValue>();
+            results.forEach(({ courseId, assignments }) => {
+                assignments.forEach((a) => {
+                    if (Number(a.userId) === Number(user.userId) && a.staffRole === 'LECTURER') {
+                        map.set(`${courseId}_${a.scheduleDate}`, a.sessionType);
+                    }
+                });
+            });
+            setMySessionByCourseDate(map);
+
+            if (anyForbidden) {
+                setDailyStaffError(
+                    '날짜별 시간대(오전/오후) 조회 권한이 없어 표시하지 못했습니다. 관리자에게 권한 확인을 요청해주세요.',
+                );
+            } else if (anyOtherError) {
+                setDailyStaffError('날짜별 시간대 정보를 불러오는 중 오류가 발생했습니다.');
+            } else {
+                setDailyStaffError(null);
+            }
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [isLecturer, visibleCourses, myStaffRoleByCourse, user]);
 
     const year = cursor.getFullYear();
     const month = cursor.getMonth(); // 0-based
@@ -273,6 +403,12 @@ export default function CourseCalendarPage() {
                     )}
                 </div>
 
+                {dailyStaffError && (
+                    <div style={{ padding: '8px 16px', background: '#fdecec', borderBottom: '1px solid var(--line)', fontSize: 12, color: '#c0392b' }}>
+                        ⚠ {dailyStaffError}
+                    </div>
+                )}
+
                 {regionLegend.length > 0 && (
                     <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--line)' }}>
                         {regionLegend.map((name) => (
@@ -289,11 +425,23 @@ export default function CourseCalendarPage() {
                                 {name}
                             </span>
                         ))}
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, marginLeft: 'auto' }}>
-                            <span className="chip ok" style={{ padding: '1px 7px' }}>가능</span>
-                            <span className="chip danger" style={{ padding: '1px 7px' }}>불가</span>
-                            내 근무 가능 여부
-                        </span>
+                        {isLecturer && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, marginLeft: 'auto' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ padding: '1px 6px', borderRadius: 4, background: SESSION_BADGE_COLOR.AM, fontWeight: 700 }}>오전</span>
+                                    <span style={{ padding: '1px 6px', borderRadius: 4, background: SESSION_BADGE_COLOR.PM, fontWeight: 700 }}>오후</span>
+                                    <span style={{ padding: '1px 6px', borderRadius: 4, background: SESSION_BADGE_COLOR.FULL, fontWeight: 700 }}>종일</span>
+                                </span>
+                                내 강의 시간대
+                            </span>
+                        )}
+                        {!isLecturer && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, marginLeft: 'auto' }}>
+                                <span className="chip ok" style={{ padding: '1px 7px' }}>가능</span>
+                                <span className="chip danger" style={{ padding: '1px 7px' }}>불가</span>
+                                내 근무 가능 여부
+                            </span>
+                        )}
                     </div>
                 )}
 
@@ -336,21 +484,76 @@ export default function CourseCalendarPage() {
                                     )}
                                 </div>
                                 <div className="cal-events" style={{ overflow: 'hidden' }}>
-                                    {dayEvents.slice(0, 2).map((ev, idx) => (
-                                        <div
-                                            key={`${ev.courseId}-${idx}`}
-                                            className={`cal-event ${ev.dayIndex === 0 ? 'cal-event-start' : ev.dayIndex === 4 ? 'cal-event-end' : ''}`}
-                                            style={{ background: colorForRegion(ev.regionName) }}
-                                            title={`${ev.regionName ?? ''} ${ev.courseName} (${ev.courseNumber ?? '-'}기) - ${ev.dayIndex + 1}일차`}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                navigate(`/rounds/${ev.courseId}`);
-                                            }}
-                                        >
-                                            {ev.courseNumber ? `${ev.courseNumber}기 ` : ''}
-                                            {ev.courseName} · {ev.dayIndex + 1}일차
-                                        </div>
-                                    ))}
+                                    {dayEvents.slice(0, 2).map((ev, idx) => {
+                                        // 이 회차에서 내 역할(회차마다 다를 수 있음)
+                                        const roleLabel = staffRoleLabel(myStaffRoleByCourse.get(ev.courseId));
+                                        // LECTURER로 배정된 회차에서만: 그 날짜 담당 세션(오전/오후/종일)
+                                        const mySession = mySessionByCourseDate.get(`${ev.courseId}_${dateStr}`);
+
+                                        return (
+                                            <div
+                                                key={`${ev.courseId}-${idx}`}
+                                                className={`cal-event ${ev.dayIndex === 0 ? 'cal-event-start' : ev.dayIndex === 4 ? 'cal-event-end' : ''}`}
+                                                style={{
+                                                    background: colorForRegion(ev.regionName),
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: 4,
+                                                    overflow: 'hidden',
+                                                }}
+                                                title={`${ev.regionName ?? ''} ${ev.courseName} (${ev.courseNumber ?? '-'}기) - ${ev.dayIndex + 1}일차${roleLabel ? ` · ${roleLabel}` : ''}${mySession ? ` · ${SESSION_TYPE_LABELS[mySession]}` : ''}`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/rounds/${ev.courseId}`);
+                                                }}
+                                            >
+                                                {/* 강사: 오전/오후/종일 배지를 맨 앞에 항상 고정 노출 (절대 안 잘림) */}
+                                                {mySession && (
+                                                    <span
+                                                        style={{
+                                                            flexShrink: 0,
+                                                            fontSize: 9.5,
+                                                            fontWeight: 700,
+                                                            padding: '1px 5px',
+                                                            borderRadius: 4,
+                                                            background: SESSION_BADGE_COLOR[mySession],
+                                                            color: '#1a1a1a',
+                                                        }}
+                                                    >
+                                                        {SESSION_TYPE_LABELS[mySession]}
+                                                    </span>
+                                                )}
+                                                {/* 강사가 아닌 그 외 역할: 역할명 배지를 맨 앞에 고정 노출 */}
+                                                {roleLabel && !mySession && (
+                                                    <span
+                                                        style={{
+                                                            flexShrink: 0,
+                                                            fontSize: 9.5,
+                                                            fontWeight: 700,
+                                                            padding: '1px 5px',
+                                                            borderRadius: 4,
+                                                            background: '#e2e8f0',
+                                                            color: '#1a1a1a',
+                                                        }}
+                                                    >
+                                                        {roleLabel}
+                                                    </span>
+                                                )}
+                                                {/* 강좌명 — 남는 공간만 차지, 넘치면 이 부분만 말줄임 처리 */}
+                                                <span
+                                                    style={{
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        whiteSpace: 'nowrap',
+                                                        minWidth: 0,
+                                                    }}
+                                                >
+                                                    {ev.courseNumber ? `${ev.courseNumber}기 ` : ''}
+                                                    {ev.courseName} · {ev.dayIndex + 1}일차
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
                                     {dayEvents.length > 2 && <div className="cal-event-more">+{dayEvents.length - 2}건</div>}
                                 </div>
                             </div>
@@ -430,6 +633,7 @@ export default function CourseCalendarPage() {
 
             <p className="note">
                 날짜 칸의 강좌 일정을 클릭하면 해당 강좌 상세 화면으로, 빈 곳을 클릭하면 근무 가능 여부를 등록할 수 있습니다.
+                {isRestricted ? ' 강좌 이벤트에 표시되는 배지는 해당 회차에서의 내 담당 역할이며, 강사로 배정된 회차는 그날 담당 시간대(오전/오후/종일)가 강좌명 앞에 바로 표시됩니다.' : ''}
                 {canManageStaffSchedules ? ' 다른 근무자의 일정은 "근무자 일정 관리"에서 등록할 수 있습니다.' : ''}
             </p>
         </section>
