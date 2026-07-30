@@ -8,8 +8,15 @@ import {
   getSmsHistoryPage,
   getParticipantSmsDetail,
   refreshParticipantSmsStatus,
+  getReservationCancelPreview,
+  cancelSmsReservation,
 } from '../api/participantSms';
-import type { SmsHistoryPageItem, ParticipantSmsDetailItem, SmsHistoryParams } from '../api/participantSms';
+import type {
+  SmsHistoryPageItem,
+  ParticipantSmsDetailItem,
+  SmsHistoryParams,
+  ReservationCancelPreview,
+} from '../api/participantSms';
 import { apiErrorMessage } from '../api/apiError';
 
 const PAGE_SIZE = 20;
@@ -21,6 +28,8 @@ const STATUS_LABELS: Record<string, string> = {
   SUCCESS: '성공',
   FAIL: '실패',
   PENDING: '대기',
+  RESERVED: '예약중',
+  CANCELED: '취소됨',
 };
 function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
@@ -28,7 +37,15 @@ function statusLabel(status: string): string {
 function statusChip(status: string): string {
   if (status === 'SUCCESS') return 'ok';
   if (status === 'FAIL') return 'warn';
+  if (status === 'RESERVED') return 'info';
   return 'neutral';
+}
+// 표시 일시: 발송건은 sentAt, 예약(미발송)건은 reserveTime 기준.
+function whenLabel(item: { sentAt: string | null; reserveTime: string | null; sendStatus: string }): string {
+  if (item.sendStatus === 'RESERVED') {
+    return item.reserveTime ? `${fmtDateTime(item.reserveTime)} (예약)` : '예약';
+  }
+  return fmtDateTime(item.sentAt ?? item.reserveTime);
 }
 function formatChip(format: string): string {
   if (format === 'MMS') return 'ok';
@@ -76,6 +93,11 @@ export default function SmsHistoryPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // 예약 취소 확인 모달 — reserveId 단위 취소라 "함께 취소될 인원"을 먼저 보여준다.
+  const [cancelPreview, setCancelPreview] = useState<ReservationCancelPreview | null>(null);
+  const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
+  const [canceling, setCanceling] = useState(false);
 
   // 현재 필터 조건(페이지 제외) — 목록·CSV 공통
   const buildParams = useCallback(
@@ -166,6 +188,32 @@ export default function SmsHistoryPage() {
     }
   };
 
+  // 예약 취소 — reserveId 단위. 먼저 프리뷰로 함께 취소될 인원을 확인시킨 뒤 실행.
+  const openCancelPreview = (reserveId: string) => {
+    setCancelPreviewLoading(true);
+    setCancelPreview(null);
+    getReservationCancelPreview(reserveId)
+      .then((res) => setCancelPreview(res.data.data))
+      .catch((err) => alert(apiErrorMessage(err, '예약 취소 대상을 불러오지 못했습니다.')))
+      .finally(() => setCancelPreviewLoading(false));
+  };
+
+  const confirmCancelReservation = async () => {
+    if (!cancelPreview || canceling) return;
+    setCanceling(true);
+    try {
+      const res = await cancelSmsReservation(cancelPreview.reserveId);
+      alert(`예약 ${res.data.data ?? 0}건을 취소했습니다.`);
+      setCancelPreview(null);
+      setDetail(null);
+      fetchList();
+    } catch (err) {
+      alert(apiErrorMessage(err, '예약 취소에 실패했습니다.'));
+    } finally {
+      setCanceling(false);
+    }
+  };
+
   // CSV 내보내기 — 현재 필터로 전 페이지 순회 수집 후 다운로드(UTF-8 BOM)
   const exportCsv = async () => {
     if (exporting) return;
@@ -191,7 +239,7 @@ export default function SmsHistoryPage() {
       for (const r of rows) {
         lines.push(
           [
-            fmtDateTime(r.sentAt),
+            fmtDateTime(r.sentAt ?? r.reserveTime),
             r.participantName ?? '',
             r.phone ?? '',
             r.regionName ?? '',
@@ -271,6 +319,8 @@ export default function SmsHistoryPage() {
               <option value="SUCCESS">성공</option>
               <option value="FAIL">실패</option>
               <option value="PENDING">대기</option>
+              <option value="RESERVED">예약중</option>
+              <option value="CANCELED">취소됨</option>
             </select>
           </div>
           <div className="searchbox" style={{ width: '180px', padding: '4px 10px' }}>
@@ -345,7 +395,7 @@ export default function SmsHistoryPage() {
               {items.map((r) => (
                 <tr key={r.smsId} onClick={() => openDetail(r.smsId)} style={{ cursor: 'pointer' }}>
                   <td className="tnum" style={{ fontSize: '12px' }}>
-                    {fmtDateTime(r.sentAt)}
+                    {whenLabel(r)}
                   </td>
                   <td>
                     <div className="pname">{r.participantName ?? '—'}</div>
@@ -421,7 +471,7 @@ export default function SmsHistoryPage() {
                     <span className={`chip ${formatChip(detail.messageFormat)}`}>{detail.messageFormat}</span>
                     <span className={`chip ${statusChip(detail.sendStatus)}`}>{statusLabel(detail.sendStatus)}</span>
                     <span className="muted" style={{ fontSize: '12px' }}>
-                      {fmtDateTime(detail.sentAt)} · {detail.senderName ?? '—'}
+                      {whenLabel(detail)} · {detail.senderName ?? '—'}
                     </span>
                   </div>
                   {detail.title && (
@@ -480,8 +530,59 @@ export default function SmsHistoryPage() {
                   {refreshing ? '재조회 중…' : '재조회'}
                 </button>
               )}
+              {detail && detail.sendStatus === 'RESERVED' && detail.reserveId && (
+                <button
+                  className="btn danger-btn"
+                  disabled={cancelPreviewLoading}
+                  onClick={() => openCancelPreview(detail.reserveId as string)}
+                >
+                  {cancelPreviewLoading ? '확인 중…' : '예약 취소'}
+                </button>
+              )}
               <button className="btn" onClick={() => setDetail(null)}>
                 닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cancelPreview && (
+        <div
+          className="modal-overlay open"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !canceling) setCancelPreview(null);
+          }}
+        >
+          <div className="modal" style={{ width: 'min(460px, 100%)' }}>
+            <div className="modal-h">
+              <h3>예약 발송 취소</h3>
+              <button className="x" onClick={() => !canceling && setCancelPreview(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-b">
+              <p style={{ fontSize: '14px', lineHeight: 1.6 }}>
+                이 예약은 <b>{fmtDateTime(cancelPreview.reserveTime)}</b> 발송 예정입니다.
+                <br />
+                예약 취소는 <b>예약 묶음(batch) 단위</b>로 이루어져,{' '}
+                <b style={{ color: 'var(--danger)' }}>함께 예약된 {cancelPreview.targetCount}명 전원의 발송이 취소</b>됩니다.
+              </p>
+              {cancelPreview.recipientNames.length > 0 && (
+                <div>
+                  <div className="cell-sub">함께 취소될 대상</div>
+                  <div style={{ fontSize: '13px', lineHeight: 1.6 }}>
+                    {cancelPreview.recipientNames.join(', ')}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-f">
+              <button className="btn" disabled={canceling} onClick={() => setCancelPreview(null)}>
+                돌아가기
+              </button>
+              <button className="btn danger-btn" disabled={canceling} onClick={confirmCancelReservation}>
+                {canceling ? '취소 중…' : `${cancelPreview.targetCount}명 예약 취소`}
               </button>
             </div>
           </div>
