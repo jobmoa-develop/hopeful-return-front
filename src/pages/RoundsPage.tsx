@@ -14,6 +14,10 @@ const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED',
 // 이 역할들은 본인이 담당자로 배정된 회차만 목록에 노출
 const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
 
+// 이 역할들 중 하나라도 있으면, RESTRICTED_ROLES를 같이 갖고 있어도 전체 열람이 우선한다.
+// 예: ADMIN + COUNSELOR 다중 역할 계정 → 전체 열람
+const UNRESTRICTED_ROLES = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'PROJECT_MANAGER'];
+
 // 휴게시간 입력용 시간/분 드롭다운 옵션 (실제 저장/전송 값은 이 둘을 합산한 총 분(breakMinutes))
 const BREAK_HOUR_OPTIONS = ['0', '1', '2', '3', '4'];
 const BREAK_MINUTE_OPTIONS = ['0', '10', '20', '30', '40', '50'];
@@ -104,8 +108,15 @@ export default function RoundsPage() {
   const [regionsLoading, setRegionsLoading] = useState(false);
   const [expandedParentId, setExpandedParentId] = useState<number | null>(null);
 
-  const canCreate = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(roleConfig.role);
-  const isRestricted = Boolean(user?.roles?.some((r) => RESTRICTED_ROLES.includes(r)));
+  // 대표 역할(roleConfig.role) 1개만 보면 다중 역할 계정(예: ADMIN+COUNSELOR)에서
+  // 대표 역할이 우연히 COUNSELOR로 뽑힐 경우 ADMIN 권한이 무시된다 → 전체 역할 배열로 판단
+  const canCreate = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(r));
+
+  // 제한 역할을 갖고 있더라도, 전체 열람 역할(ADMIN 등)을 함께 갖고 있으면 제한하지 않는다.
+  const isRestricted = Boolean(
+    user?.roles?.some((r) => RESTRICTED_ROLES.includes(r)) &&
+    !user?.roles?.some((r) => UNRESTRICTED_ROLES.includes(r)),
+  );
 
   // 담당자로 배정된 회차만 남기는 필터 (제한 대상 역할 전용)
   const filterToMyCourses = async (list: CourseSummary[]): Promise<CourseSummary[]> => {
@@ -114,7 +125,7 @@ export default function RoundsPage() {
       list.map((c) =>
         c.courseId
           ? getCourseStaffs(c.courseId)
-            .then(({ data: res }) => (res.data.staffs ?? []).some((s) => s.userId === user.userId))
+            .then(({ data: res }) => (res.data.staffs ?? []).some((s) => Number(s.userId) === Number(user.userId)))
             .catch(() => false)
           : Promise.resolve(false),
       ),

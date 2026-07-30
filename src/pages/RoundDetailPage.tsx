@@ -180,9 +180,11 @@ export default function RoundDetailPage() {
   const [statusForm, setStatusForm] = useState('OPEN');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const canEdit = ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(roleConfig.role);
-  const canDelete = roleConfig.role === 'ADMIN';
-  const canChangeStatus = ['ADMIN', 'HEAD_OFFICE'].includes(roleConfig.role);
+  // 대표 역할(roleConfig.role) 1개만 보면 다중 역할 계정(예: ADMIN+COUNSELOR)에서
+  // 대표 역할이 우연히 COUNSELOR로 뽑힐 경우 ADMIN 권한이 무시된다 → 전체 역할 배열로 판단
+  const canEdit = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(r));
+  const canDelete = roleConfig.roles.includes('ADMIN');
+  const canChangeStatus = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE'].includes(r));
 
   const loadCourse = async () => {
     if (!Number.isFinite(courseId)) return;
