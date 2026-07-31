@@ -52,6 +52,7 @@ export const ROLE_MENU_RULES: Record<string, AppRole[]> = {
   rounds: ALL_ROLES,
   assign: ['ADMIN', 'REGIONAL_MANAGER', 'OPERATOR'],
   consulting: ['ADMIN', 'OPERATOR', 'COUNSELOR'],
+  counselingSchedule: ['ADMIN', 'OPERATOR', 'COUNSELOR'],
   attendance: ['ADMIN', 'OPERATOR', 'STAFF'],
   followUp: ['ADMIN', 'COUNSELOR'],
   userManagement: ['ADMIN', 'HEAD_OFFICE'],

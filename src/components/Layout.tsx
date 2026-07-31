@@ -90,6 +90,7 @@ export default function Layout() {
     if (view === 'calendar' && path === '/calendar') return true;
     if (view === 'assign' && path === '/assign') return true;
     if (view === 'consulting' && path === '/consulting') return true;
+    if (view === 'counselingSchedule' && path === '/counseling-schedule') return true;
     if (view === 'attendance' && path === '/attendance') return true;
     if (view === 'followUp' && path.startsWith('/follow-up')) return true;
     if (view === 'userManagement' && path === '/users') return true;
@@ -100,7 +101,7 @@ export default function Layout() {
   const showOperationGroup = ['dashboard', 'participants', 'rounds', 'calendar'].some((menu) =>
     roleConfig.menu.includes(menu),
   );
-  const showStepGroup = ['assign', 'consulting', 'attendance'].some((menu) =>
+  const showStepGroup = ['assign', 'consulting', 'counselingSchedule', 'attendance'].some((menu) =>
     roleConfig.menu.includes(menu),
   );
   const showAdminGroup = ['followUp', 'userManagement'].some((menu) =>
@@ -214,6 +215,15 @@ export default function Layout() {
               onClick={() => setIsSidebarOpen(false)}
             >
               <span className="ic">💬</span>상담 관리
+            </Link>
+          )}
+          {roleConfig.menu.includes('counselingSchedule') && (
+            <Link
+              to="/counseling-schedule"
+              className={`nav-item ${isNavActive('counselingSchedule') ? 'active' : ''}`}
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              <span className="ic">🗓️</span>상담사 캘린더
             </Link>
           )}
           {roleConfig.menu.includes('attendance') && (
