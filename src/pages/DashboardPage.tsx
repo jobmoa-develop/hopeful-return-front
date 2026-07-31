@@ -4,6 +4,11 @@ import { getDashboardRegionStats } from '../api/dashboard';
 import type { DashboardRegionStatItem } from '../api/dashboard';
 import { getDashboardCalendar } from '../api/dashboard';
 import type { DashboardCalendarItem } from '../api/dashboard';
+import {
+  getDashboardTaskCompletions,
+  completeDashboardTask,
+  uncompleteDashboardTask,
+} from '../api/dashboard';
 import { useRole } from '../context/RoleContext';
 import { getFollowUpStats } from '../api/followUps';
 import type { FollowUpStatsResponse } from '../api/followUps';
@@ -83,6 +88,13 @@ export default function DashboardPage() {
       active = false;
     };
   }, [year, month]);
+
+  // 대시보드 일정 체크 완료 목록 — 전역 공유(계정 구분 없이 모두 동일하게 보임)
+  useEffect(() => {
+    getDashboardTaskCompletions()
+      .then(({ data: res }) => setCheckedIds(new Set(res.data.completedTaskIds ?? [])))
+      .catch(() => setCheckedIds(new Set()));
+  }, []);
 
   // 사후관리 집계 — 지역 목록(필터 드롭다운)은 최초 1회만 로드
   useEffect(() => {
@@ -165,12 +177,26 @@ export default function DashboardPage() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [calendarItems]);
 
+  // 대시보드 일정 체크 토글 — 전역 공유이므로 누가 체크/해제해도 모든 사용자 화면에 반영된다.
+  // 낙관적 업데이트로 먼저 화면 반영 후, 서버 요청 실패 시에만 롤백한다.
   const toggleChecked = (id: string) => {
+    const isCurrentlyChecked = checkedIds.has(id);
+
     setCheckedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
+      if (isCurrentlyChecked) next.delete(id);
       else next.add(id);
       return next;
+    });
+
+    const request = isCurrentlyChecked ? uncompleteDashboardTask(id) : completeDashboardTask(id);
+    request.catch(() => {
+      setCheckedIds((prev) => {
+        const next = new Set(prev);
+        if (isCurrentlyChecked) next.add(id);
+        else next.delete(id);
+        return next;
+      });
     });
   };
 
@@ -471,7 +497,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-      <p className="note">※ 실시간 API 데이터입니다.</p>
+      <p className="note">※ 실시간 API 데이터입니다. 완료 체크는 대시보드 접근 권한이 있는 모든 사용자에게 공유됩니다.</p>
     </section>
   );
 }
