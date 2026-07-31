@@ -14,6 +14,8 @@ export type SendSmsRequest = {
   content: string;
   messageFormat?: MessageFormat;
   images?: string[];
+  // 예약 발송 시각(yyyy-MM-dd HH:mm, Asia/Seoul). 미지정 시 즉시 발송
+  reserveTime?: string;
 };
 
 // SendSmsResponse 와 동일
@@ -24,6 +26,8 @@ export type SendSmsResult = {
   failedCount: number;
   statusName: string;
   smsIds: number[];
+  // 예약 발송 시 SENS 예약 batch ID(예약 취소 단위). 즉시 발송은 null
+  reserveId: string | null;
 };
 
 // ParticipantSmsListResponse.Item 과 동일
@@ -39,6 +43,9 @@ export type ParticipantSmsHistoryItem = {
   resultMessage: string | null;
   completeTime: string | null;
   sentAt: string | null;
+  // 예약 발송(V16): 예약건은 sentAt=null, reserveTime=예정시각, reserveId=예약 batch ID
+  reserveTime: string | null;
+  reserveId: string | null;
   senderName: string | null;
   imageUrls: string[];
 };
@@ -73,6 +80,8 @@ export type SmsHistoryPageItem = {
   resultMessage: string | null;
   completeTime: string | null;
   sentAt: string | null;
+  reserveTime: string | null;
+  reserveId: string | null;
   senderName: string | null;
 };
 
@@ -110,6 +119,8 @@ export type ParticipantSmsDetailItem = {
   sentBy: number | null;
   senderName: string | null;
   sentAt: string | null;
+  reserveTime: string | null;
+  reserveId: string | null;
   createdAt: string | null;
   imageUrls: string[];
 };
@@ -121,4 +132,23 @@ export function getParticipantSmsDetail(smsId: number) {
 // 발송결과 재조회(수동) — SENS 결과조회로 상태·messageId·결과를 갱신한 상세 반환. 권한: SMS_SEND
 export function refreshParticipantSmsStatus(smsId: number) {
   return apiClient.post<ApiResponse<ParticipantSmsDetailItem>>(`/api/participant-sms/${smsId}/refresh`);
+}
+
+// 예약 취소 사전 확인 — reserveId 로 함께 취소될(예약중) 대상 인원·수신자명을 반환. 권한: SMS_SEND
+export type ReservationCancelPreview = {
+  reserveId: string;
+  targetCount: number;
+  reserveTime: string | null;
+  recipientNames: string[];
+};
+
+export function getReservationCancelPreview(reserveId: string) {
+  return apiClient.get<ApiResponse<ReservationCancelPreview>>(
+    `/api/participant-sms/reservations/${reserveId}/cancel-preview`,
+  );
+}
+
+// 예약 발송 취소 — reserveId(예약 batch) 단위. 묶인 전 수신자가 함께 취소됨. 권한: SMS_SEND
+export function cancelSmsReservation(reserveId: string) {
+  return apiClient.delete<ApiResponse<number>>(`/api/participant-sms/reservations/${reserveId}`);
 }

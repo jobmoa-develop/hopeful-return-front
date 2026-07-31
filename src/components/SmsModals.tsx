@@ -22,6 +22,8 @@ import {
 } from '../utils/smsBytes';
 
 const NAME_PLACEHOLDER = '{name}';
+const REGION_PLACEHOLDER = '{region}';
+const ROUND_PLACEHOLDER = '{round}';
 
 // 발송 상태·형식 칩(전송내역 표시용)
 const SMS_STATUS_LABELS: Record<string, string> = { SUCCESS: '성공', FAIL: '실패', PENDING: '대기' };
@@ -75,6 +77,11 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
   const [images, setImages] = useState<PreparedMmsImage[]>([]);
   const [sending, setSending] = useState(false);
 
+  // 예약 발송(V16) — 토글 + 날짜/시간. 두 값을 합쳐 "yyyy-MM-dd HH:mm" 으로 전송
+  const [reserveEnabled, setReserveEnabled] = useState(false);
+  const [reserveDate, setReserveDate] = useState('');
+  const [reserveClock, setReserveClock] = useState('');
+
   const [templates, setTemplates] = useState<SmsTemplateItem[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templateForm, setTemplateForm] = useState<TemplateForm | null>(null);
@@ -94,6 +101,9 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
     setTitle('');
     setContent('');
     setImages([]);
+    setReserveEnabled(false);
+    setReserveDate('');
+    setReserveClock('');
     setTemplateForm(null);
     setSelectedCpId(null);
     setHistory([]);
@@ -145,20 +155,20 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
 
   if (!isOpen) return null;
 
-  const insertPlaceholder = () => {
+  const insertPlaceholder = (token: string) => {
     const el = contentRef.current;
     if (!el) {
-      setContent((c) => c + NAME_PLACEHOLDER);
+      setContent((c) => c + token);
       return;
     }
     const start = el.selectionStart ?? content.length;
     const end = el.selectionEnd ?? content.length;
-    const next = content.slice(0, start) + NAME_PLACEHOLDER + content.slice(end);
+    const next = content.slice(0, start) + token + content.slice(end);
     setContent(next);
     // 커서를 삽입 뒤로 이동
     requestAnimationFrame(() => {
       el.focus();
-      const pos = start + NAME_PLACEHOLDER.length;
+      const pos = start + token.length;
       el.setSelectionRange(pos, pos);
     });
   };
@@ -201,6 +211,20 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
       alert(`제목은 최대 ${TITLE_MAX_BYTES}바이트까지 가능합니다.`);
       return;
     }
+    // 예약 발송: 날짜·시간 입력 및 미래 시각 검증
+    let reserveTime: string | undefined;
+    if (reserveEnabled) {
+      if (!reserveDate || !reserveClock) {
+        alert('예약 발송 날짜와 시간을 모두 입력하세요.');
+        return;
+      }
+      const when = new Date(`${reserveDate}T${reserveClock}`);
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        alert('예약 발송 시각은 현재 이후여야 합니다.');
+        return;
+      }
+      reserveTime = `${reserveDate} ${reserveClock}`;
+    }
 
     setSending(true);
     try {
@@ -210,12 +234,20 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
         content,
         messageFormat: byteState.format,
         images: hasImage ? images.map((img) => img.base64) : undefined,
+        reserveTime,
       });
       const result = res.data.data;
-      alert(
-        `문자 발송 완료 (${result?.messageFormat ?? byteState.format})\n` +
-          `성공 ${result?.successCount ?? 0}건 / 실패 ${result?.failedCount ?? 0}건`,
-      );
+      if (reserveTime) {
+        alert(
+          `문자 예약 완료 (${result?.messageFormat ?? byteState.format})\n` +
+            `예정 시각: ${reserveTime}\n대상 ${result?.successCount ?? 0}건`,
+        );
+      } else {
+        alert(
+          `문자 발송 완료 (${result?.messageFormat ?? byteState.format})\n` +
+            `성공 ${result?.successCount ?? 0}건 / 실패 ${result?.failedCount ?? 0}건`,
+        );
+      }
       onSent();
       onClose();
     } catch (err) {
@@ -364,8 +396,14 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
               <div className="field">
                 <label>
                   본문{' '}
-                  <button type="button" className="btn tiny" onClick={insertPlaceholder}>
+                  <button type="button" className="btn tiny" onClick={() => insertPlaceholder(NAME_PLACEHOLDER)}>
                     {NAME_PLACEHOLDER} 삽입
+                  </button>{' '}
+                  <button type="button" className="btn tiny" onClick={() => insertPlaceholder(REGION_PLACEHOLDER)}>
+                    {REGION_PLACEHOLDER} 지역
+                  </button>{' '}
+                  <button type="button" className="btn tiny" onClick={() => insertPlaceholder(ROUND_PLACEHOLDER)}>
+                    {ROUND_PLACEHOLDER} 회차
                   </button>
                 </label>
                 <textarea
@@ -385,9 +423,37 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
                 {byteState.exceedsMax && <span className="danger">본문 초과</span>}
               </div>
               <p className="muted" style={{ fontSize: 12 }}>
-                ※ {NAME_PLACEHOLDER} 은 수신자 성명으로 치환됩니다. 실제 발송 형식은 성명 길이에 따라 서버가
-                재확정합니다.
+                ※ {NAME_PLACEHOLDER}=성명, {REGION_PLACEHOLDER}=지역, {ROUND_PLACEHOLDER}=회차 로 수신자별 치환됩니다.
+                치환 결과에 따라 길이가 달라질 수 있으며, 실제 발송 형식은 서버가 재확정합니다.
               </p>
+
+              <div className="field">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={reserveEnabled}
+                    onChange={(e) => setReserveEnabled(e.target.checked)}
+                  />{' '}
+                  예약 발송
+                </label>
+                {reserveEnabled && (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={reserveDate}
+                      onChange={(e) => setReserveDate(e.target.value)}
+                    />
+                    <input
+                      type="time"
+                      value={reserveClock}
+                      onChange={(e) => setReserveClock(e.target.value)}
+                    />
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      (현재 이후 시각)
+                    </span>
+                  </div>
+                )}
+              </div>
 
               <div className="field">
                 <label>이미지 첨부 (MMS · jpg/jpeg · ≤300KB · ≤1500×1440)</label>
@@ -532,7 +598,11 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
         </div>
 
         <div className="modal-f">
-          <span className="modal-note">※ 발송 시 SENS 를 통해 즉시 전송됩니다</span>
+          <span className="modal-note">
+            {reserveEnabled
+              ? '※ 예약 시각에 SENS 를 통해 발송됩니다'
+              : '※ 발송 시 SENS 를 통해 즉시 전송됩니다'}
+          </span>
           <button className="btn" onClick={onClose} disabled={sending}>
             취소
           </button>
@@ -541,7 +611,13 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
             onClick={handleSend}
             disabled={sending || courseParticipantIds.length === 0 || byteState.exceedsMax}
           >
-            {sending ? '발송 중…' : `문자 발송 (${courseParticipantIds.length}명)`}
+            {sending
+              ? reserveEnabled
+                ? '예약 중…'
+                : '발송 중…'
+              : reserveEnabled
+                ? `문자 예약 (${courseParticipantIds.length}명)`
+                : `문자 발송 (${courseParticipantIds.length}명)`}
           </button>
         </div>
       </div>
