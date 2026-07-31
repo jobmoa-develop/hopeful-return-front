@@ -48,6 +48,21 @@ export type CounselorAssignment = {
   status: CounselingType;
 };
 
+// 변경 주체 — NONE(빈칸) / COUNSELOR(상담사) / PARTICIPANT(참여자)
+export type ChangeSubject = 'NONE' | 'COUNSELOR' | 'PARTICIPANT';
+
+export const CHANGE_SUBJECT_LABELS: Record<ChangeSubject, string> = {
+  NONE: '',
+  COUNSELOR: '상담사',
+  PARTICIPANT: '참여자',
+};
+
+// 상담사/일정 변경 시 필수인 변경 주체·비고
+export type ChangeMeta = {
+  changedBy: ChangeSubject;
+  reason: string;
+};
+
 // GET /api/course-participants/{id} 응답 (CourseParticipantDetailResponse와 동일)
 export type CourseParticipantDetail = {
   courseParticipantId: number;
@@ -75,6 +90,8 @@ export type RecordCounselingSessionRequest = {
   startedAt?: string | null; // null이면 기존값 유지, endedAt 입력 시 완료
   endedAt?: string | null;
   memo?: string | null;
+  changedBy: ChangeSubject; // 필수
+  reason: string; // 필수
 };
 
 export type CounselingSessionResponse = {
@@ -137,10 +154,15 @@ export function updateCourseParticipant(
 }
 
 // 상담사 3슬롯 전체 교체 — 같은 슬롯 중복 시 400 COUNSELING_SLOT_DUPLICATED
-export function changeCounselors(courseParticipantId: number, counselors: CounselorAssignment[]) {
+// 변경 주체·비고는 필수(변경 이력 저장용)
+export function changeCounselors(
+  courseParticipantId: number,
+  counselors: CounselorAssignment[],
+  meta: ChangeMeta,
+) {
   return apiClient.patch<
     ApiResponse<{ courseParticipantId: number; counselors: CounselorSummary[] }>
-  >(`/api/course-participants/${courseParticipantId}/counselor`, { counselors });
+  >(`/api/course-participants/${courseParticipantId}/counselor`, { counselors, ...meta });
 }
 
 // 상담 세션(일시·메모) 기록 — endedAt 입력 시 해당 상담 완료 처리
@@ -362,16 +384,48 @@ export function getAssignableCounselors(courseParticipantId: number) {
   );
 }
 
-// 단일 슬롯 상담사 지정 — COUNSELOR는 본인 배정건만, 대상은 회차 배치 상담사만(BE 검증)
+// 단일 슬롯 상담사 지정 — COUNSELOR는 회차 배치 상담사면 사전상담사도 지정 가능(권한 개편),
+// 대상은 회차 배치 상담사만(BE 검증). 변경 주체·비고는 필수(변경 이력 저장용)
 export function assignSlotCounselor(
   courseParticipantId: number,
   counselingType: CounselingType,
-  payload: { counselorId: number },
+  payload: { counselorId: number } & ChangeMeta,
 ) {
   return apiClient.patch<
     ApiResponse<{ courseParticipantId: number; counselors: CounselorSummary[] }>
   >(
     `/api/course-participants/${courseParticipantId}/counselors/${counselingType}/counselor`,
     payload,
+  );
+}
+
+// 상담사/일정 변경 이력 항목 (BE CounselorChangeHistoryResponse.Item과 동일)
+export type CounselorChangeHistoryItem = {
+  historyId: number;
+  courseParticipantId: number;
+  courseNumber: number | null;
+  regionId: number | null;
+  counselingType: CounselingType | string | null;
+  changeType: 'COUNSELOR_CHANGE' | 'SCHEDULE_CHANGE' | string;
+  oldCounselorId: number | null;
+  oldCounselorName: string | null;
+  newCounselorId: number | null;
+  newCounselorName: string | null;
+  changedDate: string | null;
+  oldStartedAt: string | null;
+  newStartedAt: string | null;
+  oldEndedAt: string | null;
+  newEndedAt: string | null;
+  changedBy: ChangeSubject | string;
+  reason: string | null;
+  accountUserId: number | null;
+  accountUserName: string | null;
+  createdAt: string | null;
+};
+
+// 상담사/일정 변경 이력 조회 (최신순)
+export function getCounselorHistory(courseParticipantId: number) {
+  return apiClient.get<ApiResponse<{ histories: CounselorChangeHistoryItem[] }>>(
+    `/api/course-participants/${courseParticipantId}/counselor-history`,
   );
 }

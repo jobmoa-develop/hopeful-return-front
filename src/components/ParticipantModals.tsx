@@ -28,6 +28,7 @@ import type {
   BulkImportParsedRow,
   BulkImportPreview,
   BulkImportResult,
+  ChangeSubject,
   CounselingType,
   CounselorSummary,
   CourseParticipantDetail,
@@ -61,7 +62,9 @@ function canRecordSlot(
   return !counselorOnly || slot.counselorId === currentUserId;
 }
 
-// 이 사용자가 해당 슬롯의 상담사를 지정할 수 있는가 — COUNSELOR는 직전 슬롯 배정자만(체인)
+// 이 사용자가 해당 슬롯의 상담사를 지정할 수 있는가
+// - 사전상담(PRE_SESSION): 회차 배치 상담사면 지정·수정 가능(권한 개편). BE가 최종 검증.
+// - 사후1/2: COUNSELOR는 직전 슬롯 배정자만(체인).
 function canAssignSlot(
   counselors: CounselorSummary[],
   type: CounselingType,
@@ -69,9 +72,60 @@ function canAssignSlot(
   currentUserId?: number,
 ): boolean {
   if (!counselorOnly) return true;
+  if (type === 'PRE_SESSION') return true;
   const predecessor = PREDECESSOR_SLOT[type];
   if (!predecessor) return false;
   return counselors.find((c) => c.status === predecessor)?.counselorId === currentUserId;
+}
+
+// 변경 주체(빈칸/상담사/참여자, 필수) + 비고(필수) 공통 입력 — 상담사/일정 변경 이력용
+function ChangeMetaFields({
+  changedBy,
+  reason,
+  onChangedBy,
+  onReason,
+  disabled,
+}: {
+  changedBy: ChangeSubject;
+  reason: string;
+  onChangedBy: (v: ChangeSubject) => void;
+  onReason: (v: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <>
+      <div className="field full">
+        <label>변경 주체 *</label>
+        <select
+          value={changedBy}
+          disabled={disabled}
+          onChange={(e) => onChangedBy(e.target.value as ChangeSubject)}
+        >
+          <option value="NONE">선택 안 함</option>
+          <option value="COUNSELOR">상담사</option>
+          <option value="PARTICIPANT">참여자</option>
+        </select>
+      </div>
+      <div className="field full">
+        <label>변경 비고 *</label>
+        <textarea
+          value={reason}
+          disabled={disabled}
+          onChange={(e) => onReason(e.target.value)}
+          placeholder="변경 사유를 입력하세요(필수)"
+        />
+      </div>
+    </>
+  );
+}
+
+// 변경 비고(필수) 검증 — 공백이면 alert 후 false
+function validateChangeReason(reason: string): boolean {
+  if (!reason.trim()) {
+    alert('변경 비고는 필수입니다.');
+    return false;
+  }
+  return true;
 }
 
 type CounselorOption = { userId: number; userName: string };
@@ -442,6 +496,8 @@ export function CounselorEditModal({
     POST_SESSION_1: '',
     POST_SESSION_2: '',
   });
+  const [changedBy, setChangedBy] = useState<ChangeSubject>('NONE');
+  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const counselorOptions = useCounselorOptions(isOpen);
 
@@ -458,16 +514,19 @@ export function CounselorEditModal({
       }
     }
     setSlots(next);
+    setChangedBy('NONE');
+    setReason('');
   }, [isOpen, counselors]);
 
   const handleSave = async () => {
+    if (!validateChangeReason(reason)) return;
     setSaving(true);
     try {
       const payload = COUNSELING_TYPES.filter((type) => slots[type] !== '').map((type) => ({
         counselorId: Number(slots[type]),
         status: type,
       }));
-      await changeCounselors(courseParticipantId, payload);
+      await changeCounselors(courseParticipantId, payload, { changedBy, reason: reason.trim() });
       onSaved();
       onClose();
     } catch (err) {
@@ -508,6 +567,12 @@ export function CounselorEditModal({
             </select>
           </div>
         ))}
+        <ChangeMetaFields
+          changedBy={changedBy}
+          reason={reason}
+          onChangedBy={setChangedBy}
+          onReason={setReason}
+        />
       </div>
       <p className="muted" style={{ fontSize: '11.5px', marginTop: '10px' }}>
         · 같은 상담사가 여러 슬롯을 맡을 수 있습니다. 슬롯을 "배정 안 함"으로 저장하면 해당
@@ -553,6 +618,8 @@ export function CounselingSessionModal({
   const [startedAt, setStartedAt] = useState('');
   const [endedAt, setEndedAt] = useState('');
   const [memo, setMemo] = useState('');
+  const [changedBy, setChangedBy] = useState<ChangeSubject>('NONE');
+  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -568,6 +635,8 @@ export function CounselingSessionModal({
     setStartedAt(toInputDateTime(current?.startedAt ?? null));
     setEndedAt(toInputDateTime(current?.endedAt ?? null));
     setMemo(current?.memo ?? '');
+    setChangedBy('NONE');
+    setReason('');
   }, [isOpen, counselingType, counselors]);
 
   const currentCounselor = counselors.find((c) => c.status === counselingType);
@@ -583,12 +652,15 @@ export function CounselingSessionModal({
       alert('본인에게 배정된 상담만 기록할 수 있습니다.');
       return;
     }
+    if (!validateChangeReason(reason)) return;
     setSaving(true);
     try {
       await recordCounselingSession(courseParticipantId, counselingType, {
         startedAt: toLocalDateTime(startedAt),
         endedAt: toLocalDateTime(endedAt),
         memo: memo || null,
+        changedBy,
+        reason: reason.trim(),
       });
       onSaved();
       onClose();
@@ -667,6 +739,13 @@ export function CounselingSessionModal({
             disabled={!canEditCurrent}
           />
         </div>
+        <ChangeMetaFields
+          changedBy={changedBy}
+          reason={reason}
+          onChangedBy={setChangedBy}
+          onReason={setReason}
+          disabled={!canEditCurrent}
+        />
       </div>
     </ApiModal>
   );
@@ -1728,6 +1807,8 @@ export function SlotCounselorAssignModal({
     POST_SESSION_1: '',
     POST_SESSION_2: '',
   });
+  const [changedBy, setChangedBy] = useState<ChangeSubject>('NONE');
+  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1743,6 +1824,8 @@ export function SlotCounselorAssignModal({
       }
     }
     setSlots(next);
+    setChangedBy('NONE');
+    setReason('');
     getAssignableCounselors(courseParticipantId)
       .then((res) => setOptions(res.data.data?.counselors ?? []))
       .catch(() => setOptions([]));
@@ -1766,10 +1849,15 @@ export function SlotCounselorAssignModal({
       onClose();
       return;
     }
+    if (!validateChangeReason(reason)) return;
     setSaving(true);
     try {
       for (const type of changed) {
-        await assignSlotCounselor(courseParticipantId, type, { counselorId: Number(slots[type]) });
+        await assignSlotCounselor(courseParticipantId, type, {
+          counselorId: Number(slots[type]),
+          changedBy,
+          reason: reason.trim(),
+        });
       }
       onSaved();
       onClose();
@@ -1823,11 +1911,19 @@ export function SlotCounselorAssignModal({
             </div>
           );
         })}
+        <ChangeMetaFields
+          changedBy={changedBy}
+          reason={reason}
+          onChangedBy={setChangedBy}
+          onReason={setReason}
+        />
       </div>
       <p className="muted" style={{ fontSize: '11.5px', marginTop: '10px' }}>
         · 지정 대상은 해당 회차에 배치된 상담사만 선택할 수 있습니다. 상담사 교체 시 이전 세션
         기록은 초기화됩니다.
-        {counselorOnly ? ' · 상담사는 본인 담당 다음 단계의 상담사만 지정할 수 있습니다.' : ''}
+        {counselorOnly
+          ? ' · 상담사는 사전상담사, 그리고 본인 담당 다음 단계의 상담사를 지정할 수 있습니다.'
+          : ''}
       </p>
     </ApiModal>
   );
