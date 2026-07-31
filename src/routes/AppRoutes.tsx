@@ -8,6 +8,7 @@ import RoundsPage from '../pages/RoundsPage';
 import RoundDetailPage from '../pages/RoundDetailPage';
 import AssignPage from '../pages/AssignPage';
 import ConsultingPage from '../pages/ConsultingPage';
+import CounselorScheduleCalendarPage from '../pages/CounselorScheduleCalendarPage';
 import AttendancePage from '../pages/AttendancePage';
 import LoginPage from '../pages/LoginPage';
 import { useAuth } from '../context/AuthContext';
@@ -117,6 +118,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR', 'COUNSELOR']}>
               <ConsultingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/counseling-schedule"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'OPERATOR', 'COUNSELOR']}>
+              <CounselorScheduleCalendarPage />
             </ProtectedRoute>
           }
         />
