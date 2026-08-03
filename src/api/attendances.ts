@@ -138,3 +138,27 @@ export type CompletionRiskResponse = {
 export function getCompletionRisk(courseId: number) {
   return apiClient.get<ApiResponse<CompletionRiskResponse>>(`/api/attendances/courses/${courseId}/completion-risk`);
 }
+
+// ─── 일차별 출석 일괄 등록 ───
+export type BulkAttendanceItem = {
+  courseParticipantId: number;
+  checkInTime?: string;   // "HH:mm:ss"
+  checkOutTime?: string;  // "HH:mm:ss"
+};
+
+export type BulkAttendanceRequest = {
+  courseId: number;
+  dayNo: number;
+  attendances: BulkAttendanceItem[];
+};
+
+export type BulkAttendanceResponse = {
+  savedCount: number;
+  dayNo: number;
+  courseId: number;
+  message: string;
+};
+
+export function createAttendanceBulk(payload: BulkAttendanceRequest) {
+  return apiClient.post<ApiResponse<BulkAttendanceResponse>>('/api/attendances/bulk', payload);
+}

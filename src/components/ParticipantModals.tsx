@@ -40,6 +40,7 @@ import { getParticipants } from '../api/participants';
 import type { ParticipantListItem } from '../api/participants';
 import { enrollParticipant } from '../api/courseParticipants';
 import type { RiskStatus } from '../api/attendances';
+import { createAttendanceBulk } from '../api/attendances';
 
 const COUNSELING_TYPES: CounselingType[] = ['PRE_SESSION', 'POST_SESSION_1', 'POST_SESSION_2'];
 const INFLOW_OPTS = ['소진공', '워크넷', '컨설턴트 연계', '사내 타사업부', '외부 홍보(당근·벼룩)'];
@@ -2622,17 +2623,17 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
                   <table className="data">
                     <thead>
                       <tr>
-                        <th style={{ width: '50px' }}>행</th>
+                        <th className="col-row">행</th>
                         <th>이름</th>
                         <th>사유</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="participants-list">
                       {result.details.map((d) => (
                         <tr key={`${d.rowNumber}-${d.outcome}`}>
                           <td>{d.rowNumber}</td>
                           <td>{d.name ?? '—'}</td>
-                          <td className="muted" style={{ fontSize: '12px' }}>
+                          <td className="muted">
                             {d.reason ?? d.outcome}
                           </td>
                         </tr>
@@ -2679,5 +2680,201 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
         </div>
       </div>
     </div>
+  );
+}
+
+
+// 8. 일차별 출석 일괄 등록 모달 — 체크박스로 선택한 참여자에게 동일 입/퇴실 시간 적용
+interface BulkAttendanceModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  courseId: number;
+  dayNo: number;
+  participants: { courseParticipantId: number; name: string }[];
+  // 이미 해당 일차 출석 기록이 있는 courseParticipantId 집합 — 체크박스에서 제외
+  alreadyRecordedIds: Set<number>;
+  onSaved: () => void;
+}
+
+export function BulkAttendanceModal({
+  isOpen,
+  onClose,
+  courseId,
+  dayNo,
+  participants,
+  alreadyRecordedIds,
+  onSaved,
+}: BulkAttendanceModalProps) {
+  const [checkInTime, setCheckInTime] = useState('09:00:00');
+  const [checkOutTime, setCheckOutTime] = useState('18:00:00');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [saving, setSaving] = useState(false);
+
+  const selectableParticipants = useMemo(
+    () => participants.filter((p) => !alreadyRecordedIds.has(p.courseParticipantId)),
+    [participants, alreadyRecordedIds],
+  );
+  const alreadyRecordedCount = participants.length - selectableParticipants.length;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setCheckInTime('09:00:00');
+    setCheckOutTime('18:00:00');
+    setSelectedIds(new Set());
+  }, [isOpen, dayNo]);
+
+  const toggleOne = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    setSelectedIds((prev) =>
+      prev.size === selectableParticipants.length
+        ? new Set()
+        : new Set(selectableParticipants.map((p) => p.courseParticipantId)),
+    );
+  };
+
+  const handleSave = async () => {
+    if (selectedIds.size === 0) {
+      alert('출석 처리할 참여자를 선택하세요.');
+      return;
+    }
+    if (!checkInTime) {
+      alert('입실 시간을 입력하세요.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await createAttendanceBulk({
+        courseId,
+        dayNo,
+        attendances: Array.from(selectedIds).map((id) => ({
+          courseParticipantId: id,
+          checkInTime,
+          checkOutTime: checkOutTime || undefined,
+        })),
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      alert(apiErrorMessage(err, '일괄 출석 처리에 실패했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ApiModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`${dayNo}일차 출석 일괄 등록`}
+      onSave={handleSave}
+      saving={saving}
+      note={`※ 선택한 ${selectedIds.size}명에게 동일한 입/퇴실 시간이 적용됩니다`}
+    >
+      <div className="form-grid">
+        <div className="field">
+          <label>
+            입실 시간 (HH:mm:ss)<span className="req">*</span>
+          </label>
+          <input
+            type="time"
+            step="1"
+            value={checkInTime}
+            onChange={(e) => setCheckInTime(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label>퇴실 시간 (HH:mm:ss)</label>
+          <input
+            type="time"
+            step="1"
+            value={checkOutTime}
+            onChange={(e) => setCheckOutTime(e.target.value)}
+          />
+        </div>
+        {alreadyRecordedCount > 0 && (
+          <div className="field full muted" style={{ fontSize: '12px' }}>
+            이미 {dayNo}일차 출석이 등록된 {alreadyRecordedCount}명은 목록에서 제외됩니다. (중복
+            등록 방지 · 수정은 개별 셀에서 진행)
+          </div>
+        )}
+      </div>
+
+      {/* form-grid/.field 바깥 — 카스케이드 충돌 없이 기존 .chk 클래스 사용 */}
+      <div style={{ marginTop: '16px' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '4px',
+          }}
+        >
+          <label
+            className="chk"
+            style={{
+              padding: 0,
+              cursor: selectableParticipants.length === 0 ? 'default' : 'pointer',
+              fontWeight: 600,
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={
+                selectableParticipants.length > 0 &&
+                selectedIds.size === selectableParticipants.length
+              }
+              onChange={toggleAll}
+              disabled={selectableParticipants.length === 0}
+            />
+            전체 선택
+          </label>
+          <span className="muted" style={{ fontSize: '12px' }}>
+            {selectedIds.size} / {selectableParticipants.length}명 선택
+          </span>
+        </div>
+
+        <div
+          style={{
+            maxHeight: '260px',
+            overflowY: 'auto',
+            border: '1px solid var(--line)',
+            borderRadius: '8px',
+            padding: '2px 12px',
+          }}
+        >
+          {selectableParticipants.length === 0 && (
+            <div style={{ padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>
+              {dayNo}일차 출석 처리가 가능한 참여자가 없습니다.
+            </div>
+          )}
+          {selectableParticipants.map((p, idx) => (
+            <label
+              key={p.courseParticipantId}
+              className="chk"
+              style={{
+                borderBottom:
+                  idx < selectableParticipants.length - 1 ? '1px solid var(--line-soft)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.has(p.courseParticipantId)}
+                onChange={() => toggleOne(p.courseParticipantId)}
+              />
+              <span>{p.name}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </ApiModal>
   );
 }
