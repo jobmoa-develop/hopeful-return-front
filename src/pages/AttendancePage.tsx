@@ -4,7 +4,7 @@ import { getCourses, getCourseParticipants } from '../api/courses';
 import type { CourseSummary, CourseParticipant } from '../api/courses';
 import { getAttendances, getCompletionRisk } from '../api/attendances';
 import type { AttendanceListItem, CompletionRiskItem, RiskStatus } from '../api/attendances';
-import { AttendanceApiModal } from '../components/ParticipantModals';
+import { AttendanceApiModal, BulkAttendanceModal } from '../components/ParticipantModals';
 
 const STATUS_TO_KOR: Record<string, string> = {
   ATTEND: '출석',
@@ -21,13 +21,17 @@ export default function AttendancePage() {
   const [attendancesMap, setAttendancesMap] = useState<Record<string, AttendanceListItem>>({});
   const [riskMap, setRiskMap] = useState<Record<number, CompletionRiskItem>>({});
 
-  // 모달 상태
+  // 모달 상태 (개별 셀 상세)
   const [selectedCell, setSelectedCell] = useState<{
     courseParticipantId: number;
     participantName: string;
     dayNo: number;
     attendanceId?: number;
   } | null>(null);
+
+  // 일차별 일괄 출석 모달 상태
+  const [bulkDayNo, setBulkDayNo] = useState<number>(1);
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
 
   // 실제 API에서 개설된 회차(courses) 목록 조회
   useEffect(() => {
@@ -152,6 +156,16 @@ export default function AttendancePage() {
     }
   };
 
+  // 현재 선택된 회차(courseId) — bulk 모달, 저장 후 리로드에 사용
+  const matchedCourse = courses.find((c) => String(c.courseId) === selectedCourseNo);
+
+  // bulkDayNo 기준으로 이미 출석 기록이 있는 courseParticipantId 집합 (중복 등록 방지용)
+  const alreadyRecordedIds = new Set(
+    courseParticipants
+      .filter((cp) => attendancesMap[`${cp.courseParticipantId}_${bulkDayNo}`]?.attendanceId != null)
+      .map((cp) => cp.courseParticipantId)
+  );
+
   return (
     <section className="view active" id="view-attendance">
       <div className="perm-bar">
@@ -176,6 +190,32 @@ export default function AttendancePage() {
             ))}
           </select>
         </span>
+
+        {canEdit && (
+          <>
+            <span className="select" style={{ position: 'relative' }}>
+              <span className="ico">일차</span>
+              <select
+                value={bulkDayNo}
+                onChange={e => setBulkDayNo(Number(e.target.value))}
+                style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+              >
+                {[1, 2, 3, 4, 5].map(d => (
+                  <option key={d} value={d}>{d}일차 ▾</option>
+                ))}
+              </select>
+            </span>
+            <button
+              className="btn primary"
+              style={{ fontSize: '13px' }}
+              onClick={() => setBulkModalOpen(true)}
+              disabled={courseParticipants.length === 0}
+            >
+              선택 일차 일괄 출석
+            </button>
+          </>
+        )}
+
         <span className="muted" style={{ fontSize: '12.5px' }}>
           · 외출·조퇴는 시간까지 기록 · 셀 클릭 시 상세 조회/등록 가능
         </span>
@@ -252,7 +292,7 @@ export default function AttendancePage() {
       </div>
       <p className="note">※ 진행자가 당일 출결을 입력 · QR 먹통 시 수기 대체 입력 · 누적 미달 시 수료 위험 경고</p>
 
-      {/* 모달 */}
+      {/* 개별 셀 상세 모달 */}
       {selectedCell && (
         <AttendanceApiModal
           isOpen={true}
@@ -267,6 +307,22 @@ export default function AttendancePage() {
           participantName={selectedCell.participantName}
           dayNo={selectedCell.dayNo}
           initialAttendanceId={selectedCell.attendanceId}
+        />
+      )}
+
+      {/* 일차별 일괄 출석 모달 */}
+      {bulkModalOpen && matchedCourse && (
+        <BulkAttendanceModal
+          isOpen={true}
+          onClose={() => setBulkModalOpen(false)}
+          courseId={matchedCourse.courseId}
+          dayNo={bulkDayNo}
+          participants={courseParticipants.map((cp) => ({
+            courseParticipantId: cp.courseParticipantId,
+            name: cp.participantName ?? cp.name ?? '이름없음',
+          }))}
+          alreadyRecordedIds={alreadyRecordedIds}
+          onSaved={() => loadDataForCourse(matchedCourse.courseId)}
         />
       )}
     </section>
