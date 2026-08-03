@@ -53,3 +53,20 @@ export function getDashboardCalendar(year?: number, month?: number) {
         params: { year, month },
     });
 }
+
+
+export type DashboardTaskCompletionResponse = {
+    completedTaskIds: string[];
+};
+
+export function getDashboardTaskCompletions() {
+    return apiClient.get<ApiResponse<DashboardTaskCompletionResponse>>('/api/dashboard/task-completions');
+}
+
+export function completeDashboardTask(taskId: string) {
+    return apiClient.post<ApiResponse<null>>('/api/dashboard/task-completions', { taskId });
+}
+
+export function uncompleteDashboardTask(taskId: string) {
+    return apiClient.delete<ApiResponse<null>>(`/api/dashboard/task-completions/${encodeURIComponent(taskId)}`);
+}
