@@ -9,7 +9,7 @@ import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 
-const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
 
 // 이 역할들은 본인이 담당자로 배정된 회차만 목록에 노출
 const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
@@ -50,7 +50,7 @@ function statusLabel(status?: CourseStatus) {
     CLOSED: '모집마감',
     IN_PROGRESS: '교육중',
     COMPLETED: '완료',
-    CANCELLED: '취소',
+    CANCELED: '취소',
   };
   return status ? labels[status] ?? status : '-';
 }
@@ -58,7 +58,7 @@ function statusLabel(status?: CourseStatus) {
 function statusClass(status?: CourseStatus) {
   if (status === 'OPEN' || status === 'IN_PROGRESS') return 'info';
   if (status === 'COMPLETED') return 'ok';
-  if (status === 'CANCELLED') return 'danger';
+  if (status === 'CANCELED') return 'danger';
   if (status === 'CLOSED') return 'warn';
   return 'neutral';
 }

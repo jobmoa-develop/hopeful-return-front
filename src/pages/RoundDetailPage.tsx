@@ -17,7 +17,7 @@ import { useRole } from '../context/RoleContext';
 import { roleNameLabel } from '../api/userRoles'; // ROLE_NAME_LABELS 매핑만 재사용
 import { ParticipantEnrollModal } from '../components/ParticipantModals';
 
-const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
 
 // 휴게시간 입력용 시간/분 드롭다운 옵션 (실제 저장/전송 값은 이 둘을 합산한 총 분(breakMinutes))
 const BREAK_HOUR_OPTIONS = ['0', '1', '2', '3', '4'];
@@ -58,7 +58,7 @@ function statusLabel(status?: string) {
     CLOSED: '모집마감',
     IN_PROGRESS: '교육중',
     COMPLETED: '완료',
-    CANCELLED: '취소',
+    CANCELED: '취소',
   };
   return status ? labels[status] ?? status : '-';
 }
@@ -66,7 +66,7 @@ function statusLabel(status?: string) {
 function statusClass(status?: string) {
   if (status === 'OPEN' || status === 'IN_PROGRESS') return 'info';
   if (status === 'COMPLETED') return 'ok';
-  if (status === 'CANCELLED') return 'danger';
+  if (status === 'CANCELED') return 'danger';
   if (status === 'CLOSED') return 'warn';
   return 'neutral';
 }
