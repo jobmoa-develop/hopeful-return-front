@@ -108,9 +108,9 @@ export default function FollowUpPage() {
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
           <RegionSelect
-            value={selectedRegionId}
+            value={{ regionId: selectedRegionId === '' ? undefined : selectedRegionId }}
             onChange={(val) => {
-              setSelectedRegionId(val);
+              setSelectedRegionId(val.regionId ?? '');
               setPage(0);
             }}
             groups={regionGroups}
