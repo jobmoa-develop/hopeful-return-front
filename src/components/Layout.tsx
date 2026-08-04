@@ -172,7 +172,8 @@ export default function Layout() {
               <span className="ic">👤</span>참여자 관리
             </Link>
           )}
-          {roleConfig.menu.includes('participants') && user?.canSendSms && (
+          {roleConfig.menu.includes('participants')
+            && (user?.canSendSms || roleConfig.roles.includes('ADMIN')) && (
             <Link
               to="/participants/sms-history"
               className={`nav-item ${isNavActive('smsHistory') ? 'active' : ''}`}
