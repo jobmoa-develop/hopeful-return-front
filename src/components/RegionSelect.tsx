@@ -1,20 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RegionGroup } from '../api/regions';
 
+// 지역 필터 값 — 상위(서울) 선택 시 parentRegionId, 하위(양천) 선택 시 regionId.
+// 둘 다 없으면 전체. 서버는 parentRegionId 를 받으면 산하 하위 지역 전체로 확장 조회한다.
+export type RegionFilterValue = { regionId?: number; parentRegionId?: number };
+
 interface RegionSelectProps {
-  value: number | '';
-  onChange: (value: number | '') => void;
+  value: RegionFilterValue;
+  onChange: (value: RegionFilterValue) => void;
   groups: RegionGroup[];
+  // true 면 상위 지역행을 "○○ 전체"로 클릭 선택 가능(parentRegionId). false(기본)면 상위는 라벨만.
+  allowParentSelect?: boolean;
   allLabel?: string;
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
 }
 
+/**
+ * 공용 지역 필터(사후관리 디자인). 커스텀 드롭다운으로 전체·상위지역 전체·하위지역을 선택한다.
+ * - 하위 지역만 필요한 화면(대시보드·사후관리): allowParentSelect 생략 → 상위는 라벨.
+ * - 상위지역 "전체"까지 필요한 화면(참여자관리·문자내역·상담사일정): allowParentSelect 로 활성화.
+ */
 export function RegionSelect({
   value,
   onChange,
   groups,
+  allowParentSelect = false,
   allLabel = '전체 지역',
   placeholder = '지역 선택',
   className = '',
@@ -23,17 +35,22 @@ export function RegionSelect({
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 현재 선택된 항목 이름 찾기
+  // 현재 선택된 항목 이름 찾기 — 상위 전체 / 하위 개별 / 전체
   let selectedLabel = allLabel;
-  if (value !== '') {
+  if (value.parentRegionId != null) {
+    const group = groups.find((g) => g.parent.regionId === value.parentRegionId);
+    if (group) selectedLabel = `${group.parent.regionName} 전체`;
+  } else if (value.regionId != null) {
     for (const group of groups) {
-      const match = group.children.find((c) => c.regionId === value);
+      const match = group.children.find((c) => c.regionId === value.regionId);
       if (match) {
         selectedLabel = `${group.parent.regionName} > ${match.regionName}`;
         break;
       }
     }
   }
+
+  const isAllSelected = value.regionId == null && value.parentRegionId == null;
 
   // 외부 클릭 시 드롭다운 닫기
   useEffect(() => {
@@ -45,6 +62,11 @@ export function RegionSelect({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const select = (next: RegionFilterValue) => {
+    onChange(next);
+    setIsOpen(false);
+  };
 
   return (
     <div
@@ -70,7 +92,7 @@ export function RegionSelect({
           padding: '5px 10px',
           fontSize: 12.5,
           fontWeight: 500,
-          color: value === '' ? 'var(--muted, #64748b)' : 'var(--fg, #1e293b)',
+          color: isAllSelected ? 'var(--muted, #64748b)' : 'var(--fg, #1e293b)',
           background: 'var(--bg-card, #ffffff)',
           border: '1px solid var(--border, #cbd5e1)',
           borderRadius: 6,
@@ -118,89 +140,119 @@ export function RegionSelect({
         >
           {/* 전체 옵션 */}
           <div
-            onClick={() => {
-              onChange('');
-              setIsOpen(false);
-            }}
+            onClick={() => select({})}
             style={{
               padding: '7px 14px',
               fontSize: 12.5,
-              fontWeight: value === '' ? 600 : 400,
-              color: value === '' ? '#2563eb' : '#334155',
-              background: value === '' ? '#eff6ff' : 'transparent',
+              fontWeight: isAllSelected ? 600 : 400,
+              color: isAllSelected ? '#2563eb' : '#334155',
+              background: isAllSelected ? '#eff6ff' : 'transparent',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}
             onMouseEnter={(e) => {
-              if (value !== '') e.currentTarget.style.background = '#f8fafc';
+              if (!isAllSelected) e.currentTarget.style.background = '#f8fafc';
             }}
             onMouseLeave={(e) => {
-              if (value !== '') e.currentTarget.style.background = 'transparent';
+              if (!isAllSelected) e.currentTarget.style.background = 'transparent';
             }}
           >
             <span>{allLabel}</span>
-            {value === '' && <span style={{ color: '#2563eb', fontSize: 12 }}>✓</span>}
+            {isAllSelected && <span style={{ color: '#2563eb', fontSize: 12 }}>✓</span>}
           </div>
 
           {/* 상위 및 하위 지역 그룹 */}
-          {groups.map((group) => (
-            <div key={group.parent.regionId} style={{ marginTop: 4 }}>
-              {/* 상위 지역 (라벨 - 선택 불가) */}
-              <div
-                style={{
-                  padding: '6px 14px 2px 12px',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: '#64748b',
-                  letterSpacing: '0.02em',
-                  borderTop: '1px solid #f1f5f9',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <span style={{ color: '#94a3b8' }}>•</span>
-                {group.parent.regionName}
-              </div>
-
-              {/* 하위 지역 옵션 */}
-              {group.children.map((child) => {
-                const isSelected = value === child.regionId;
-                return (
+          {groups.map((group) => {
+            const isParentSelected = value.parentRegionId === group.parent.regionId;
+            return (
+              <div key={group.parent.regionId} style={{ marginTop: 4 }}>
+                {/* 상위 지역 — allowParentSelect 면 "○○ 전체"로 선택 가능, 아니면 라벨 */}
+                {allowParentSelect ? (
                   <div
-                    key={child.regionId}
-                    onClick={() => {
-                      onChange(child.regionId);
-                      setIsOpen(false);
-                    }}
+                    onClick={() => select({ parentRegionId: group.parent.regionId })}
                     style={{
-                      padding: '6px 14px 6px 24px',
-                      fontSize: 12.5,
-                      fontWeight: isSelected ? 600 : 400,
-                      color: isSelected ? '#2563eb' : '#334155',
-                      background: isSelected ? '#eff6ff' : 'transparent',
+                      padding: '6px 14px 6px 12px',
+                      fontSize: 12,
+                      fontWeight: isParentSelected ? 700 : 600,
+                      color: isParentSelected ? '#2563eb' : '#475569',
+                      background: isParentSelected ? '#eff6ff' : 'transparent',
+                      letterSpacing: '0.02em',
+                      borderTop: '1px solid #f1f5f9',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
+                      gap: 4,
                       transition: 'background 0.1s ease',
                     }}
                     onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                      if (!isParentSelected) e.currentTarget.style.background = '#f8fafc';
                     }}
                     onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.background = 'transparent';
+                      if (!isParentSelected) e.currentTarget.style.background = 'transparent';
                     }}
                   >
-                    <span>{child.regionName}</span>
-                    {isSelected && <span style={{ color: '#2563eb', fontSize: 12 }}>✓</span>}
+                    <span>
+                      <span style={{ color: '#94a3b8', marginRight: 4 }}>•</span>
+                      {group.parent.regionName} 전체
+                    </span>
+                    {isParentSelected && <span style={{ color: '#2563eb', fontSize: 12 }}>✓</span>}
                   </div>
-                );
-              })}
-            </div>
-          ))}
+                ) : (
+                  <div
+                    style={{
+                      padding: '6px 14px 2px 12px',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: '#64748b',
+                      letterSpacing: '0.02em',
+                      borderTop: '1px solid #f1f5f9',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <span style={{ color: '#94a3b8' }}>•</span>
+                    {group.parent.regionName}
+                  </div>
+                )}
+
+                {/* 하위 지역 옵션 */}
+                {group.children.map((child) => {
+                  const isSelected = value.regionId === child.regionId;
+                  return (
+                    <div
+                      key={child.regionId}
+                      onClick={() => select({ regionId: child.regionId })}
+                      style={{
+                        padding: '6px 14px 6px 24px',
+                        fontSize: 12.5,
+                        fontWeight: isSelected ? 600 : 400,
+                        color: isSelected ? '#2563eb' : '#334155',
+                        background: isSelected ? '#eff6ff' : 'transparent',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        transition: 'background 0.1s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) e.currentTarget.style.background = 'transparent';
+                      }}
+                    >
+                      <span>{child.regionName}</span>
+                      {isSelected && <span style={{ color: '#2563eb', fontSize: 12 }}>✓</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

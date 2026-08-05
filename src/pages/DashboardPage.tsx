@@ -291,8 +291,8 @@ export default function DashboardPage() {
             <span className="section-title">사후관리 현황 (수료자 기준)</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
               <RegionSelect
-                value={statsRegionId}
-                onChange={(val) => setStatsRegionId(val)}
+                value={{ regionId: statsRegionId === '' ? undefined : statsRegionId }}
+                onChange={(val) => setStatsRegionId(val.regionId ?? '')}
                 groups={statsRegionGroups}
                 allLabel="전체 지역"
               />

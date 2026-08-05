@@ -3,10 +3,10 @@ import { getCounselingSchedules } from '../api/counselingSchedules';
 import type { CounselingScheduleItem } from '../api/counselingSchedules';
 import { COUNSELING_TYPE_LABELS } from '../api/courseParticipants';
 import type { CounselingType } from '../api/courseParticipants';
-import { getRegions } from '../api/regions';
+import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
-import { RegionFilterSelect } from '../components/RegionFilterSelect';
-import type { RegionFilterValue } from '../components/RegionFilterSelect';
+import { RegionSelect } from '../components/RegionSelect';
+import type { RegionFilterValue } from '../components/RegionSelect';
 import { useRole } from '../context/RoleContext';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -122,6 +122,7 @@ export default function CounselorScheduleCalendarPage() {
     return new Date(n.getFullYear(), n.getMonth(), n.getDate());
   });
   const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}. 참여자관리와 동일.
   const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumber, setCourseNumber] = useState('');
@@ -283,7 +284,13 @@ export default function CounselorScheduleCalendarPage() {
           <strong style={{ fontSize: '15px' }}>{periodLabel}</strong>
           <div style={{ flex: 1 }} />
           {canFilterRegion && (
-            <RegionFilterSelect regions={regions} value={regionFilter} onChange={setRegionFilter} />
+            <RegionSelect
+              groups={regionGroups}
+              value={regionFilter}
+              onChange={setRegionFilter}
+              allowParentSelect
+              allLabel="전체 지역"
+            />
           )}
           <input
             className="input"

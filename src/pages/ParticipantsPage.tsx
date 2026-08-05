@@ -5,10 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { getParticipants, deleteParticipant } from '../api/participants';
 import type { ParticipantListItem } from '../api/participants';
 import { SmsSendModal } from '../components/SmsModals';
-import { getRegions } from '../api/regions';
+import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
-import { RegionFilterSelect } from '../components/RegionFilterSelect';
-import type { RegionFilterValue } from '../components/RegionFilterSelect';
+import { RegionSelect } from '../components/RegionSelect';
+import type { RegionFilterValue } from '../components/RegionSelect';
 import {
   COUNSELING_TYPE_LABELS,
   CP_STATUS_CHIP,
@@ -69,6 +69,7 @@ export default function ParticipantsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchName, setSearchName] = useState('');
   const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}.
   const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumberQuery, setCourseNumberQuery] = useState('');
@@ -279,13 +280,15 @@ export default function ParticipantsPage() {
 
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
-          <RegionFilterSelect
-            regions={regions}
+          <RegionSelect
+            groups={regionGroups}
             value={regionFilter}
             onChange={(v) => {
               setRegionFilter(v);
               setPage(0);
             }}
+            allowParentSelect
+            allLabel="전체 지역"
           />
           <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
             <input
