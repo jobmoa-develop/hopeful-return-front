@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 
-export type CourseStatus = 'PLANNED' | 'OPEN' | 'CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | string;
+export type CourseStatus = 'PLANNED' | 'OPEN' | 'CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED' | string;
 
 export type CourseSummary = {
   courseId: number;
