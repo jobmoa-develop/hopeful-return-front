@@ -16,8 +16,14 @@ export default function ProtectedRoute({ allowedRoles, requireSmsPermission, chi
     return <Navigate to="/login" replace />;
   }
 
+  const userRoles = user?.roles ?? [];
+
+  // 시스템 관리자(ADMIN)는 슈퍼유저 — 역할/문자권한 게이트를 모두 우회하고 전체 페이지 접근 허용.
+  if (userRoles.includes('ADMIN')) {
+    return children;
+  }
+
   if (allowedRoles) {
-    const userRoles = user?.roles ?? [];
     const hasAccess = userRoles.some((r) => allowedRoles.includes(r as AppRole));
     if (!hasAccess) {
       return (

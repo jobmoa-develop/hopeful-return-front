@@ -41,6 +41,7 @@ function KstClock() {
 const PAGE_META = [
   { match: (path: string) => path === '/', crumb: '운영', title: '대시보드' },
   { match: (path: string) => path === '/participants', crumb: '운영', title: '참여자 관리' },
+  { match: (path: string) => path === '/mypage', crumb: '내 계정', title: '마이페이지' },
   {
     match: (path: string) => path === '/participants/sms-history',
     crumb: '운영 · 참여자',
@@ -95,6 +96,7 @@ export default function Layout() {
     if (view === 'followUp' && path.startsWith('/follow-up')) return true;
     if (view === 'userManagement' && path === '/users') return true;
     if (view === 'smsPermission' && path === '/users/sms-permission') return true;
+    if (view === 'mypage' && path === '/mypage') return true;
     return false;
   };
 
@@ -170,7 +172,8 @@ export default function Layout() {
               <span className="ic">👤</span>참여자 관리
             </Link>
           )}
-          {roleConfig.menu.includes('participants') && user?.canSendSms && (
+          {roleConfig.menu.includes('participants')
+            && (user?.canSendSms || roleConfig.roles.includes('ADMIN')) && (
             <Link
               to="/participants/sms-history"
               className={`nav-item ${isNavActive('smsHistory') ? 'active' : ''}`}
@@ -264,6 +267,15 @@ export default function Layout() {
               <span className="ic">💬</span>문자 권한 관리
             </Link>
           )}
+
+          <div className="nav-group">내 계정</div>
+          <Link
+            to="/mypage"
+            className={`nav-item ${isNavActive('mypage') ? 'active' : ''}`}
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <span className="ic">🙍</span>마이페이지
+          </Link>
         </nav>
 
         <div className="sidebar-foot">디자인 시안 v0.2 · 데이터 가상</div>
@@ -284,7 +296,7 @@ export default function Layout() {
 
           <KstClock />
 
-          <div className="user">
+          <Link to="/mypage" className="user" style={{ cursor: 'pointer' }}>
             <div className="avatar" id="u-avatar">
               {userInitial}
             </div>
@@ -296,7 +308,7 @@ export default function Layout() {
                 {roleConfig.roles.join(' · ')}
               </div>
             </div>
-          </div>
+          </Link>
           <button className="btn" type="button" onClick={handleLogout} disabled={isLoggingOut}>
             {isLoggingOut ? '로그아웃 중...' : '로그아웃'}
           </button>

@@ -7,6 +7,7 @@ import {
     deleteUser,
     getUser,
     getUsers,
+    resetUserPassword,
     roleNameLabel,
     updateUser,
     ROLE_NAME_OPTIONS,
@@ -88,6 +89,10 @@ export default function UserManagementPage() {
 
     const [deleteTarget, setDeleteTarget] = useState<UserListItem | null>(null);
     const [deleteSaving, setDeleteSaving] = useState(false);
+
+    const [resetSaving, setResetSaving] = useState(false);
+    const [resetError, setResetError] = useState('');
+    const [resetResult, setResetResult] = useState<string | null>(null);
 
     const loadUsers = async () => {
         setIsLoading(true);
@@ -223,8 +228,9 @@ export default function UserManagementPage() {
         setEditTarget(null);
         setEditForm(null);
         setEditError('');
+        setResetError('');
+        setResetResult(null);
     };
-
     const handleEditSubmit = async () => {
         if (!editTarget || !editForm) return;
         setEditError('');
@@ -253,6 +259,24 @@ export default function UserManagementPage() {
             setEditError(getErrorMessage(error));
         } finally {
             setEditSaving(false);
+        }
+    };
+
+    const handleResetPassword = async () => {
+        if (!editTarget) return;
+        if (!window.confirm(`${editTarget.name}(${editTarget.loginId}) 계정의 비밀번호를 초기화하시겠습니까?`)) {
+            return;
+        }
+        setResetError('');
+        setResetResult(null);
+        setResetSaving(true);
+        try {
+            const { data: response } = await resetUserPassword(editTarget.userId);
+            setResetResult(response.data?.tempPassword ?? null);
+        } catch (error) {
+            setResetError(getErrorMessage(error));
+        } finally {
+            setResetSaving(false);
         }
     };
 
@@ -537,6 +561,7 @@ export default function UserManagementPage() {
                                     </div>
                                 </div>
                             </div>
+
                         </div>
                         <div className="modal-f">
                             <button className="btn" type="button" onClick={() => setCreateOpen(false)} disabled={createSaving}>
@@ -636,7 +661,48 @@ export default function UserManagementPage() {
                                     </div>
                                 </div>
                             </div>
+                            {canWrite && (
+                                <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px dashed var(--line)' }}>
+                                    <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted)' }}>
+                                        비밀번호 초기화
+                                    </label>
+                                    <p className="muted" style={{ fontSize: 12, margin: '4px 0 10px' }}>
+                                        사용자가 비밀번호를 잊었을 때 임시 비밀번호를 발급합니다. 발급 후 사용자에게 직접 전달해주세요.
+                                    </p>
+                                    {resetError && (
+                                        <div className="login-error" style={{ marginBottom: 10 }}>
+                                            {resetError}
+                                        </div>
+                                    )}
+                                    {resetResult && (
+                                        <div
+                                            className="chip info"
+                                            style={{
+                                                display: 'inline-flex',
+                                                fontSize: 13,
+                                                padding: '8px 12px',
+                                                marginBottom: 10,
+                                                userSelect: 'all',
+                                            }}
+                                        >
+                                            임시 비밀번호: <b style={{ marginLeft: 6 }}>{resetResult}</b>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <button
+                                            className="btn"
+                                            type="button"
+                                            onClick={() => void handleResetPassword()}
+                                            disabled={resetSaving}
+                                        >
+                                            {resetSaving ? '초기화 중…' : '비밀번호 초기화'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
+
+
                         <div className="modal-f">
                             {!canWrite && <span className="modal-note">조회 권한만 있습니다.</span>}
                             <button className="btn" type="button" onClick={closeEdit} disabled={editSaving}>

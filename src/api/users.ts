@@ -131,3 +131,10 @@ export function roleNameLabel(roleName: string): string {
 export function roleNamesLabel(roleNames: string[]): string {
     return roleNames.map(roleNameLabel).join(' · ');
 }
+
+// PATCH /api/users/{userId}/reset-password - 비밀번호 초기화 (권한: ADMIN)
+export function resetUserPassword(userId: number) {
+    return apiClient.patch<ApiResponse<{ message: string; tempPassword: string }>>(
+        `/api/users/${userId}/reset-password`
+    );
+}

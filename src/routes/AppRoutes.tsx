@@ -18,6 +18,7 @@ import StaffScheduleManagePage from '../pages/StaffScheduleManagePage';
 import UserManagementPage from '../pages/UserManagementPage';
 import SmsPermissionPage from '../pages/SmsPermissionPage';
 import FollowUpPage from '../pages/FollowUpPage';
+import MyPage from '../pages/MyPage';
 
 function LoginRoute() {
   const { isAuthenticated } = useAuth();
@@ -40,6 +41,14 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       >
+        <Route
+          path="/mypage"
+          element={
+            <ProtectedRoute>
+              <MyPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/" element={<DashboardPage />} />
         <Route
           path="/participants"
