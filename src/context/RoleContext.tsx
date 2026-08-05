@@ -98,6 +98,8 @@ const ROLE_PERMISSIONS: Record<AppRole, Omit<RoleConfig, 'nm' | 'role' | 'roles'
 };
 
 export function canAccessMenu(roles: string[] | undefined, menu: string): boolean {
+  // 시스템 관리자(ADMIN)는 슈퍼유저 — 모든 메뉴 접근 허용.
+  if ((roles ?? []).includes('ADMIN')) return true;
   const allowed = ROLE_MENU_RULES[menu] ?? [];
   return (roles ?? []).some((r) => allowed.includes(r as AppRole));
 }
@@ -119,14 +121,17 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const ownedRoles = (user?.roles ?? []).filter(isAppRole);
   const roles: AppRole[] = ownedRoles.length > 0 ? ownedRoles : ['STAFF'];
 
-  // 보유한 모든 역할의 메뉴를 합집합으로 노출
-  const menu = Array.from(
-    new Set(
-      Object.entries(ROLE_MENU_RULES)
-        .filter(([, allowed]) => roles.some((r) => allowed.includes(r)))
-        .map(([key]) => key),
-    ),
-  );
+  // 시스템 관리자(ADMIN)는 전체 메뉴 노출, 그 외는 보유한 모든 역할의 메뉴를 합집합으로 노출
+  const isAdmin = roles.includes('ADMIN');
+  const menu = isAdmin
+    ? Object.keys(ROLE_MENU_RULES)
+    : Array.from(
+        new Set(
+          Object.entries(ROLE_MENU_RULES)
+            .filter(([, allowed]) => roles.some((r) => allowed.includes(r)))
+            .map(([key]) => key),
+        ),
+      );
 
   // 권한(can)은 역할 중 하나라도 가능하면 가능으로 처리(OR)
   const can = roles.reduce<Permissions>(
