@@ -118,16 +118,17 @@ export default function ConsultingPage() {
               onChange={setRegionFilter}
               groups={regionGroups}
               allowParentSelect
+              allLabel="전체 지역"
             />
           )}
-          <div className="select">
-            <span className="ico">회차</span>
+          <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
             <input
               type="number"
+              min={1}
               value={courseNumber}
               onChange={(e) => setCourseNumber(e.target.value)}
               placeholder={roundInputPlaceholder(regionFilter)}
-              style={{ border: 'none', background: 'transparent', outline: 'none', width: '60px' }}
+              style={{ fontSize: '12px' }}
             />
           </div>
           <div className="select">
