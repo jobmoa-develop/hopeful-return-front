@@ -239,7 +239,8 @@ export type CourseParticipantListItem = {
 
 export type CourseParticipantListParams = {
   courseId?: number;
-  regionId?: number;
+  regionId?: number; // 하위 지역
+  parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 조회
   courseNumber?: number;
   status?: string;
   keyword?: string;
