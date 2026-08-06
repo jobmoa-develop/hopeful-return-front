@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { isAxiosError } from 'axios';
 import { useRole } from '../context/RoleContext';
 import { getUsers, updateSmsPermission, roleNameLabel, ROLE_NAME_OPTIONS } from '../api/users';
@@ -23,7 +24,8 @@ export default function SmsPermissionPage() {
     const [totalPages, setTotalPages] = useState(0);
     const [totalElements, setTotalElements] = useState(0);
 
-    const [nameFilter, setNameFilter] = useState('');
+    const nameFilterInput = useDebounceSearch('', 300);
+    const nameFilter = nameFilterInput.debouncedValue.trim();
     const [roleFilter, setRoleFilter] = useState('');
     const [enabledFilter, setEnabledFilter] = useState<'' | 'true' | 'false'>('');
 
@@ -66,8 +68,18 @@ export default function SmsPermissionPage() {
         }
     };
 
+    // 직원명 검색 디바운스 적용 후 자동 검색
+    useEffect(() => {
+        if (page === 0) {
+            void loadUsers();
+        } else {
+            setPage(0);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [nameFilter]);
+
     const resetFilters = () => {
-        setNameFilter('');
+        nameFilterInput.clear();
         setRoleFilter('');
         setEnabledFilter('');
         if (page === 0) {
@@ -119,8 +131,7 @@ export default function SmsPermissionPage() {
                         <span className="select" style={{ cursor: 'default' }}>
                             <span className="ico">이름</span>
                             <input
-                                value={nameFilter}
-                                onChange={(e) => setNameFilter(e.target.value)}
+                                {...nameFilterInput.inputProps}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                 placeholder="직원명 검색"
                                 style={{ border: 'none', outline: 'none', font: 'inherit', width: 110 }}

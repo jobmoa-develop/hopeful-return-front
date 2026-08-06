@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
@@ -39,8 +40,8 @@ export default function ConsultingPage() {
 
   // 검색 필터 (서버측)
   const [regions, setRegions] = useState<RegionSummary[]>([]);
-  const [keyword, setKeyword] = useState('');
-  const [searchName, setSearchName] = useState('');
+  const searchNameInput = useDebounceSearch('', SEARCH_DEBOUNCE_MS);
+  const searchName = searchNameInput.debouncedValue.trim();
   const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumber, setCourseNumber] = useState('');
   const [status, setStatus] = useState('');
@@ -58,11 +59,7 @@ export default function ConsultingPage() {
       .catch(() => setRegions([]));
   }, [canFilterRegion]);
 
-  // 이름 검색 디바운스
-  useEffect(() => {
-    const timer = setTimeout(() => setSearchName(keyword.trim()), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [keyword]);
+
 
   const fetchList = useCallback(() => {
     setLoading(true);
@@ -107,8 +104,7 @@ export default function ConsultingPage() {
             <input
               type="text"
               placeholder="이름·전화 검색..."
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
+              {...searchNameInput.inputProps}
               style={{ fontSize: '12px' }}
             />
           </div>

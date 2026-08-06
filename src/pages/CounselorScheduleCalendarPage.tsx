@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { getCounselingSchedules } from '../api/counselingSchedules';
 import type { CounselingScheduleItem } from '../api/counselingSchedules';
 import { COUNSELING_TYPE_LABELS } from '../api/courseParticipants';
@@ -127,7 +128,8 @@ export default function CounselorScheduleCalendarPage() {
   // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}. 참여자관리와 동일.
   const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumber, setCourseNumber] = useState('');
-  const [counselorName, setCounselorName] = useState('');
+  const counselorNameInput = useDebounceSearch('', 300);
+  const counselorName = counselorNameInput.debouncedValue.trim();
   const [items, setItems] = useState<CounselingScheduleItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -307,8 +309,7 @@ export default function CounselorScheduleCalendarPage() {
             className="input"
             style={{ width: '150px' }}
             placeholder="상담사명 검색"
-            value={counselorName}
-            onChange={(e) => setCounselorName(e.target.value)}
+            {...counselorNameInput.inputProps}
           />
           {loading && <span className="muted" style={{ fontSize: '12px' }}>불러오는 중…</span>}
         </div>

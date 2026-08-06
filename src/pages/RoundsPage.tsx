@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { isAxiosError } from 'axios';
@@ -106,7 +107,8 @@ export default function RoundsPage() {
   const [regionId, setRegionId] = useState('');
   const [filterParentRegionId, setFilterParentRegionId] = useState('');
   const [status, setStatus] = useState('');
-  const [keyword, setKeyword] = useState('');
+  const keywordInput = useDebounceSearch('', 300);
+  const keyword = keywordInput.debouncedValue.trim();
   const [page, setPage] = useState(0);
   const [size] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
@@ -223,6 +225,16 @@ export default function RoundsPage() {
     setPage(0);
   };
 
+  // 강좌명 검색 디바운스 적용 후 자동 검색
+  useEffect(() => {
+    if (page === 0) {
+      void loadCourses();
+    } else {
+      setPage(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyword]);
+
   const updateForm = (key: keyof CourseCreateRequest, value: string) => {
     const numericKeys: Array<keyof CourseCreateRequest> = ['regionId', 'courseNumber', 'localCourseNumber', 'capacity', 'minimumCapacity'];
     setForm((prev) => ({
@@ -324,8 +336,7 @@ export default function RoundsPage() {
           <div className="select" style={{ minWidth: '220px' }}>
             <span className="ico">검색</span>
             <input
-              value={keyword}
-              onChange={(event) => setKeyword(event.target.value)}
+              {...keywordInput.inputProps}
               placeholder="강좌명 검색"
               style={{ border: 'none', background: 'transparent', outline: 'none', width: '140px' }}
             />
