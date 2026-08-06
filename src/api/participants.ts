@@ -33,7 +33,8 @@ export type ParticipantListParams = {
   phone?: string;
   regionId?: number; // 최신 수강건 기준 회차 필터(하위 지역)
   parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 조회
-  courseNumber?: number; // 최신 수강건 기준 회차 필터(회차번호)
+  courseNumber?: number; // 전체회차(기수) — 전체 지역 조회 시 사용(최신 수강건 기준)
+  localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용(최신 수강건 기준)
   registerDateFrom?: string; // 전산 등록일 시작(YYYY-MM-DD, 포함) — 최신 수강건 created_at 기준
   registerDateTo?: string; // 전산 등록일 종료(YYYY-MM-DD, 포함)
   page?: number;

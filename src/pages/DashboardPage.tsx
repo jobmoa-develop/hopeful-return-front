@@ -16,6 +16,8 @@ import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 
 import { RegionSelect } from '../components/RegionSelect';
+import type { RegionFilterValue } from '../components/RegionSelect';
+import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const STATS_DEBOUNCE_MS = 300;
@@ -44,7 +46,7 @@ export default function DashboardPage() {
   // ── 사후관리 집계(취업률 · 숲체험 방문률 · 국취연계률) — ADMIN/HEAD_OFFICE 전용 ──
   const canSeeFollowUpStats = roleConfig.roles.some((r) => r === 'ADMIN' || r === 'HEAD_OFFICE');
   const [statsRegions, setStatsRegions] = useState<RegionSummary[]>([]);
-  const [statsRegionId, setStatsRegionId] = useState<number | ''>('');
+  const [statsRegionFilter, setStatsRegionFilter] = useState<RegionFilterValue>({});
   const [statsCourseNumberInput, setStatsCourseNumberInput] = useState('');
   const [statsCourseNumber, setStatsCourseNumber] = useState<number | ''>('');
   const [followUpStats, setFollowUpStats] = useState<FollowUpStatsResponse | null>(null);
@@ -120,8 +122,9 @@ export default function DashboardPage() {
     setStatsLoading(true);
     setStatsError(null);
     getFollowUpStats({
-      regionId: statsRegionId === '' ? undefined : statsRegionId,
-      courseNumber: statsCourseNumber === '' ? undefined : statsCourseNumber,
+      regionId: statsRegionFilter.regionId,
+      parentRegionId: statsRegionFilter.parentRegionId,
+      ...buildRoundParams(statsRegionFilter, statsCourseNumber),
     })
       .then((res) => {
         if (active) setFollowUpStats(res.data.data);
@@ -138,7 +141,12 @@ export default function DashboardPage() {
     return () => {
       active = false;
     };
-  }, [canSeeFollowUpStats, statsRegionId, statsCourseNumber]);
+  }, [
+    canSeeFollowUpStats,
+    statsRegionFilter.regionId,
+    statsRegionFilter.parentRegionId,
+    statsCourseNumber,
+  ]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, DashboardCalendarItem[]>();
@@ -291,15 +299,16 @@ export default function DashboardPage() {
             <span className="section-title">사후관리 현황 (수료자 기준)</span>
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
               <RegionSelect
-                value={{ regionId: statsRegionId === '' ? undefined : statsRegionId }}
-                onChange={(val) => setStatsRegionId(val.regionId ?? '')}
+                value={statsRegionFilter}
+                onChange={setStatsRegionFilter}
                 groups={statsRegionGroups}
+                allowParentSelect
                 allLabel="전체 지역"
               />
               <input
                 type="number"
                 min={1}
-                placeholder="회차번호"
+                placeholder={roundInputPlaceholder(statsRegionFilter)}
                 value={statsCourseNumberInput}
                 onChange={(e) => setStatsCourseNumberInput(e.target.value)}
                 style={{ fontSize: 12, padding: '4px 8px', width: 90 }}

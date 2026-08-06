@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
@@ -8,8 +8,11 @@ import type {
   CounselingType,
   CourseParticipantStatus,
 } from '../api/courseParticipants';
-import { getRegions } from '../api/regions';
+import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+import { RegionSelect } from '../components/RegionSelect';
+import type { RegionFilterValue } from '../components/RegionSelect';
+import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import { CounselingSessionModal, SlotCounselorAssignModal } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 
@@ -38,10 +41,11 @@ export default function ConsultingPage() {
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const [keyword, setKeyword] = useState('');
   const [searchName, setSearchName] = useState('');
-  const [regionId, setRegionId] = useState<number | ''>('');
+  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumber, setCourseNumber] = useState('');
   const [status, setStatus] = useState('');
 
+  const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   const canConsult = roleConfig.can.consult === 1;
   const canAssign = canConsult || roleConfig.can.editP === 1;
   // 지역 목록(GET /api/regions)은 COUNSELOR 권한 밖 — 상담사는 어차피 본인 배정건만 조회하므로 지역 필터 생략
@@ -65,8 +69,9 @@ export default function ConsultingPage() {
     setError(null);
     getCourseParticipants({
       keyword: searchName || undefined,
-      regionId: regionId === '' ? undefined : Number(regionId),
-      courseNumber: courseNumber === '' ? undefined : Number(courseNumber),
+      regionId: regionFilter.regionId,
+      parentRegionId: regionFilter.parentRegionId,
+      ...buildRoundParams(regionFilter, courseNumber),
       status: status || undefined,
       page: 0,
       size: PAGE_SIZE,
@@ -74,7 +79,7 @@ export default function ConsultingPage() {
       .then((res) => setItems(res.data.data?.content ?? []))
       .catch((err) => setError(apiErrorMessage(err, '상담 대상 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, regionId, courseNumber, status]);
+  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status]);
 
   useEffect(() => {
     fetchList();
@@ -108,35 +113,22 @@ export default function ConsultingPage() {
             />
           </div>
           {canFilterRegion && (
-            <div className="select">
-              <span className="ico">지역</span>
-              <select
-                value={regionId}
-                onChange={(e) => setRegionId(e.target.value === '' ? '' : Number(e.target.value))}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  outline: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="">전체</option>
-                {regions.map((r) => (
-                  <option key={r.regionId} value={r.regionId}>
-                    {r.regionName}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <RegionSelect
+              value={regionFilter}
+              onChange={setRegionFilter}
+              groups={regionGroups}
+              allowParentSelect
+              allLabel="전체 지역"
+            />
           )}
-          <div className="select">
-            <span className="ico">회차</span>
+          <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
             <input
               type="number"
+              min={1}
               value={courseNumber}
               onChange={(e) => setCourseNumber(e.target.value)}
-              placeholder="전체"
-              style={{ border: 'none', background: 'transparent', outline: 'none', width: '60px' }}
+              placeholder={roundInputPlaceholder(regionFilter)}
+              style={{ fontSize: '12px' }}
             />
           </div>
           <div className="select">

@@ -7,6 +7,7 @@ import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { RegionSelect } from '../components/RegionSelect';
 import type { RegionFilterValue } from '../components/RegionSelect';
+import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import { useRole } from '../context/RoleContext';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -160,6 +161,7 @@ export default function CounselorScheduleCalendarPage() {
       regionId?: number;
       parentRegionId?: number;
       courseNumber?: number;
+      localCourseNumber?: number;
       counselorName?: string;
     } = {
       from: range.from,
@@ -167,7 +169,8 @@ export default function CounselorScheduleCalendarPage() {
     };
     if (regionFilter.regionId != null) params.regionId = regionFilter.regionId;
     if (regionFilter.parentRegionId != null) params.parentRegionId = regionFilter.parentRegionId;
-    if (courseNumber.trim()) params.courseNumber = Number(courseNumber);
+    // 지역 선택 상태에 따라 전체회차(courseNumber)↔지역회차(localCourseNumber)로 분기 전송.
+    Object.assign(params, buildRoundParams(regionFilter, courseNumber));
     if (counselorName.trim()) params.counselorName = counselorName.trim();
     getCounselingSchedules(params)
       .then(({ data: res }) => setItems(res.data?.schedules ?? []))
@@ -296,7 +299,7 @@ export default function CounselorScheduleCalendarPage() {
             className="input"
             style={{ width: '110px' }}
             type="number"
-            placeholder="회차"
+            placeholder={roundInputPlaceholder(regionFilter)}
             value={courseNumber}
             onChange={(e) => setCourseNumber(e.target.value)}
           />
