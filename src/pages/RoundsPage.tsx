@@ -63,6 +63,18 @@ function statusClass(status?: CourseStatus) {
   return 'neutral';
 }
 
+// day1~day5 중 실제 값이 있는 날짜로 개강일정(시작~종료) 문자열 생성
+function formatCourseSchedule(course: CourseSummary): string {
+  const days = [course.day1Date, course.day2Date, course.day3Date, course.day4Date, course.day5Date].filter(
+    (d): d is string => Boolean(d),
+  );
+  if (days.length === 0) return '-';
+  const start = days[0];
+  const end = days[days.length - 1];
+  if (start === end) return start; // 단일 일정
+  return `${start} ~ ${end.slice(5)}`; // 예: 2026-06-23 ~ 06-27
+}
+
 function getErrorMessage(error: unknown) {
   if (isAxiosError<{ error?: string; message?: string }>(error)) {
     const data = error.response?.data;
@@ -488,6 +500,7 @@ export default function RoundsPage() {
                 <th>정원</th>
                 <th>교육장</th>
                 <th>상태</th>
+                <th>개강일정</th>
                 <th>계획서 제출일</th>
               </tr>
             </thead>
@@ -511,12 +524,13 @@ export default function RoundsPage() {
                   <td>
                     <span className={`chip ${statusClass(course.status)}`}>{statusLabel(course.status)}</span>
                   </td>
+                  <td className="tnum">{formatCourseSchedule(course)}</td>
                   <td className="tnum">{course.planSubmitDate ?? '-'}</td>
                 </tr>
               ))}
               {!isLoading && courses.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
                     {isRestricted ? '담당 중인 회차가 없습니다.' : '등록된 강좌가 없습니다.'}
                   </td>
                 </tr>
