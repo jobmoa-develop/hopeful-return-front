@@ -239,8 +239,10 @@ export type CourseParticipantListItem = {
 
 export type CourseParticipantListParams = {
   courseId?: number;
-  regionId?: number;
-  courseNumber?: number;
+  regionId?: number; // 하위 지역
+  parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 조회
+  courseNumber?: number; // 전체회차(기수) — 전체 지역 조회 시 사용
+  localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용
   status?: string;
   keyword?: string;
   page?: number;

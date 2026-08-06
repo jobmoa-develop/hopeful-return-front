@@ -5,6 +5,8 @@ import type { FollowUpListItem } from '../api/followUps';
 import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { RegionSelect } from '../components/RegionSelect';
+import type { RegionFilterValue } from '../components/RegionSelect';
+import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import { apiErrorMessage } from '../api/apiError';
 import { FollowUpDetailModal } from '../components/FollowUpModals';
 
@@ -31,7 +33,7 @@ export default function FollowUpPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchName, setSearchName] = useState('');
   const [regions, setRegions] = useState<RegionSummary[]>([]);
-  const [selectedRegionId, setSelectedRegionId] = useState<number | ''>('');
+  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumberQuery, setCourseNumberQuery] = useState('');
   const [courseNumber, setCourseNumber] = useState<number | ''>('');
   const [employment, setEmployment] = useState<'전체' | '취업' | '미취업'>('전체');
@@ -46,8 +48,9 @@ export default function FollowUpPage() {
     setError(null);
     getFollowUpList({
       name: searchName || undefined,
-      regionId: selectedRegionId === '' ? undefined : selectedRegionId,
-      courseNumber: courseNumber === '' ? undefined : courseNumber,
+      regionId: regionFilter.regionId,
+      parentRegionId: regionFilter.parentRegionId,
+      ...buildRoundParams(regionFilter, courseNumber),
       page,
       size: PAGE_SIZE,
     })
@@ -59,7 +62,7 @@ export default function FollowUpPage() {
       })
       .catch((err) => setError(apiErrorMessage(err, '사후관리 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, selectedRegionId, courseNumber, page]);
+  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, page]);
 
   useEffect(() => {
     fetchList();
@@ -108,19 +111,20 @@ export default function FollowUpPage() {
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
           <RegionSelect
-            value={{ regionId: selectedRegionId === '' ? undefined : selectedRegionId }}
+            value={regionFilter}
             onChange={(val) => {
-              setSelectedRegionId(val.regionId ?? '');
+              setRegionFilter(val);
               setPage(0);
             }}
             groups={regionGroups}
+            allowParentSelect
             allLabel="전체 지역"
           />
           <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
             <input
               type="number"
               min={1}
-              placeholder="회차번호"
+              placeholder={roundInputPlaceholder(regionFilter)}
               value={courseNumberQuery}
               onChange={(e) => setCourseNumberQuery(e.target.value)}
               style={{ fontSize: '12px' }}

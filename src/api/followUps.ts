@@ -53,8 +53,10 @@ export type FollowUpDetail = {
 
 export type FollowUpListParams = {
   name?: string;
-  regionId?: number;
-  courseNumber?: number; // localCourseNumber 기준
+  regionId?: number; // 하위 지역
+  parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 조회
+  courseNumber?: number; // 전체회차(기수) — 전체 지역 조회 시 사용
+  localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용
   page?: number;
   size?: number;
 };
@@ -111,8 +113,10 @@ export type FollowUpStatsResponse = {
 };
 
 export type FollowUpStatsParams = {
-  regionId?: number;
-  courseNumber?: number; // 주의: course.courseNumber(교육과정 전체 회차) 기준 — localCourseNumber 아님
+  regionId?: number; // 하위 지역
+  parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 집계
+  courseNumber?: number; // 전체회차(기수) — 전체 지역 조회 시 사용
+  localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용
 };
 
 // GET /api/follow-ups/stats — 취업률/숲체험 방문률/국취연계률 집계 (regionId/courseNumber 미지정 시 전체)

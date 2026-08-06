@@ -4,6 +4,7 @@ import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { RegionSelect } from '../components/RegionSelect';
 import type { RegionFilterValue } from '../components/RegionSelect';
+import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import {
   getSmsHistoryPage,
   getParticipantSmsDetail,
@@ -107,7 +108,7 @@ export default function SmsHistoryPage() {
       sendStatus: statusFilter || undefined,
       regionId: regionFilter.regionId,
       parentRegionId: regionFilter.parentRegionId,
-      courseNumber: courseNumber === '' ? undefined : courseNumber,
+      ...buildRoundParams(regionFilter, courseNumber),
       sentDateFrom: dateFrom || undefined,
       sentDateTo: dateTo || undefined,
     }),
@@ -302,7 +303,7 @@ export default function SmsHistoryPage() {
             <input
               type="number"
               min={1}
-              placeholder="회차번호"
+              placeholder={roundInputPlaceholder(regionFilter)}
               value={courseNumberQuery}
               onChange={(e) => setCourseNumberQuery(e.target.value)}
               style={{ fontSize: '12px' }}

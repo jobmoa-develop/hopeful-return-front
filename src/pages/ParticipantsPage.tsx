@@ -9,6 +9,7 @@ import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { RegionSelect } from '../components/RegionSelect';
 import type { RegionFilterValue } from '../components/RegionSelect';
+import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import {
   COUNSELING_TYPE_LABELS,
   CP_STATUS_CHIP,
@@ -107,7 +108,7 @@ export default function ParticipantsPage() {
       name: searchName || undefined,
       regionId: regionFilter.regionId,
       parentRegionId: regionFilter.parentRegionId,
-      courseNumber: courseNumber === '' ? undefined : courseNumber,
+      ...buildRoundParams(regionFilter, courseNumber),
       registerDateFrom: registerDateFrom || undefined,
       registerDateTo: registerDateTo || undefined,
       page,
@@ -294,7 +295,7 @@ export default function ParticipantsPage() {
             <input
               type="number"
               min={1}
-              placeholder="회차번호"
+              placeholder={roundInputPlaceholder(regionFilter)}
               value={courseNumberQuery}
               onChange={(e) => setCourseNumberQuery(e.target.value)}
               style={{ fontSize: '12px' }}

@@ -23,7 +23,8 @@ export type CounselingScheduleParams = {
   to?: string; // "YYYY-MM-DD" 포함
   regionId?: number; // 하위 지역(양천) 단일
   parentRegionId?: number; // 상위 지역(서울) 산하 하위 전체
-  courseNumber?: number;
+  courseNumber?: number; // 전체회차(기수) — 전체 지역 조회 시 사용
+  localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용
   counselorName?: string;
 };
 
