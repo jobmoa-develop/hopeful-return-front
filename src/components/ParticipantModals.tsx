@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRole } from '../context/RoleContext';
-import { getRegions } from '../api/regions';
+import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+import { RegionSelect } from './RegionSelect';
 import { getCourses } from '../api/courses';
 import type { CourseSummary } from '../api/courses';
 import { getUserRoles } from '../api/userRoles';
@@ -258,6 +259,7 @@ export function ParticipantRegisterModal({
   const [saving, setSaving] = useState(false);
   const counselorOptions = useCounselorOptions(isOpen);
 
+  const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   const hasEnrollment = courseId !== '';
 
   useEffect(() => {
@@ -383,17 +385,15 @@ export function ParticipantRegisterModal({
         </div>
         <div className="field">
           <label>지역</label>
-          <select
-            value={regionId}
-            onChange={(e) => setRegionId(e.target.value === '' ? '' : Number(e.target.value))}
-          >
-            <option value="">선택 안 함</option>
-            {regions.map((r) => (
-              <option key={r.regionId} value={r.regionId}>
-                {r.regionName}
-              </option>
-            ))}
-          </select>
+          <RegionSelect
+            value={regionId === '' ? {} : { regionId }}
+            onChange={(v) => setRegionId(v.regionId ?? '')}
+            groups={regionGroups}
+            allLabel="선택 안 함"
+            placeholder="선택 안 함"
+            style={{ width: '100%' }}
+            menuPortal
+          />
         </div>
         <div className="field">
           <label>회차</label>
