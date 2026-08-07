@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { isAxiosError } from 'axios';
 import { useRole } from '../context/RoleContext';
@@ -68,8 +68,15 @@ export default function SmsPermissionPage() {
         }
     };
 
-    // 직원명 검색 디바운스 적용 후 자동 검색
+    // 직원명 검색 디바운스 적용 후 자동 검색.
+    // 마운트 시점은 위 [page] effect가 이미 loadUsers를 호출하므로,
+    // 여기서는 스킵(didMount 가드)해 페이지 진입 시 API가 2번 호출되는 것을 막는다.
+    const nameFilterDidMountRef = useRef(false);
     useEffect(() => {
+        if (!nameFilterDidMountRef.current) {
+            nameFilterDidMountRef.current = true;
+            return;
+        }
         if (page === 0) {
             void loadUsers();
         } else {
