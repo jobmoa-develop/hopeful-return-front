@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
@@ -17,7 +17,7 @@ import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import { CounselingSessionModal, SlotCounselorAssignModal } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 const SLOT_COLUMNS: { type: CounselingType; label: string }[] = [
   { type: 'PRE_SESSION', label: '사전상담' },
@@ -33,6 +33,9 @@ export default function ConsultingPage() {
   const isCounselorOnly = roleConfig.role === 'COUNSELOR';
 
   const [items, setItems] = useState<CourseParticipantListItem[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sessionTarget, setSessionTarget] = useState<CourseParticipantListItem | null>(null);
@@ -70,17 +73,37 @@ export default function ConsultingPage() {
       parentRegionId: regionFilter.parentRegionId,
       ...buildRoundParams(regionFilter, courseNumber),
       status: status || undefined,
-      page: 0,
+      page,
       size: PAGE_SIZE,
     })
-      .then((res) => setItems(res.data.data?.content ?? []))
+      .then((res) => {
+        const data = res.data.data;
+        setItems(data?.content ?? []);
+        setTotalElements(data?.totalElements ?? 0);
+        setTotalPages(data?.totalPages ?? 0);
+      })
       .catch((err) => setError(apiErrorMessage(err, '상담 대상 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status]);
+  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status, page]);
+
+  // 페이지를 리셋시켜야 하는 필터들을 하나의 키로 묶어서, 필터 변경 시
+  // page 리셋 + fetch가 각각 별도 effect로 실행되며 API가 2번 호출되는 것을 방지한다.
+  const filterKey = useMemo(
+    () => JSON.stringify([searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status]),
+    [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status],
+  );
+  const prevFilterKeyRef = useRef(filterKey);
 
   useEffect(() => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (page !== 0) {
+        setPage(0);
+        return; // page 변경으로 이 effect가 다시 실행되며 fetchList가 호출됨 (중복 방지)
+      }
+    }
     fetchList();
-  }, [fetchList]);
+  }, [filterKey, page, fetchList]);
 
   const roundText = (p: CourseParticipantListItem) =>
     [p.regionName, p.localCourseNumber != null ? `${p.localCourseNumber}회차` : p.courseName]
@@ -149,7 +172,7 @@ export default function ConsultingPage() {
           </div>
         </div>
         <span className="count">
-          총 {items.length}건{loading ? ' · 불러오는 중…' : ''}
+          총 {totalElements}건{loading ? ' · 불러오는 중…' : ''}
         </span>
       </div>
 
@@ -256,6 +279,20 @@ export default function ConsultingPage() {
           </table>
         </div>
       </div>
+
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '12px' }}>
+          <button className="btn" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+            이전
+          </button>
+          <span className="muted" style={{ fontSize: '12px' }}>
+            {page + 1} / {totalPages}
+          </span>
+          <button className="btn" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            다음
+          </button>
+        </div>
+      )}
       <p className="note">
         ※ 상담 완료 = 종료 일시 입력 기준 · 상담사는 본인 배정 참여자만 조회됩니다 · 상담사 지정은
         해당 회차 배치 상담사만 가능
