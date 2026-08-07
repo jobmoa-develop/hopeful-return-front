@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
@@ -67,8 +68,8 @@ export default function ParticipantsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchName, setSearchName] = useState('');
+  const searchNameInput = useDebounceSearch('', SEARCH_DEBOUNCE_MS);
+  const searchName = searchNameInput.debouncedValue.trim();
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}.
@@ -132,9 +133,39 @@ export default function ParticipantsPage() {
     page,
   ]);
 
+  // 페이지를 리셋시켜야 하는 필터들을 하나의 키로 묶어서, 필터 변경 시
+  // page 리셋 + fetch가 각각 별도 effect로 실행되며 API가 2번 호출되는 것을 방지한다.
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify([
+        searchName,
+        regionFilter.regionId,
+        regionFilter.parentRegionId,
+        courseNumber,
+        registerDateFrom,
+        registerDateTo,
+      ]),
+    [
+      searchName,
+      regionFilter.regionId,
+      regionFilter.parentRegionId,
+      courseNumber,
+      registerDateFrom,
+      registerDateTo,
+    ],
+  );
+  const prevFilterKeyRef = useRef(filterKey);
+
   useEffect(() => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (page !== 0) {
+        setPage(0);
+        return; // page 변경으로 이 effect가 다시 실행되며 fetchList가 호출됨 (중복 방지)
+      }
+    }
     fetchList();
-  }, [fetchList]);
+  }, [filterKey, page, fetchList]);
 
   // 지역 목록 로드(회차 필터 드롭다운)
   useEffect(() => {
@@ -143,21 +174,11 @@ export default function ParticipantsPage() {
       .catch(() => setRegions([]));
   }, []);
 
-  // 검색어 디바운스 — 입력 후 잠시 멈추면 서버 검색(name) 실행
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchName(searchQuery.trim());
-      setPage(0);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // 회차번호 디바운스 — 숫자만 반영, 빈 값이면 필터 해제
+  // 회차번호 디바운스 — 숫자만 반영, 빈 값이면 필터 해제 (page 리셋은 위 filterKey effect가 처리)
   useEffect(() => {
     const timer = setTimeout(() => {
       const trimmed = courseNumberQuery.trim();
       setCourseNumber(trimmed === '' ? '' : Number(trimmed));
-      setPage(0);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [courseNumberQuery]);
@@ -286,7 +307,6 @@ export default function ParticipantsPage() {
             value={regionFilter}
             onChange={(v) => {
               setRegionFilter(v);
-              setPage(0);
             }}
             allowParentSelect
             allLabel="전체 지역"
@@ -326,8 +346,7 @@ export default function ParticipantsPage() {
             <input
               type="text"
               placeholder="참여자 이름 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              {...searchNameInput.inputProps}
               style={{ fontSize: '12px' }}
             />
           </div>
@@ -338,7 +357,6 @@ export default function ParticipantsPage() {
               value={registerDateFrom}
               onChange={(e) => {
                 setRegisterDateFrom(e.target.value);
-                setPage(0);
               }}
               style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
             />
@@ -350,7 +368,6 @@ export default function ParticipantsPage() {
               value={registerDateTo}
               onChange={(e) => {
                 setRegisterDateTo(e.target.value);
-                setPage(0);
               }}
               style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
             />

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useRole } from '../context/RoleContext';
 import { getFollowUpList } from '../api/followUps';
 import type { FollowUpListItem } from '../api/followUps';
@@ -30,8 +31,8 @@ export default function FollowUpPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchName, setSearchName] = useState('');
+  const searchNameInput = useDebounceSearch('', SEARCH_DEBOUNCE_MS);
+  const searchName = searchNameInput.debouncedValue.trim();
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumberQuery, setCourseNumberQuery] = useState('');
@@ -64,9 +65,24 @@ export default function FollowUpPage() {
       .finally(() => setLoading(false));
   }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, page]);
 
+  // 페이지를 리셋시켜야 하는 필터들을 하나의 키로 묶어서 API 중복 호출 방지
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify([searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber]),
+    [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber],
+  );
+  const prevFilterKeyRef = useRef(filterKey);
+
   useEffect(() => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (page !== 0) {
+        setPage(0);
+        return; // page 변경으로 이 effect가 다시 실행되며 fetchList가 호출됨 (중복 방지)
+      }
+    }
     fetchList();
-  }, [fetchList]);
+  }, [filterKey, page, fetchList]);
 
   // 지역 목록 로드(회차 필터 드롭다운)
   useEffect(() => {
@@ -75,21 +91,11 @@ export default function FollowUpPage() {
       .catch(() => setRegions([]));
   }, []);
 
-  // 검색어 디바운스 — 입력 후 잠시 멈추면 서버 검색(name) 실행
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchName(searchQuery.trim());
-      setPage(0);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // 회차번호 디바운스 — 숫자만 반영, 빈 값이면 필터 해제
+  // 회차번호 디바운스 — 숫자만 반영, 빈 값이면 필터 해제 (page 리셋은 위 filterKey effect가 처리)
   useEffect(() => {
     const timer = setTimeout(() => {
       const trimmed = courseNumberQuery.trim();
       setCourseNumber(trimmed === '' ? '' : Number(trimmed));
-      setPage(0);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [courseNumberQuery]);
@@ -114,7 +120,6 @@ export default function FollowUpPage() {
             value={regionFilter}
             onChange={(val) => {
               setRegionFilter(val);
-              setPage(0);
             }}
             groups={regionGroups}
             allowParentSelect
@@ -152,8 +157,7 @@ export default function FollowUpPage() {
             <input
               type="text"
               placeholder="참여자 이름 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              {...searchNameInput.inputProps}
               style={{ fontSize: '12px' }}
             />
           </div>

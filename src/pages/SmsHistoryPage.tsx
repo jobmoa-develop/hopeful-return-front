@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useRole } from '../context/RoleContext';
 import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
@@ -79,8 +80,8 @@ export default function SmsHistoryPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [keyword, setKeyword] = useState('');
+  const keywordInput = useDebounceSearch('', SEARCH_DEBOUNCE_MS);
+  const keyword = keywordInput.debouncedValue.trim();
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}.
@@ -137,9 +138,32 @@ export default function SmsHistoryPage() {
       .finally(() => setLoading(false));
   }, [buildParams, page]);
 
+  // 페이지를 리셋시켜야 하는 필터들을 하나의 키로 묶어서 API 중복 호출 방지
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify([
+        keyword,
+        statusFilter,
+        regionFilter.regionId,
+        regionFilter.parentRegionId,
+        courseNumber,
+        dateFrom,
+        dateTo,
+      ]),
+    [keyword, statusFilter, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, dateFrom, dateTo],
+  );
+  const prevFilterKeyRef = useRef(filterKey);
+
   useEffect(() => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (page !== 0) {
+        setPage(0);
+        return; // page 변경으로 이 effect가 다시 실행되며 fetchList가 호출됨 (중복 방지)
+      }
+    }
     fetchList();
-  }, [fetchList]);
+  }, [filterKey, page, fetchList]);
 
   useEffect(() => {
     getRegions()
@@ -147,21 +171,11 @@ export default function SmsHistoryPage() {
       .catch(() => setRegions([]));
   }, []);
 
-  // 검색어 디바운스
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setKeyword(searchQuery.trim());
-      setPage(0);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // 회차번호 디바운스
+  // 회차번호 디바운스 (page 리셋은 위 filterKey effect가 처리)
   useEffect(() => {
     const timer = setTimeout(() => {
       const trimmed = courseNumberQuery.trim();
       setCourseNumber(trimmed === '' ? '' : Number(trimmed));
-      setPage(0);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [courseNumberQuery]);
@@ -294,7 +308,6 @@ export default function SmsHistoryPage() {
             value={regionFilter}
             onChange={(v) => {
               setRegionFilter(v);
-              setPage(0);
             }}
             allowParentSelect
             allLabel="전체 지역"
@@ -315,7 +328,6 @@ export default function SmsHistoryPage() {
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
-                setPage(0);
               }}
               style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
             >
@@ -331,8 +343,7 @@ export default function SmsHistoryPage() {
             <input
               type="text"
               placeholder="수신자 이름/전화 검색..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              {...keywordInput.inputProps}
               style={{ fontSize: '12px' }}
             />
           </div>
@@ -343,7 +354,6 @@ export default function SmsHistoryPage() {
               value={dateFrom}
               onChange={(e) => {
                 setDateFrom(e.target.value);
-                setPage(0);
               }}
               style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
             />
@@ -355,7 +365,6 @@ export default function SmsHistoryPage() {
               value={dateTo}
               onChange={(e) => {
                 setDateTo(e.target.value);
-                setPage(0);
               }}
               style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
             />
