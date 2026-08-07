@@ -31,6 +31,12 @@ const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 const COUNSELING_TYPES: CounselingType[] = ['PRE_SESSION', 'POST_SESSION_1', 'POST_SESSION_2'];
 
+// CP_STATUS_LABELS(enum → 한글 라벨)를 뒤집어 한글 라벨 → enum 매핑을 만든다.
+// 진행상태 select는 화면에 한글 라벨을 값으로 쓰고 있어서, 서버로 보낼 때만 enum 값으로 변환한다.
+const STATUS_LABEL_TO_VALUE: Record<string, string> = Object.fromEntries(
+  Object.entries(CP_STATUS_LABELS).map(([value, label]) => [label, value]),
+);
+
 function statusLabel(status: string | null | undefined): string {
   if (!status) return '—';
   return CP_STATUS_LABELS[status as CourseParticipantStatus] ?? status;
@@ -104,12 +110,13 @@ export default function ParticipantsPage() {
   const fetchList = useCallback(() => {
     setLoading(true);
     setError(null);
-    // 지역·회차는 서버 필터(최신 수강건 기준). 상태는 아래 filteredList 에서 클라이언트 필터.
+    // 지역·회차·진행상태·등록일 모두 서버 필터(최신 수강건 기준). 지역 정렬도 서버가 처리한다.
     getParticipants({
       name: searchName || undefined,
       regionId: regionFilter.regionId,
       parentRegionId: regionFilter.parentRegionId,
       ...buildRoundParams(regionFilter, courseNumber),
+      status: selectedStatus === '전체' ? undefined : STATUS_LABEL_TO_VALUE[selectedStatus],
       registerDateFrom: registerDateFrom || undefined,
       registerDateTo: registerDateTo || undefined,
       page,
@@ -128,6 +135,7 @@ export default function ParticipantsPage() {
     regionFilter.regionId,
     regionFilter.parentRegionId,
     courseNumber,
+    selectedStatus,
     registerDateFrom,
     registerDateTo,
     page,
@@ -142,6 +150,7 @@ export default function ParticipantsPage() {
         regionFilter.regionId,
         regionFilter.parentRegionId,
         courseNumber,
+        selectedStatus,
         registerDateFrom,
         registerDateTo,
       ]),
@@ -150,6 +159,7 @@ export default function ParticipantsPage() {
       regionFilter.regionId,
       regionFilter.parentRegionId,
       courseNumber,
+      selectedStatus,
       registerDateFrom,
       registerDateTo,
     ],
@@ -183,14 +193,8 @@ export default function ParticipantsPage() {
     return () => clearTimeout(timer);
   }, [courseNumberQuery]);
 
-  // 진행상태는 현재 페이지 데이터 기준 클라이언트 필터(서버 미지원 — 범위 밖)
-  const filteredList = useMemo(() => {
-    let list = items;
-    if (selectedStatus !== '전체') {
-      list = list.filter((p) => statusLabel(p.latestEnrollment?.status) === selectedStatus);
-    }
-    return list;
-  }, [items, selectedStatus]);
+  // 지역 정렬·진행상태 필터 모두 서버가 처리하므로 클라이언트 가공 없이 그대로 사용한다.
+  const filteredList = items;
 
   const handleRowClick = (p: ParticipantListItem) => {
     if (!p.latestEnrollment) {

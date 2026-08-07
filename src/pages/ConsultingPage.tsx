@@ -59,11 +59,10 @@ export default function ConsultingPage() {
       .catch(() => setRegions([]));
   }, [canFilterRegion]);
 
-
-
   const fetchList = useCallback(() => {
     setLoading(true);
     setError(null);
+    // 지역 정렬(양천 → 강북 → 천안 → 의정부...) + 이름 가나다순 정렬은 서버가 처리한다.
     getCourseParticipants({
       keyword: searchName || undefined,
       regionId: regionFilter.regionId,

@@ -12,6 +12,18 @@ const STATUS_TO_KOR: Record<string, string> = {
   ABSENT: '결석',
 };
 
+// 회차 드롭다운 표시 라벨 — 지역 + 전체회차(기수) + 지역회차를 함께 보여준다.
+// 예: "서울 양천 전체3기 · 2회차 (OPEN)"
+// 지역회차(localCourseNumber)가 없으면 courseName으로 대체(기존 로직 유지).
+function courseOptionLabel(c: CourseSummary): string {
+  const region = c.regionName ?? '';
+  const overallRound = c.courseNumber != null ? `전체${c.courseNumber}기` : null;
+  const localRound = c.localCourseNumber != null ? `${c.localCourseNumber}회차` : null;
+  const roundText = [overallRound, localRound].filter(Boolean).join(' · ') || (c.courseName ?? '');
+  const statusText = c.status ? ` (${c.status})` : '';
+  return [region, roundText].filter(Boolean).join(' ') + statusText;
+}
+
 export default function AttendancePage() {
   const { roleConfig } = useRole();
 
@@ -185,7 +197,7 @@ export default function AttendancePage() {
           >
             {courses.map(c => (
               <option key={c.courseId} value={String(c.courseId)}>
-                {c.regionName ?? ''} {c.localCourseNumber != null ? `${c.localCourseNumber}회차` : (c.courseName ?? '')} ({c.status ?? ''}) ▾
+                {courseOptionLabel(c)} ▾
               </option>
             ))}
           </select>
