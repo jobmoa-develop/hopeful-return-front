@@ -9,6 +9,7 @@ import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
+import QrModal from '../components/QrModal';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
 
@@ -53,7 +54,7 @@ function statusLabel(status?: CourseStatus) {
     COMPLETED: '완료',
     CANCELED: '취소',
   };
-  return status ? labels[status] ?? status : '-';
+  return status ? (labels[status] ?? status) : '-';
 }
 
 function statusClass(status?: CourseStatus) {
@@ -66,9 +67,13 @@ function statusClass(status?: CourseStatus) {
 
 // day1~day5 중 실제 값이 있는 날짜로 개강일정(시작~종료) 문자열 생성
 function formatCourseSchedule(course: CourseSummary): string {
-  const days = [course.day1Date, course.day2Date, course.day3Date, course.day4Date, course.day5Date].filter(
-    (d): d is string => Boolean(d),
-  );
+  const days = [
+    course.day1Date,
+    course.day2Date,
+    course.day3Date,
+    course.day4Date,
+    course.day5Date,
+  ].filter((d): d is string => Boolean(d));
   if (days.length === 0) return '-';
   const start = days[0];
   const end = days[days.length - 1];
@@ -121,10 +126,13 @@ export default function RoundsPage() {
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const [regionsLoading, setRegionsLoading] = useState(false);
   const [expandedParentId, setExpandedParentId] = useState<number | null>(null);
+  const [qrCourse, setQrCourse] = useState<CourseSummary | null>(null);
 
   // 대표 역할(roleConfig.role) 1개만 보면 다중 역할 계정(예: ADMIN+COUNSELOR)에서
   // 대표 역할이 우연히 COUNSELOR로 뽑힐 경우 ADMIN 권한이 무시된다 → 전체 역할 배열로 판단
-  const canCreate = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(r));
+  const canCreate = roleConfig.roles.some((r) =>
+    ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(r),
+  );
 
   // 제한 역할을 갖고 있더라도, 전체 열람 역할(ADMIN 등)을 함께 갖고 있으면 제한하지 않는다.
   const isRestricted = Boolean(
@@ -139,8 +147,10 @@ export default function RoundsPage() {
       list.map((c) =>
         c.courseId
           ? getCourseStaffs(c.courseId)
-            .then(({ data: res }) => (res.data.staffs ?? []).some((s) => Number(s.userId) === Number(user.userId)))
-            .catch(() => false)
+              .then(({ data: res }) =>
+                (res.data.staffs ?? []).some((s) => Number(s.userId) === Number(user.userId)),
+              )
+              .catch(() => false)
           : Promise.resolve(false),
       ),
     );
@@ -154,7 +164,8 @@ export default function RoundsPage() {
       const commonParams = {
         regionId: regionId ? Number(regionId) : undefined,
         // 하위지역까지 선택했으면 regionId가 우선 적용되므로, 상위지역만 선택("전체")된 경우에만 parentRegionId 전달
-        parentRegionId: !regionId && filterParentRegionId ? Number(filterParentRegionId) : undefined,
+        parentRegionId:
+          !regionId && filterParentRegionId ? Number(filterParentRegionId) : undefined,
         status: status || undefined,
         keyword: keyword || undefined,
       };
@@ -207,7 +218,10 @@ export default function RoundsPage() {
 
   const level1Regions = useMemo(() => regions.filter((r) => r.level === 'LEVEL1'), [regions]);
   const childrenOf = (parentId: number) => regions.filter((r) => r.parentRegionId === parentId);
-  const selectedRegion = useMemo(() => regions.find((r) => r.regionId === form.regionId), [regions, form.regionId]);
+  const selectedRegion = useMemo(
+    () => regions.find((r) => r.regionId === form.regionId),
+    [regions, form.regionId],
+  );
   const selectedRegionParentName = useMemo(() => {
     if (!selectedRegion?.parentRegionId) return null;
     return regions.find((r) => r.regionId === selectedRegion.parentRegionId)?.regionName ?? null;
@@ -243,7 +257,13 @@ export default function RoundsPage() {
   }, [keyword]);
 
   const updateForm = (key: keyof CourseCreateRequest, value: string) => {
-    const numericKeys: Array<keyof CourseCreateRequest> = ['regionId', 'courseNumber', 'localCourseNumber', 'capacity', 'minimumCapacity'];
+    const numericKeys: Array<keyof CourseCreateRequest> = [
+      'regionId',
+      'courseNumber',
+      'localCourseNumber',
+      'capacity',
+      'minimumCapacity',
+    ];
     setForm((prev) => ({
       ...prev,
       [key]: numericKeys.includes(key) ? Number(value) : value,
@@ -283,7 +303,8 @@ export default function RoundsPage() {
   };
 
   const pageSummary = useMemo(() => {
-    if (totalElements === 0) return isRestricted ? '담당 중인 회차가 없습니다.' : '등록된 강좌가 없습니다.';
+    if (totalElements === 0)
+      return isRestricted ? '담당 중인 회차가 없습니다.' : '등록된 강좌가 없습니다.';
     return `총 ${totalElements.toLocaleString()}개 강좌${isRestricted ? ' (내 담당 회차만 표시)' : ''}`;
   }, [totalElements, isRestricted]);
 
@@ -299,7 +320,13 @@ export default function RoundsPage() {
                 setFilterParentRegionId(event.target.value);
                 setRegionId('');
               }}
-              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                fontWeight: 'inherit',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
             >
               <option value="">전체</option>
               {level1Regions.map((region) => (
@@ -315,7 +342,13 @@ export default function RoundsPage() {
               value={regionId}
               onChange={(event) => setRegionId(event.target.value)}
               disabled={!filterParentRegionId}
-              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: filterParentRegionId ? 'pointer' : 'not-allowed' }}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                fontWeight: 'inherit',
+                outline: 'none',
+                cursor: filterParentRegionId ? 'pointer' : 'not-allowed',
+              }}
             >
               <option value="">전체</option>
               {childrenOf(Number(filterParentRegionId)).map((child) => (
@@ -330,7 +363,13 @@ export default function RoundsPage() {
             <select
               value={status}
               onChange={(event) => setStatus(event.target.value)}
-              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                fontWeight: 'inherit',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
             >
               <option value="">전체</option>
               {STATUS_OPTIONS.map((item) => (
@@ -354,7 +393,12 @@ export default function RoundsPage() {
         </div>
 
         {canCreate && (
-          <button className="btn primary" id="btn-add-round" type="button" onClick={() => setIsCreateOpen((prev) => !prev)}>
+          <button
+            className="btn primary"
+            id="btn-add-round"
+            type="button"
+            onClick={() => setIsCreateOpen((prev) => !prev)}
+          >
             + 새 회차등록
           </button>
         )}
@@ -375,10 +419,14 @@ export default function RoundsPage() {
             <div className="field full">
               <label>지역</label>
               {regionsLoading ? (
-                <span className="muted" style={{ fontSize: '12.5px' }}>지역 목록 불러오는 중...</span>
+                <span className="muted" style={{ fontSize: '12.5px' }}>
+                  지역 목록 불러오는 중...
+                </span>
               ) : (
                 <>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  <div
+                    style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}
+                  >
                     {level1Regions.map((region) => (
                       <button
                         key={region.regionId}
@@ -391,7 +439,9 @@ export default function RoundsPage() {
                       </button>
                     ))}
                     {level1Regions.length === 0 && (
-                      <span className="muted" style={{ fontSize: '12px' }}>등록된 지역이 없습니다.</span>
+                      <span className="muted" style={{ fontSize: '12px' }}>
+                        등록된 지역이 없습니다.
+                      </span>
                     )}
                   </div>
 
@@ -409,7 +459,9 @@ export default function RoundsPage() {
                         </button>
                       ))}
                       {childrenOf(expandedParentId).length === 0 && (
-                        <span className="muted" style={{ fontSize: '12px' }}>하위 지역이 없습니다.</span>
+                        <span className="muted" style={{ fontSize: '12px' }}>
+                          하위 지역이 없습니다.
+                        </span>
                       )}
                     </div>
                   )}
@@ -424,23 +476,47 @@ export default function RoundsPage() {
             </div>
             <div className="field">
               <label>전체회차 번호</label>
-              <input type="number" value={form.courseNumber} onChange={(event) => updateForm('courseNumber', event.target.value)} required />
+              <input
+                type="number"
+                value={form.courseNumber}
+                onChange={(event) => updateForm('courseNumber', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>지역회차 번호</label>
-              <input type="number" value={form.localCourseNumber} onChange={(event) => updateForm('localCourseNumber', event.target.value)} required />
+              <input
+                type="number"
+                value={form.localCourseNumber}
+                onChange={(event) => updateForm('localCourseNumber', event.target.value)}
+                required
+              />
             </div>
             <div className="field full">
               <label>강좌명</label>
-              <input value={form.courseName} onChange={(event) => updateForm('courseName', event.target.value)} required />
+              <input
+                value={form.courseName}
+                onChange={(event) => updateForm('courseName', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>모집 시작일</label>
-              <input type="date" value={form.recruitStart} onChange={(event) => updateForm('recruitStart', event.target.value)} required />
+              <input
+                type="date"
+                value={form.recruitStart}
+                onChange={(event) => updateForm('recruitStart', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>모집 종료일</label>
-              <input type="date" value={form.recruitEnd} onChange={(event) => updateForm('recruitEnd', event.target.value)} required />
+              <input
+                type="date"
+                value={form.recruitEnd}
+                onChange={(event) => updateForm('recruitEnd', event.target.value)}
+                required
+              />
             </div>
 
             {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
@@ -464,23 +540,39 @@ export default function RoundsPage() {
 
             <div className="field">
               <label>교육 시작시간</label>
-              <input type="time" value={form.educationStartTime} onChange={(event) => updateForm('educationStartTime', event.target.value)} required />
+              <input
+                type="time"
+                value={form.educationStartTime}
+                onChange={(event) => updateForm('educationStartTime', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>교육 종료시간</label>
-              <input type="time" value={form.educationEndTime} onChange={(event) => updateForm('educationEndTime', event.target.value)} required />
+              <input
+                type="time"
+                value={form.educationEndTime}
+                onChange={(event) => updateForm('educationEndTime', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>휴게시간</label>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <select value={breakHour} onChange={(event) => handleBreakHourChange(event.target.value)}>
+                <select
+                  value={breakHour}
+                  onChange={(event) => handleBreakHourChange(event.target.value)}
+                >
                   {BREAK_HOUR_OPTIONS.map((h) => (
                     <option key={h} value={h}>
                       {h}시간
                     </option>
                   ))}
                 </select>
-                <select value={breakMinute} onChange={(event) => handleBreakMinuteChange(event.target.value)}>
+                <select
+                  value={breakMinute}
+                  onChange={(event) => handleBreakMinuteChange(event.target.value)}
+                >
                   {BREAK_MINUTE_OPTIONS.map((m) => (
                     <option key={m} value={m}>
                       {m}분
@@ -491,19 +583,38 @@ export default function RoundsPage() {
             </div>
             <div className="field">
               <label>정원</label>
-              <input type="number" value={form.capacity} onChange={(event) => updateForm('capacity', event.target.value)} required />
+              <input
+                type="number"
+                value={form.capacity}
+                onChange={(event) => updateForm('capacity', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>최소 정원</label>
-              <input type="number" value={form.minimumCapacity} onChange={(event) => updateForm('minimumCapacity', event.target.value)} required />
+              <input
+                type="number"
+                value={form.minimumCapacity}
+                onChange={(event) => updateForm('minimumCapacity', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>수행계획서 제출일</label>
-              <input type="date" value={form.planSubmitDate} onChange={(event) => updateForm('planSubmitDate', event.target.value)} required />
+              <input
+                type="date"
+                value={form.planSubmitDate}
+                onChange={(event) => updateForm('planSubmitDate', event.target.value)}
+                required
+              />
             </div>
             <div className="field">
               <label>교육장</label>
-              <input value={form.location} onChange={(event) => updateForm('location', event.target.value)} required />
+              <input
+                value={form.location}
+                onChange={(event) => updateForm('location', event.target.value)}
+                required
+              />
             </div>
             <div className="field full" style={{ alignItems: 'flex-end' }}>
               <button className="btn primary" type="submit" disabled={isSubmitting}>
@@ -534,6 +645,7 @@ export default function RoundsPage() {
                 <th>상태</th>
                 <th>개강일정</th>
                 <th>계획서 제출일</th>
+                <th>QR</th>
               </tr>
             </thead>
             <tbody id="r-rows">
@@ -547,22 +659,43 @@ export default function RoundsPage() {
                   <td className="pname">{course.courseName ?? `강좌 #${course.courseId}`}</td>
                   <td>{course.regionName ?? course.regionId ?? '-'}</td>
                   <td className="tnum">{course.courseNumber ? `${course.courseNumber}기` : '-'}</td>
-                  <td className="tnum">{course.localCourseNumber ? `${course.localCourseNumber}회차` : '-'}</td>
+                  <td className="tnum">
+                    {course.localCourseNumber ? `${course.localCourseNumber}회차` : '-'}
+                  </td>
                   <td className="tnum">
                     {course.currentParticipants ?? 0}
                     <span className="muted"> / {course.capacity ?? '-'}</span>
                   </td>
                   <td>{course.location ?? '-'}</td>
                   <td>
-                    <span className={`chip ${statusClass(course.status)}`}>{statusLabel(course.status)}</span>
+                    <span className={`chip ${statusClass(course.status)}`}>
+                      {statusLabel(course.status)}
+                    </span>
                   </td>
                   <td className="tnum">{formatCourseSchedule(course)}</td>
                   <td className="tnum">{course.planSubmitDate ?? '-'}</td>
+                  <td>
+                    <button
+                      className="btn"
+                      type="button"
+                      style={{ padding: '4px 10px', fontSize: '12px' }}
+                      disabled={!course.courseId}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQrCourse(course);
+                      }}
+                    >
+                      QR
+                    </button>
+                  </td>
                 </tr>
               ))}
               {!isLoading && courses.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                  <td
+                    colSpan={10}
+                    style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
+                  >
                     {isRestricted ? '담당 중인 회차가 없습니다.' : '등록된 강좌가 없습니다.'}
                   </td>
                 </tr>
@@ -573,7 +706,12 @@ export default function RoundsPage() {
       </div>
 
       <div className="filters" style={{ marginTop: '14px' }}>
-        <button className="btn" type="button" disabled={page <= 0 || isLoading} onClick={() => setPage((prev) => Math.max(0, prev - 1))}>
+        <button
+          className="btn"
+          type="button"
+          disabled={page <= 0 || isLoading}
+          onClick={() => setPage((prev) => Math.max(0, prev - 1))}
+        >
           이전
         </button>
         <span className="muted tnum">
@@ -589,6 +727,16 @@ export default function RoundsPage() {
         </button>
       </div>
       <p className="note">행을 클릭하면 강좌 상세, 담당자, 참여자 정보를 확인할 수 있습니다.</p>
+
+      {qrCourse?.courseId && (
+        <QrModal
+          isOpen={Boolean(qrCourse)}
+          onClose={() => setQrCourse(null)}
+          courseId={qrCourse.courseId}
+          courseName={qrCourse.courseName}
+          regionName={qrCourse.regionName}
+        />
+      )}
     </section>
   );
 }
