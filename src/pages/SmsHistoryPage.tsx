@@ -19,11 +19,19 @@ import type {
   SmsHistoryParams,
   ReservationCancelPreview,
 } from '../api/participantSms';
+import { getCourseStaffSmsHistoryPage } from '../api/courseStaffSms';
+import type {
+  CourseStaffSmsHistoryPageItem,
+  CourseStaffSmsHistoryParams,
+} from '../api/courseStaffSms';
 import { apiErrorMessage } from '../api/apiError';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 const EXPORT_PAGE_SIZE = 100;
+
+// 상단 탭: 참여자에게 보낸 문자 / 담당자에게 보낸 안내 문자
+type HistoryTarget = 'PARTICIPANT' | 'STAFF';
 
 // 발송 상태 라벨/칩
 const STATUS_LABELS: Record<string, string> = {
@@ -63,6 +71,32 @@ function roundLabel(item: SmsHistoryPageItem): string {
   return `${region} · ${round}`.replace(/^ · /, '').replace(/ · $/, '') || '—';
 }
 
+// 담당자 발송내역용 — 알림 종류 라벨/칩
+const STAFF_NOTIFY_TYPE_LABELS: Record<string, string> = {
+  STATUS_CHANGE: '상태 변경',
+  SCHEDULE_CHANGE: '일정/장소 변경',
+};
+function staffNotifyTypeLabel(notifyType?: string): string {
+  return notifyType ? STAFF_NOTIFY_TYPE_LABELS[notifyType] ?? notifyType : '-';
+}
+const STAFF_STATUS_LABELS: Record<string, string> = {
+  SUCCESS: '성공',
+  FAIL: '실패',
+};
+function staffStatusLabel(sendStatus?: string): string {
+  return sendStatus ? STAFF_STATUS_LABELS[sendStatus] ?? sendStatus : '-';
+}
+function staffStatusChip(sendStatus?: string): string {
+  if (sendStatus === 'SUCCESS') return 'ok';
+  if (sendStatus === 'FAIL') return 'warn';
+  return 'neutral';
+}
+function staffRoundLabel(item: CourseStaffSmsHistoryPageItem): string {
+  const region = item.regionName ?? '';
+  const round = item.courseNumber != null ? `${item.courseNumber}회차` : (item.courseName ?? '');
+  return `${region} · ${round}`.replace(/^ · /, '').replace(/ · $/, '') || '—';
+}
+
 // CSV 셀 이스케이프(큰따옴표 이중화 + 감싸기)
 function csvCell(value: string | number | null | undefined): string {
   const s = value == null ? '' : String(value);
@@ -73,6 +107,47 @@ export default function SmsHistoryPage() {
   const { roleConfig } = useRole();
   const isAllScope = roleConfig.roles.some((r) => r === 'ADMIN' || r === 'HEAD_OFFICE');
 
+  // 상단 탭: 참여자 / 담당자
+  const [target, setTarget] = useState<HistoryTarget>('PARTICIPANT');
+
+  return (
+    <section className="view active" id="view-sms-history">
+      <div className="perm-bar" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <span className="pb-ic">✉</span>
+        <span>
+          {isAllScope
+            ? '전체 발송내역 조회 중 (관리자 / 본사 권한)'
+            : '내 발송내역만 조회 중 (지정 권한)'}
+        </span>
+        <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
+          <button
+            type="button"
+            className={`chip ${target === 'PARTICIPANT' ? 'info' : 'neutral'}`}
+            style={{ cursor: 'pointer', border: 'none' }}
+            onClick={() => setTarget('PARTICIPANT')}
+          >
+            참여자에게 보낸 문자
+          </button>
+          <button
+            type="button"
+            className={`chip ${target === 'STAFF' ? 'info' : 'neutral'}`}
+            style={{ cursor: 'pointer', border: 'none' }}
+            onClick={() => setTarget('STAFF')}
+          >
+            담당자에게 보낸 안내 문자
+          </button>
+        </div>
+      </div>
+
+      {target === 'PARTICIPANT' ? <ParticipantSmsHistorySection /> : <StaffSmsHistorySection />}
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// 참여자에게 보낸 문자 발송내역 — 기존 UI/로직 그대로(변경 없음)
+// ────────────────────────────────────────────────────────────
+function ParticipantSmsHistorySection() {
   const [items, setItems] = useState<SmsHistoryPageItem[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -291,16 +366,7 @@ export default function SmsHistoryPage() {
   };
 
   return (
-    <section className="view active" id="view-sms-history">
-      <div className="perm-bar">
-        <span className="pb-ic">✉</span>
-        <span>
-          {isAllScope
-            ? '전체 발송내역 조회 중 (관리자 / 본사 권한)'
-            : '내 발송내역만 조회 중 (지정 권한)'}
-        </span>
-      </div>
-
+    <>
       <div className="filters">
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
           <RegionSelect
@@ -601,6 +667,334 @@ export default function SmsHistoryPage() {
           </div>
         </div>
       )}
-    </section>
+    </>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// 담당자(강좌 staff)에게 보낸 안내 문자 발송내역 — 신규
+// ────────────────────────────────────────────────────────────
+function StaffSmsHistorySection() {
+  const [items, setItems] = useState<CourseStaffSmsHistoryPageItem[]>([]);
+  const [totalElements, setTotalElements] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const keywordInput = useDebounceSearch('', SEARCH_DEBOUNCE_MS);
+  const keyword = keywordInput.debouncedValue.trim();
+  const [regions, setRegions] = useState<RegionSummary[]>([]);
+  const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
+  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
+  const [courseNumberQuery, setCourseNumberQuery] = useState('');
+  const [courseNumber, setCourseNumber] = useState<number | ''>('');
+  const [notifyTypeFilter, setNotifyTypeFilter] = useState(''); // '' = 전체
+  const [statusFilter, setStatusFilter] = useState(''); // '' = 전체
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  const buildParams = useCallback(
+    (): Omit<CourseStaffSmsHistoryParams, 'page' | 'size'> => ({
+      keyword: keyword || undefined,
+      notifyType: notifyTypeFilter || undefined,
+      sendStatus: statusFilter || undefined,
+      regionId: regionFilter.regionId,
+      parentRegionId: regionFilter.parentRegionId,
+      ...buildRoundParams(regionFilter, courseNumber),
+      sentDateFrom: dateFrom || undefined,
+      sentDateTo: dateTo || undefined,
+    }),
+    [
+      keyword,
+      notifyTypeFilter,
+      statusFilter,
+      regionFilter.regionId,
+      regionFilter.parentRegionId,
+      courseNumber,
+      dateFrom,
+      dateTo,
+    ],
+  );
+
+  const fetchList = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    getCourseStaffSmsHistoryPage({ ...buildParams(), page, size: PAGE_SIZE })
+      .then((res) => {
+        const data = res.data.data;
+        setItems(data?.content ?? []);
+        setTotalElements(data?.totalElements ?? 0);
+        setTotalPages(data?.totalPages ?? 0);
+      })
+      .catch((err) => setError(apiErrorMessage(err, '담당자 발송 내역을 불러오지 못했습니다.')))
+      .finally(() => setLoading(false));
+  }, [buildParams, page]);
+
+  const filterKey = useMemo(
+    () =>
+      JSON.stringify([
+        keyword,
+        notifyTypeFilter,
+        statusFilter,
+        regionFilter.regionId,
+        regionFilter.parentRegionId,
+        courseNumber,
+        dateFrom,
+        dateTo,
+      ]),
+    [
+      keyword,
+      notifyTypeFilter,
+      statusFilter,
+      regionFilter.regionId,
+      regionFilter.parentRegionId,
+      courseNumber,
+      dateFrom,
+      dateTo,
+    ],
+  );
+  const prevFilterKeyRef = useRef(filterKey);
+
+  useEffect(() => {
+    if (prevFilterKeyRef.current !== filterKey) {
+      prevFilterKeyRef.current = filterKey;
+      if (page !== 0) {
+        setPage(0);
+        return;
+      }
+    }
+    fetchList();
+  }, [filterKey, page, fetchList]);
+
+  useEffect(() => {
+    getRegions()
+      .then((res) => setRegions(res.data.data ?? []))
+      .catch(() => setRegions([]));
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const trimmed = courseNumberQuery.trim();
+      setCourseNumber(trimmed === '' ? '' : Number(trimmed));
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [courseNumberQuery]);
+
+  const exportCsv = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const params = buildParams();
+      const rows: CourseStaffSmsHistoryPageItem[] = [];
+      let p = 0;
+      let pages = 1;
+      do {
+        const res = await getCourseStaffSmsHistoryPage({ ...params, page: p, size: EXPORT_PAGE_SIZE });
+        const data = res.data.data;
+        rows.push(...(data?.content ?? []));
+        pages = data?.totalPages ?? 1;
+        p += 1;
+      } while (p < pages);
+
+      const header = ['발송일시', '수신담당자', '전화', '지역', '회차', '종류', '내용', '상태', '발송자'];
+      const lines = [header.map(csvCell).join(',')];
+      for (const r of rows) {
+        lines.push(
+          [
+            fmtDateTime(r.sentAt ?? null),
+            r.userName ?? '',
+            r.userPhone ?? '',
+            r.regionName ?? '',
+            r.courseNumber ?? '',
+            staffNotifyTypeLabel(r.notifyType),
+            r.content ?? '',
+            staffStatusLabel(r.sendStatus),
+            r.sentByName ?? (r.sentBy ? `#${r.sentBy}` : '시스템'),
+          ]
+            .map(csvCell)
+            .join(','),
+        );
+      }
+      const csv = '﻿' + lines.join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      a.href = url;
+      a.download = `담당자문자발송내역_${stamp}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(apiErrorMessage(err, 'CSV 내보내기에 실패했습니다.'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="filters">
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', flex: 1 }}>
+          <RegionSelect
+            groups={regionGroups}
+            value={regionFilter}
+            onChange={(v) => setRegionFilter(v)}
+            allowParentSelect
+            allLabel="전체 지역"
+          />
+          <div className="searchbox" style={{ width: '110px', padding: '4px 10px' }}>
+            <input
+              type="number"
+              min={1}
+              placeholder={roundInputPlaceholder(regionFilter)}
+              value={courseNumberQuery}
+              onChange={(e) => setCourseNumberQuery(e.target.value)}
+              style={{ fontSize: '12px' }}
+            />
+          </div>
+          <div className="select">
+            <span className="ico">종류</span>
+            <select
+              value={notifyTypeFilter}
+              onChange={(e) => setNotifyTypeFilter(e.target.value)}
+              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="">전체 ▾</option>
+              <option value="STATUS_CHANGE">상태 변경</option>
+              <option value="SCHEDULE_CHANGE">일정/장소 변경</option>
+            </select>
+          </div>
+          <div className="select">
+            <span className="ico">상태</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+            >
+              <option value="">전체 ▾</option>
+              <option value="SUCCESS">성공</option>
+              <option value="FAIL">실패</option>
+            </select>
+          </div>
+          <div className="searchbox" style={{ width: '180px', padding: '4px 10px' }}>
+            <input
+              type="text"
+              placeholder="담당자 이름/전화 검색..."
+              {...keywordInput.inputProps}
+              style={{ fontSize: '12px' }}
+            />
+          </div>
+          <div className="select" title="발송일 기준">
+            <span className="ico">발송일</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
+            />
+            <span className="muted" style={{ fontSize: '12px' }}>
+              ~
+            </span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
+            />
+          </div>
+        </div>
+
+        <span className="count">
+          총 {totalElements}건{loading ? ' · 불러오는 중…' : ''}
+        </span>
+        <button
+          className="btn"
+          onClick={exportCsv}
+          disabled={exporting || totalElements === 0}
+          style={{ marginLeft: '10px' }}
+        >
+          {exporting ? '내보내는 중…' : '⬇ CSV 내보내기'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="card" style={{ padding: '14px', marginBottom: '12px', color: 'var(--danger)' }}>
+          {error}
+        </div>
+      )}
+
+      <div className="card">
+        <div className="tbl-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th style={{ width: '150px' }}>발송일시</th>
+                <th>수신 담당자</th>
+                <th>지역 / 회차</th>
+                <th>종류</th>
+                <th>내용</th>
+                <th>상태</th>
+                <th>발송자</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr key={r.courseStaffSmsId}>
+                  <td className="tnum" style={{ fontSize: '12px' }}>
+                    {fmtDateTime(r.sentAt ?? null)}
+                  </td>
+                  <td>
+                    <div className="pname">{r.userName ?? `담당자 #${r.userId}`}</div>
+                    <div className="cell-sub">{r.userPhone ?? ''}</div>
+                  </td>
+                  <td>{staffRoundLabel(r)}</td>
+                  <td>
+                    <span className="chip info">{staffNotifyTypeLabel(r.notifyType)}</span>
+                  </td>
+                  <td style={{ maxWidth: '360px' }}>
+                    <div
+                      className="cell-sub"
+                      title={r.content}
+                      style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '360px' }}
+                    >
+                      {r.content}
+                    </div>
+                  </td>
+                  <td>
+                    <span className={`chip ${staffStatusChip(r.sendStatus)}`}>{staffStatusLabel(r.sendStatus)}</span>
+                  </td>
+                  <td>{r.sentByName ?? (r.sentBy ? `#${r.sentBy}` : '시스템')}</td>
+                </tr>
+              ))}
+              {!loading && items.length === 0 && (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                    조건에 일치하는 발송 내역이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '12px' }}>
+          <button className="btn" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+            이전
+          </button>
+          <span className="muted" style={{ fontSize: '12px' }}>
+            {page + 1} / {totalPages}
+          </span>
+          <button className="btn" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+            다음
+          </button>
+        </div>
+      )}
+
+      <p className="note">강좌 상태변경(모집마감/취소)·일정변경 시 담당자(PM 제외)에게 보낸 안내 문자 내역입니다.</p>
+    </>
   );
 }

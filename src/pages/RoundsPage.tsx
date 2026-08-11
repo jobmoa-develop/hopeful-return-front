@@ -518,19 +518,26 @@ export default function RoundsPage() {
                 required
               />
             </div>
-            {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map(
-              (key, index) => (
-                <div className="field" key={key}>
-                  <label>{index + 1}일차 교육일</label>
-                  <input
-                    type="date"
-                    value={form[key]}
-                    onChange={(event) => updateForm(key, event.target.value)}
-                    required
-                  />
-                </div>
-              ),
-            )}
+
+            {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
+            <div className="field full">
+              <label>교육 일정 (1~5일차)</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
+                {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map((key, index) => (
+                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>{index + 1}일차</label>
+                    <input
+                      type="date"
+                      value={form[key]}
+                      onChange={(event) => updateForm(key, event.target.value)}
+                      required
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="field">
               <label>교육 시작시간</label>
               <input
