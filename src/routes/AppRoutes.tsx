@@ -19,6 +19,7 @@ import UserManagementPage from '../pages/UserManagementPage';
 import SmsPermissionPage from '../pages/SmsPermissionPage';
 import FollowUpPage from '../pages/FollowUpPage';
 import MyPage from '../pages/MyPage';
+import QrCheckInPage from '../pages/QrCheckInPage';
 
 function LoginRoute() {
   const { isAuthenticated } = useAuth();
@@ -34,6 +35,8 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginRoute />} />
+      {/* 공개 라우트: 로그인 없이 접근 (ProtectedRoute/Layout 바깥) */}
+      <Route path="/qr/:courseId" element={<QrCheckInPage />} />
       <Route
         element={
           <ProtectedRoute>
