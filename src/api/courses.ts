@@ -165,3 +165,48 @@ export function getCourseStaffs(courseId: number) {
 export function getCourseParticipants(courseId: number, params?: { status?: string; keyword?: string; page?: number; size?: number }) {
   return apiClient.get<ApiResponse<PageData<CourseParticipant>>>(`/api/courses/${courseId}/participants`, { params });
 }
+
+export type NotifyCourseChangeRequest = {
+  userIds: number[];
+};
+
+export type NotifyCourseChangeResponse = {
+  notifiedCount: number;
+};
+
+// 강좌 일정/장소 변경 안내 문자 발송 — 선택 담당자(PM 제외) 대상
+export function notifyCourseScheduleChange(courseId: number, payload: NotifyCourseChangeRequest) {
+  return apiClient.post<ApiResponse<NotifyCourseChangeResponse>>(
+    `/api/courses/${courseId}/notify-schedule-change`,
+    payload,
+  );
+}
+
+// 강좌 담당자 안내 문자(상태변경/일정변경) 발송 종류
+export type CourseStaffSmsNotifyType = 'STATUS_CHANGE' | 'SCHEDULE_CHANGE' | string;
+
+// 강좌 담당자 안내 문자 발송 상태
+export type CourseStaffSmsSendStatus = 'SUCCESS' | 'FAIL' | string;
+
+export type CourseStaffSmsHistoryItem = {
+  courseStaffSmsId: number;
+  userId: number;
+  userName?: string;
+  sentBy?: number;
+  sentByName?: string;
+  notifyType?: CourseStaffSmsNotifyType;
+  content?: string;
+  sendStatus?: CourseStaffSmsSendStatus;
+  sentAt?: string;
+};
+
+export type CourseStaffSmsHistoryResponse = {
+  content: CourseStaffSmsHistoryItem[];
+};
+
+// 강좌 담당자 안내 문자(상태변경·일정변경) 발송 이력 조회
+export function getCourseStaffSmsHistory(courseId: number) {
+  return apiClient.get<ApiResponse<CourseStaffSmsHistoryResponse>>(
+    `/api/courses/${courseId}/staff-sms-history`,
+  );
+}

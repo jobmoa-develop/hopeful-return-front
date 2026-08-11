@@ -7,15 +7,24 @@ import {
   getCourse,
   getCourseParticipants,
   getCourseStaffs,
+  getCourseStaffSmsHistory,
   updateCourse,
   updateCourseStatus,
 } from '../api/courses';
-import type { CourseDetail, CourseParticipant, CourseStaff, CourseUpdateRequest } from '../api/courses';
+import type {
+  CourseDetail,
+  CourseParticipant,
+  CourseStaff,
+  CourseStaffSmsHistoryItem,
+  CourseUpdateRequest,
+} from '../api/courses';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { roleNameLabel } from '../api/userRoles'; // ROLE_NAME_LABELS 매핑만 재사용
 import { ParticipantEnrollModal } from '../components/ParticipantModals';
+import { notifyCourseScheduleChange } from '../api/courses';
+import { CourseChangeNotifyModal } from '../components/CourseChangeNotifyModal';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
 
@@ -51,6 +60,35 @@ function formatBreakMinutesLabel(totalMinutes?: number): string {
   return parts.join(' ');
 }
 
+// 강좌 수정 시 "변경 감지" 대상 필드 — 이 중 하나라도 원래 값과 달라지면 문자 발송 여부 팝업을 띄운다.
+const WATCHED_FIELDS: Array<keyof EditFormState> = [
+  'day1Date',
+  'day2Date',
+  'day3Date',
+  'day4Date',
+  'day5Date',
+  'educationStartTime',
+  'educationEndTime',
+  'breakMinutes',
+  'location',
+];
+
+// course(서버에서 불러온 원본)를 editForm과 같은 문자열 형태로 변환해 비교 기준을 만든다.
+function watchedValuesFromCourse(c: CourseDetail): Partial<EditFormState> {
+  return {
+    day1Date: c.day1Date ?? '',
+    day2Date: c.day2Date ?? '',
+    day3Date: c.day3Date ?? '',
+    day4Date: c.day4Date ?? '',
+    day5Date: c.day5Date ?? '',
+    educationStartTime: normalizeTimeInput(c.educationStartTime),
+    educationEndTime: normalizeTimeInput(c.educationEndTime),
+    breakMinutes:
+      c.breakMinutes === undefined || c.breakMinutes === null ? '' : String(c.breakMinutes),
+    location: c.location ?? '',
+  };
+}
+
 function statusLabel(status?: string) {
   const labels: Record<string, string> = {
     PLANNED: '예정',
@@ -77,6 +115,30 @@ function getErrorMessage(error: unknown) {
     return data?.error ?? data?.message ?? '요청 처리 중 오류가 발생했습니다.';
   }
   return '요청 처리 중 오류가 발생했습니다.';
+}
+
+// 담당자 안내 문자 종류(STATUS_CHANGE/SCHEDULE_CHANGE) 한글 라벨
+function staffSmsNotifyTypeLabel(notifyType?: string) {
+  const labels: Record<string, string> = {
+    STATUS_CHANGE: '상태 변경',
+    SCHEDULE_CHANGE: '일정/장소 변경',
+  };
+  return notifyType ? labels[notifyType] ?? notifyType : '-';
+}
+
+// 담당자 안내 문자 발송 상태(SUCCESS/FAIL) 한글 라벨 + chip 클래스
+function staffSmsStatusLabel(sendStatus?: string) {
+  const labels: Record<string, string> = {
+    SUCCESS: '발송 성공',
+    FAIL: '발송 실패',
+  };
+  return sendStatus ? labels[sendStatus] ?? sendStatus : '-';
+}
+
+function staffSmsStatusClass(sendStatus?: string) {
+  if (sendStatus === 'SUCCESS') return 'ok';
+  if (sendStatus === 'FAIL') return 'danger';
+  return 'neutral';
 }
 
 // 입력 컨트롤은 문자열로 다루고, 제출 시 빈 값은 "미변경"으로 간주해 payload에서 제외한다.
@@ -180,6 +242,15 @@ export default function RoundDetailPage() {
   const [statusForm, setStatusForm] = useState('OPEN');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 강좌 수정 시 일정/장소 변경 감지 → 문자 발송 여부 확인 팝업
+  const [isNotifyModalOpen, setIsNotifyModalOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<CourseUpdateRequest | null>(null);
+  const [notifySubmitting, setNotifySubmitting] = useState(false);
+
+  // 강좌 담당자 안내 문자(상태변경·일정변경) 발송 이력
+  const [staffSmsHistory, setStaffSmsHistory] = useState<CourseStaffSmsHistoryItem[]>([]);
+  const [isStaffSmsHistoryLoading, setIsStaffSmsHistoryLoading] = useState(false);
+
   // 대표 역할(roleConfig.role) 1개만 보면 다중 역할 계정(예: ADMIN+COUNSELOR)에서
   // 대표 역할이 우연히 COUNSELOR로 뽑힐 경우 ADMIN 권한이 무시된다 → 전체 역할 배열로 판단
   const canEdit = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(r));
@@ -259,10 +330,25 @@ export default function RoundDetailPage() {
     }
   };
 
+  const loadStaffSmsHistory = async () => {
+    if (!Number.isFinite(courseId)) return;
+
+    setIsStaffSmsHistoryLoading(true);
+    try {
+      const { data: response } = await getCourseStaffSmsHistory(courseId);
+      setStaffSmsHistory(response.data.content ?? []);
+    } catch {
+      setStaffSmsHistory([]);
+    } finally {
+      setIsStaffSmsHistoryLoading(false);
+    }
+  };
+
   useEffect(() => {
     void loadCourse();
     void loadStaffs();
     void loadParticipants();
+    void loadStaffSmsHistory();
   }, [courseId]);
 
   useEffect(() => {
@@ -318,16 +404,83 @@ export default function RoundDetailPage() {
     event.preventDefault();
     if (!course) return;
 
+    const payload = buildUpdatePayload(editForm);
+    const original = watchedValuesFromCourse(course);
+    // 비워둔 필드는 buildUpdatePayload에서도 제외되므로 "미변경"으로 간주한다.
+    const hasWatchedChange = WATCHED_FIELDS.some((key) => {
+      const currentValue = editForm[key];
+      if (currentValue === '') return false;
+      return currentValue !== original[key];
+    });
+
+    if (hasWatchedChange) {
+      // 바로 저장하지 않고, 문자 발송 여부를 먼저 확인받는다.
+      setPendingPayload(payload);
+      setIsNotifyModalOpen(true);
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      await updateCourse(course.courseId, buildUpdatePayload(editForm));
+      await updateCourse(course.courseId, payload);
       setIsEditOpen(false);
       await loadCourse();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const closeNotifyModal = () => {
+    if (notifySubmitting) return;
+    setIsNotifyModalOpen(false);
+    setPendingPayload(null);
+  };
+
+  const handleSaveOnly = async () => {
+    if (!course || !pendingPayload) return;
+    setNotifySubmitting(true);
+    setErrorMessage('');
+    try {
+      await updateCourse(course.courseId, pendingPayload);
+      setIsNotifyModalOpen(false);
+      setPendingPayload(null);
+      setIsEditOpen(false);
+      await loadCourse();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setNotifySubmitting(false);
+    }
+  };
+
+  const handleSaveAndNotify = async (userIds: number[]) => {
+    if (!course || !pendingPayload) return;
+    setNotifySubmitting(true);
+    setErrorMessage('');
+    try {
+      await updateCourse(course.courseId, pendingPayload);
+      if (userIds.length > 0) {
+        try {
+          await notifyCourseScheduleChange(course.courseId, { userIds });
+          await loadStaffSmsHistory();
+        } catch (notifyError) {
+          // 강좌 정보 저장은 이미 성공했으므로, 발송 실패는 별도 안내만 하고 흐름을 막지 않는다.
+          setErrorMessage(
+            `${getErrorMessage(notifyError)} (강좌 정보 저장은 완료되었습니다. 문자 발송만 실패했습니다.)`,
+          );
+        }
+      }
+      setIsNotifyModalOpen(false);
+      setPendingPayload(null);
+      setIsEditOpen(false);
+      await loadCourse();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setNotifySubmitting(false);
     }
   };
 
@@ -339,6 +492,8 @@ export default function RoundDetailPage() {
     try {
       await updateCourseStatus(course.courseId, { status: statusForm });
       await loadCourse();
+      // 모집마감/취소 전환 시 서버에서 자동으로 담당자 안내 문자를 보낼 수 있으므로 이력도 함께 갱신한다.
+      await loadStaffSmsHistory();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -534,18 +689,29 @@ export default function RoundDetailPage() {
               <input type="date" value={editForm.recruitEnd} onChange={(event) => updateEditForm('recruitEnd', event.target.value)} />
             </div>
 
-            {([
-              ['day1Date', '1일차 교육일'],
-              ['day2Date', '2일차 교육일'],
-              ['day3Date', '3일차 교육일'],
-              ['day4Date', '4일차 교육일'],
-              ['day5Date', '5일차 교육일'],
-            ] as const).map(([key, label]) => (
-              <div className="field" key={key}>
-                <label>{label}</label>
-                <input type="date" value={editForm[key]} onChange={(event) => updateEditForm(key, event.target.value)} />
+            {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
+            <div className="field full">
+              <label>교육 일정 (1~5일차)</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
+                {([
+                  ['day1Date', '1일차'],
+                  ['day2Date', '2일차'],
+                  ['day3Date', '3일차'],
+                  ['day4Date', '4일차'],
+                  ['day5Date', '5일차'],
+                ] as const).map(([key, label]) => (
+                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>{label}</label>
+                    <input
+                      type="date"
+                      value={editForm[key]}
+                      onChange={(event) => updateEditForm(key, event.target.value)}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
 
             <div className="field">
               <label>교육 시작시간</label>
@@ -721,6 +887,58 @@ export default function RoundDetailPage() {
 
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="card-h">
+          <span className="section-title">담당자 안내 문자 발송 이력</span>
+          <button
+            className="btn"
+            type="button"
+            onClick={loadStaffSmsHistory}
+            disabled={isStaffSmsHistoryLoading}
+            style={{ marginLeft: 'auto' }}
+          >
+            {isStaffSmsHistoryLoading ? '조회 중...' : '새로고침'}
+          </button>
+        </div>
+        <div className="tbl-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>수신 담당자</th>
+                <th>종류</th>
+                <th>내용</th>
+                <th>발송자</th>
+                <th>발송 시각</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              {staffSmsHistory.map((row) => (
+                <tr key={row.courseStaffSmsId}>
+                  <td className="pname">{row.userName ?? `담당자 #${row.userId}`}</td>
+                  <td>{staffSmsNotifyTypeLabel(row.notifyType)}</td>
+                  <td style={{ whiteSpace: 'pre-line', maxWidth: '320px' }}>{row.content ?? '-'}</td>
+                  <td>{row.sentByName ?? (row.sentBy ? `#${row.sentBy}` : '시스템')}</td>
+                  <td className="tnum">{row.sentAt ?? '-'}</td>
+                  <td>
+                    <span className={`chip ${staffSmsStatusClass(row.sendStatus)}`}>
+                      {staffSmsStatusLabel(row.sendStatus)}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {staffSmsHistory.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}>
+                    발송 이력이 없습니다.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: '18px' }}>
+        <div className="card-h">
           <span className="section-title">강좌 참여자</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button className="btn primary" type="button" onClick={() => setIsEnrollOpen(true)}>
@@ -782,6 +1000,14 @@ export default function RoundDetailPage() {
         onClose={() => setIsEnrollOpen(false)}
         courseId={courseId}
         onSaved={loadParticipants}
+      />
+      <CourseChangeNotifyModal
+        isOpen={isNotifyModalOpen}
+        courseId={courseId}
+        onClose={closeNotifyModal}
+        onSaveOnly={handleSaveOnly}
+        onSaveAndNotify={handleSaveAndNotify}
+        submitting={notifySubmitting}
       />
     </section>
   );
