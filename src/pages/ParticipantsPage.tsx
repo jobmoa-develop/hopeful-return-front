@@ -26,6 +26,8 @@ import {
   BulkImportModal,
 } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
+import { useTableSort } from '../hooks/useTableSort';
+import { SortableTh } from '../components/SortableTh';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -101,6 +103,8 @@ export default function ParticipantsPage() {
   // 체크박스 선택 UI는 일괄 처리·문자 발송 권한 중 하나라도 있으면 노출
   const canSelect = canBulkComplete || canBulkAssignCounselor || canSendSms;
 
+  const sort = useTableSort();
+
   const fetchList = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -112,6 +116,7 @@ export default function ParticipantsPage() {
       ...buildRoundParams(regionFilter, courseNumber),
       registerDateFrom: registerDateFrom || undefined,
       registerDateTo: registerDateTo || undefined,
+      ...sort.params,
       page,
       size: PAGE_SIZE,
     })
@@ -130,6 +135,8 @@ export default function ParticipantsPage() {
     courseNumber,
     registerDateFrom,
     registerDateTo,
+    sort.sortBy,
+    sort.sortOrder,
     page,
   ]);
 
@@ -144,6 +151,8 @@ export default function ParticipantsPage() {
         courseNumber,
         registerDateFrom,
         registerDateTo,
+        sort.sortBy,
+        sort.sortOrder,
       ]),
     [
       searchName,
@@ -152,6 +161,8 @@ export default function ParticipantsPage() {
       courseNumber,
       registerDateFrom,
       registerDateTo,
+      sort.sortBy,
+      sort.sortOrder,
     ],
   );
   const prevFilterKeyRef = useRef(filterKey);
@@ -462,8 +473,12 @@ export default function ParticipantsPage() {
                     />
                   </th>
                 )}
-                <th>참여자</th>
-                <th>지역 / 회차</th>
+                <SortableTh column="name" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  참여자
+                </SortableTh>
+                <SortableTh column="region" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  지역 / 회차
+                </SortableTh>
                 <th>진행상태</th>
                 <th>사전상담</th>
                 <th>출결</th>
