@@ -245,6 +245,8 @@ export type CourseParticipantListParams = {
   localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용
   status?: string;
   keyword?: string;
+  sortBy?: string; // 정렬 키(participantName/phone/status/region/courseNumber/localCourseNumber/registerDate)
+  sortOrder?: 'asc' | 'desc'; // 정렬 방향(기본 asc)
   page?: number;
   size?: number;
 };

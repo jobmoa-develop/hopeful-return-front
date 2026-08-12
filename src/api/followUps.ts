@@ -57,6 +57,8 @@ export type FollowUpListParams = {
   parentRegionId?: number; // 상위 지역(서울 등) — 산하 하위 지역 전체 포함 조회
   courseNumber?: number; // 전체회차(기수) — 전체 지역 조회 시 사용
   localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용
+  sortBy?: string; // 정렬 키(participantName/region/completionDate) — course-participant 위임
+  sortOrder?: 'asc' | 'desc'; // 정렬 방향(기본 asc)
   page?: number;
   size?: number;
 };

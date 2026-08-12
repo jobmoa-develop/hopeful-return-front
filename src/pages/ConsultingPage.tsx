@@ -16,6 +16,8 @@ import type { RegionFilterValue } from '../components/RegionSelect';
 import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import { CounselingSessionModal, SlotCounselorAssignModal } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
+import { useTableSort } from '../hooks/useTableSort';
+import { SortableTh } from '../components/SortableTh';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -48,6 +50,7 @@ export default function ConsultingPage() {
   const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
   const [courseNumber, setCourseNumber] = useState('');
   const [status, setStatus] = useState('');
+  const sort = useTableSort();
 
   const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   const canConsult = roleConfig.can.consult === 1;
@@ -73,6 +76,7 @@ export default function ConsultingPage() {
       parentRegionId: regionFilter.parentRegionId,
       ...buildRoundParams(regionFilter, courseNumber),
       status: status || undefined,
+      ...sort.params,
       page,
       size: PAGE_SIZE,
     })
@@ -84,13 +88,22 @@ export default function ConsultingPage() {
       })
       .catch((err) => setError(apiErrorMessage(err, '상담 대상 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status, page]);
+  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status, sort.sortBy, sort.sortOrder, page]);
 
   // 페이지를 리셋시켜야 하는 필터들을 하나의 키로 묶어서, 필터 변경 시
   // page 리셋 + fetch가 각각 별도 effect로 실행되며 API가 2번 호출되는 것을 방지한다.
   const filterKey = useMemo(
-    () => JSON.stringify([searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status]),
-    [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status],
+    () =>
+      JSON.stringify([
+        searchName,
+        regionFilter.regionId,
+        regionFilter.parentRegionId,
+        courseNumber,
+        status,
+        sort.sortBy,
+        sort.sortOrder,
+      ]),
+    [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status, sort.sortBy, sort.sortOrder],
   );
   const prevFilterKeyRef = useRef(filterKey);
 
@@ -190,9 +203,15 @@ export default function ConsultingPage() {
           <table className="data">
             <thead>
               <tr>
-                <th>참여자</th>
-                <th>지역 / 회차</th>
-                <th>진행상태</th>
+                <SortableTh column="participantName" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  참여자
+                </SortableTh>
+                <SortableTh column="region" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  지역 / 회차
+                </SortableTh>
+                <SortableTh column="status" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  진행상태
+                </SortableTh>
                 <th>사전상담</th>
                 <th>사후 1차</th>
                 <th>사후 2차</th>
