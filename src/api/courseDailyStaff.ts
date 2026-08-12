@@ -15,6 +15,7 @@ export type CourseDailyStaffItem = {
   sessionType: SessionTypeValue;
   userId: number;
   name?: string;
+  phone?: string; // 배정 변경 안내 문자용
 };
 
 export type CourseDailyStaffList = {
@@ -75,6 +76,7 @@ export type CandidateBusy = {
 export type StaffCandidate = {
   userId: number;
   name: string;
+  phone?: string; // 배정 변경 안내 문자용
   staffRoles: StaffRoleValue[];
   availability: CandidateAvailability[];
   busy?: CandidateBusy[];

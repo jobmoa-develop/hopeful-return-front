@@ -75,6 +75,9 @@ function roundLabel(item: SmsHistoryPageItem): string {
 const STAFF_NOTIFY_TYPE_LABELS: Record<string, string> = {
   STATUS_CHANGE: '상태 변경',
   SCHEDULE_CHANGE: '일정/장소 변경',
+  ASSIGN_NEW: '배정',
+  ASSIGN_CHANGED: '배정 변동',
+  ASSIGN_REMOVED: '배정 제외',
 };
 function staffNotifyTypeLabel(notifyType?: string): string {
   return notifyType ? STAFF_NOTIFY_TYPE_LABELS[notifyType] ?? notifyType : '-';
@@ -694,6 +697,8 @@ function StaffSmsHistorySection() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [exporting, setExporting] = useState(false);
+  // 행 클릭 상세(참여자 발송내역처럼 상태·본문 확인). 목록 항목이 전 필드를 가져 추가 조회 불필요.
+  const [detail, setDetail] = useState<CourseStaffSmsHistoryPageItem | null>(null);
 
   const buildParams = useCallback(
     (): Omit<CourseStaffSmsHistoryParams, 'page' | 'size'> => ({
@@ -862,6 +867,9 @@ function StaffSmsHistorySection() {
               style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
             >
               <option value="">전체 ▾</option>
+              <option value="ASSIGN_NEW">배정</option>
+              <option value="ASSIGN_CHANGED">배정 변동</option>
+              <option value="ASSIGN_REMOVED">배정 제외</option>
               <option value="STATUS_CHANGE">상태 변경</option>
               <option value="SCHEDULE_CHANGE">일정/장소 변경</option>
             </select>
@@ -941,7 +949,7 @@ function StaffSmsHistorySection() {
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.courseStaffSmsId}>
+                <tr key={r.courseStaffSmsId} onClick={() => setDetail(r)} style={{ cursor: 'pointer' }}>
                   <td className="tnum" style={{ fontSize: '12px' }}>
                     {fmtDateTime(r.sentAt ?? null)}
                   </td>
@@ -994,7 +1002,61 @@ function StaffSmsHistorySection() {
         </div>
       )}
 
-      <p className="note">강좌 상태변경(모집마감/취소)·일정변경 시 담당자(PM 제외)에게 보낸 안내 문자 내역입니다.</p>
+      <p className="note">
+        행을 클릭하면 발송 상세(내용·상태)를 확인할 수 있습니다. 인력 배정/변동/제외 및 강좌 상태·일정 변경 시 담당자에게 보낸 안내 문자 내역입니다.
+      </p>
+
+      {detail && (
+        <div
+          className="modal-overlay open"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDetail(null);
+          }}
+        >
+          <div className="modal" style={{ width: 'min(520px, 100%)' }}>
+            <div className="modal-h">
+              <h3>담당자 문자 발송 상세</h3>
+              <button className="x" onClick={() => setDetail(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-b">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span className="chip info">{staffNotifyTypeLabel(detail.notifyType)}</span>
+                  <span className={`chip ${staffStatusChip(detail.sendStatus)}`}>
+                    {staffStatusLabel(detail.sendStatus)}
+                  </span>
+                  <span className="muted" style={{ fontSize: '12px' }}>
+                    {fmtDateTime(detail.sentAt ?? null)} ·{' '}
+                    {detail.sentByName ?? (detail.sentBy ? `#${detail.sentBy}` : '시스템')}
+                  </span>
+                </div>
+                <div>
+                  <div className="cell-sub">수신 담당자</div>
+                  <div className="pname">{detail.userName ?? `담당자 #${detail.userId}`}</div>
+                  <div className="cell-sub">{detail.userPhone ?? ''}</div>
+                </div>
+                <div>
+                  <div className="cell-sub">지역 / 회차</div>
+                  <div style={{ fontSize: '13px' }}>{staffRoundLabel(detail)}</div>
+                </div>
+                <div>
+                  <div className="cell-sub">본문</div>
+                  <div style={{ whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: 1.5 }}>
+                    {detail.content}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-f">
+              <button className="btn" onClick={() => setDetail(null)}>
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
