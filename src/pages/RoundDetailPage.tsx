@@ -93,10 +93,10 @@ function statusLabel(status?: string) {
   const labels: Record<string, string> = {
     PLANNED: '예정',
     OPEN: '모집중',
-    CLOSED: '모집마감',
+    CLOSED: '개강 확정',
     IN_PROGRESS: '교육중',
     COMPLETED: '완료',
-    CANCELED: '취소',
+    CANCELED: '폐강',
   };
   return status ? labels[status] ?? status : '-';
 }
