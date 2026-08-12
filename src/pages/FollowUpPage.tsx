@@ -10,6 +10,8 @@ import type { RegionFilterValue } from '../components/RegionSelect';
 import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import { apiErrorMessage } from '../api/apiError';
 import { FollowUpDetailModal } from '../components/FollowUpModals';
+import { useTableSort } from '../hooks/useTableSort';
+import { SortableTh } from '../components/SortableTh';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
@@ -44,6 +46,8 @@ export default function FollowUpPage() {
   // 상위(서울/충청남도/경기도)는 optgroup 라벨로만 표시(선택 불가), 하위 지역만 실제 옵션
   const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
 
+  const sort = useTableSort();
+
   const fetchList = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -52,6 +56,7 @@ export default function FollowUpPage() {
       regionId: regionFilter.regionId,
       parentRegionId: regionFilter.parentRegionId,
       ...buildRoundParams(regionFilter, courseNumber),
+      ...sort.params,
       page,
       size: PAGE_SIZE,
     })
@@ -63,13 +68,20 @@ export default function FollowUpPage() {
       })
       .catch((err) => setError(apiErrorMessage(err, '사후관리 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, page]);
+  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, sort.sortBy, sort.sortOrder, page]);
 
   // 페이지를 리셋시켜야 하는 필터들을 하나의 키로 묶어서 API 중복 호출 방지
   const filterKey = useMemo(
     () =>
-      JSON.stringify([searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber]),
-    [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber],
+      JSON.stringify([
+        searchName,
+        regionFilter.regionId,
+        regionFilter.parentRegionId,
+        courseNumber,
+        sort.sortBy,
+        sort.sortOrder,
+      ]),
+    [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, sort.sortBy, sort.sortOrder],
   );
   const prevFilterKeyRef = useRef(filterKey);
 
@@ -182,9 +194,15 @@ export default function FollowUpPage() {
           <table className="data">
             <thead>
               <tr>
-                <th>참여자</th>
-                <th>지역 / 회차</th>
-                <th>수료일</th>
+                <SortableTh column="participantName" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  참여자
+                </SortableTh>
+                <SortableTh column="region" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  지역 / 회차
+                </SortableTh>
+                <SortableTh column="completionDate" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  수료일
+                </SortableTh>
                 <th>취업</th>
                 <th>숲체험</th>
                 <th>국취 연계</th>
