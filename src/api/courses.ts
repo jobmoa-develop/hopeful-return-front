@@ -49,6 +49,8 @@ export type CourseListParams = {
   parentRegionId?: number;
   status?: string;
   keyword?: string;
+  sortBy?: string; // 정렬 키(courseName/regionName/courseNumber/localCourseNumber/capacity/status/day1Date/planSubmitDate)
+  sortOrder?: 'asc' | 'desc'; // 정렬 방향(기본 asc)
   page?: number;
   size?: number;
 };

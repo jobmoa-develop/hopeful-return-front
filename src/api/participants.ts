@@ -37,6 +37,8 @@ export type ParticipantListParams = {
   localCourseNumber?: number; // 지역회차 — 지역 선택 조회 시 사용(최신 수강건 기준)
   registerDateFrom?: string; // 전산 등록일 시작(YYYY-MM-DD, 포함) — 최신 수강건 created_at 기준
   registerDateTo?: string; // 전산 등록일 종료(YYYY-MM-DD, 포함)
+  sortBy?: string; // 정렬 키(name/phone/region/registerDate)
+  sortOrder?: 'asc' | 'desc'; // 정렬 방향(기본 asc)
   page?: number;
   size?: number;
 };

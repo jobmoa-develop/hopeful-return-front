@@ -10,6 +10,9 @@ import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import QrModal from '../components/QrModal';
+import { statusLabel } from '../utils/courseStatus';
+import { useTableSort } from '../hooks/useTableSort';
+import { SortableTh } from '../components/SortableTh';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
 
@@ -44,6 +47,7 @@ const EMPTY_FORM: CourseCreateRequest = {
   location: '',
   planSubmitDate: '',
 };
+
 
 function statusLabel(status?: CourseStatus) {
   const labels: Record<string, string> = {
@@ -114,6 +118,7 @@ export default function RoundsPage() {
   const [status, setStatus] = useState('');
   const keywordInput = useDebounceSearch('', 300);
   const keyword = keywordInput.debouncedValue.trim();
+  const sort = useTableSort();
   const [page, setPage] = useState(0);
   const [size] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
@@ -168,6 +173,7 @@ export default function RoundsPage() {
           !regionId && filterParentRegionId ? Number(filterParentRegionId) : undefined,
         status: status || undefined,
         keyword: keyword || undefined,
+        ...sort.params,
       };
 
       if (isRestricted) {
@@ -255,6 +261,22 @@ export default function RoundsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyword]);
+
+  // 컬럼 정렬 변경 시 재조회(서버 위임). page 0 이면 즉시 로드, 아니면 page 리셋으로 로드를 유발한다.
+  // 마운트 시점은 위 [page,size,isRestricted] effect 가 이미 loadCourses 를 호출하므로 스킵(didMount 가드).
+  const sortDidMountRef = useRef(false);
+  useEffect(() => {
+    if (!sortDidMountRef.current) {
+      sortDidMountRef.current = true;
+      return;
+    }
+    if (page === 0) {
+      void loadCourses();
+    } else {
+      setPage(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sort.sortBy, sort.sortOrder]);
 
   const updateForm = (key: keyof CourseCreateRequest, value: string) => {
     const numericKeys: Array<keyof CourseCreateRequest> = [
@@ -522,19 +544,29 @@ export default function RoundsPage() {
             {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
             <div className="field full">
               <label>교육 일정 (1~5일차)</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
-                {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map((key, index) => (
-                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>{index + 1}일차</label>
-                    <input
-                      type="date"
-                      value={form[key]}
-                      onChange={(event) => updateForm(key, event.target.value)}
-                      required
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                ))}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+                  gap: '8px',
+                }}
+              >
+                {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map(
+                  (key, index) => (
+                    <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
+                        {index + 1}일차
+                      </label>
+                      <input
+                        type="date"
+                        value={form[key]}
+                        onChange={(event) => updateForm(key, event.target.value)}
+                        required
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ),
+                )}
               </div>
             </div>
 
@@ -636,15 +668,29 @@ export default function RoundsPage() {
           <table className="data">
             <thead>
               <tr>
-                <th>강좌명</th>
-                <th>지역</th>
-                <th>전체회차</th>
-                <th>지역회차</th>
+                <SortableTh column="courseName" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  강좌명
+                </SortableTh>
+                <SortableTh column="regionName" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  지역
+                </SortableTh>
+                <SortableTh column="courseNumber" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  전체회차
+                </SortableTh>
+                <SortableTh column="localCourseNumber" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  지역회차
+                </SortableTh>
                 <th>정원</th>
                 <th>교육장</th>
-                <th>상태</th>
-                <th>개강일정</th>
-                <th>계획서 제출일</th>
+                <SortableTh column="status" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  상태
+                </SortableTh>
+                <SortableTh column="day1Date" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  개강일정
+                </SortableTh>
+                <SortableTh column="planSubmitDate" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                  계획서 제출일
+                </SortableTh>
                 <th>QR</th>
               </tr>
             </thead>
