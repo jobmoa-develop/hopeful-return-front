@@ -2022,6 +2022,129 @@ table.data tbody tr:hover {
     color: var(--muted);
 }
 
+/* Course Calendar Page Responsive Styles (iPhone SE & Mobile) */
+.cal-page-layout {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+}
+
+.cal-side-panel {
+    width: 300px;
+    flex-shrink: 0;
+    max-height: 640px;
+    overflow-y: auto;
+    position: sticky;
+    top: 16px;
+}
+
+.cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.cal-header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cal-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+.cal-legend {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+}
+
+.cal-grid-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.cal-schedule-form {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+    .cal-page-layout {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .cal-side-panel {
+        width: 100% !important;
+        position: static !important;
+        max-height: 400px;
+    }
+}
+
+@media (max-width: 560px) {
+    .content {
+        padding: 14px 12px;
+    }
+    .cal-header-right {
+        margin-left: 0;
+        width: 100%;
+        justify-content: space-between;
+    }
+    .cal-legend-right {
+        margin-left: 0 !important;
+        width: 100%;
+        margin-top: 4px;
+        padding-top: 4px;
+        border-top: 1px dashed var(--line-soft);
+    }
+    .cal-grid {
+        min-width: 310px;
+    }
+    .cal-weekday {
+        padding: 6px 2px;
+        font-size: 11px;
+    }
+    .cal-cell {
+        min-height: 76px;
+        height: auto !important;
+        padding: 4px 2px !important;
+        gap: 2px !important;
+    }
+    .cal-date {
+        font-size: 11px;
+    }
+    .cal-event {
+        font-size: 9.5px;
+        padding: 1px 3px;
+    }
+    .cal-schedule-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .cal-schedule-form .field {
+        width: 100%;
+        min-width: 0 !important;
+    }
+    .cal-schedule-form button {
+        width: 100%;
+    }
+}
+
+
 /* assign redesign — 년도/회차 select + 일괄 적용 + 날짜별 표 */
 .assign-bulk-grid {
     display: grid;

@@ -420,35 +420,38 @@ export default function CourseCalendarPage() {
     return (
         <section className="view active" id="view-calendar">
             {/* 캘린더 카드 + 우측 사이드 패널(선택 날짜 강의 목록)을 나란히 배치 */}
-            <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+            <div className="cal-page-layout">
                 <div className="card" style={{ flex: 1, minWidth: 0 }}>
-                    <div className="card-h">
-                        <button className="btn" type="button" onClick={() => setCursor(new Date(year, month - 1, 1))}>
-                            ← 이전달
-                        </button>
-                        <span className="section-title" style={{ margin: '0 12px' }}>
-                            {year}년 {month + 1}월
-                        </span>
-                        <button className="btn" type="button" onClick={() => setCursor(new Date(year, month + 1, 1))}>
-                            다음달 →
-                        </button>
-                        <button className="btn" type="button" style={{ marginLeft: 8 }} onClick={() => setCursor(new Date())}>
-                            오늘
-                        </button>
-                        <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>
-                            {isLoading || isFiltering ? '불러오는 중...' : `총 ${visibleCourses.length}개 강좌`}
-                            {isRestricted && !isLoading && !isFiltering ? ' (내 담당 강좌만 표시)' : ''}
-                        </span>
-                        {canManageStaffSchedules && (
-                            <button
-                                className="btn"
-                                type="button"
-                                style={{ marginLeft: 8 }}
-                                onClick={() => navigate('/staff-schedules')}
-                            >
-                                근무자 일정 관리 →
+                    <div className="card-h cal-header">
+                        <div className="cal-header-left">
+                            <button className="btn" type="button" onClick={() => setCursor(new Date(year, month - 1, 1))}>
+                                ← 이전달
                             </button>
-                        )}
+                            <span className="section-title" style={{ margin: '0 8px' }}>
+                                {year}년 {month + 1}월
+                            </span>
+                            <button className="btn" type="button" onClick={() => setCursor(new Date(year, month + 1, 1))}>
+                                다음달 →
+                            </button>
+                            <button className="btn" type="button" onClick={() => setCursor(new Date())}>
+                                오늘
+                            </button>
+                        </div>
+                        <div className="cal-header-right">
+                            <span className="muted" style={{ fontSize: 12 }}>
+                                {isLoading || isFiltering ? '불러오는 중...' : `총 ${visibleCourses.length}개 강좌`}
+                                {isRestricted && !isLoading && !isFiltering ? ' (내 담당 강좌만 표시)' : ''}
+                            </span>
+                            {canManageStaffSchedules && (
+                                <button
+                                    className="btn"
+                                    type="button"
+                                    onClick={() => navigate('/staff-schedules')}
+                                >
+                                    근무자 일정 관리 →
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     {dailyStaffError && (
@@ -458,7 +461,7 @@ export default function CourseCalendarPage() {
                     )}
 
                     {regionLegend.length > 0 && (
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--line)' }}>
+                        <div className="cal-legend">
                             {regionLegend.map((name) => (
                                 <span key={name} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5 }}>
                                     <span
@@ -474,7 +477,7 @@ export default function CourseCalendarPage() {
                                 </span>
                             ))}
                             {!isAdmin && (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, marginLeft: 'auto' }}>
+                                <span className="cal-legend-right" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, marginLeft: 'auto' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                         <span style={{ padding: '1px 6px', borderRadius: 4, background: SESSION_BADGE_COLOR.AM, fontWeight: 700 }}>오전</span>
                                         <span style={{ padding: '1px 6px', borderRadius: 4, background: SESSION_BADGE_COLOR.PM, fontWeight: 700 }}>오후</span>
@@ -484,7 +487,7 @@ export default function CourseCalendarPage() {
                                 </span>
                             )}
                             {isAdmin && (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, marginLeft: 'auto' }}>
+                                <span className="cal-legend-right" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, marginLeft: 'auto' }}>
                                     <span className="chip ok" style={{ padding: '1px 7px' }}>가능</span>
                                     <span className="chip danger" style={{ padding: '1px 7px' }}>불가</span>
                                     내 근무 가능 여부
@@ -493,12 +496,13 @@ export default function CourseCalendarPage() {
                         </div>
                     )}
 
-                    <div className="cal-grid">
-                        {WEEKDAYS.map((w) => (
-                            <div className="cal-weekday" key={w}>
-                                {w}
-                            </div>
-                        ))}
+                    <div className="cal-grid-wrapper">
+                        <div className="cal-grid">
+                            {WEEKDAYS.map((w) => (
+                                <div className="cal-weekday" key={w}>
+                                    {w}
+                                </div>
+                            ))}
 
                         {weeks.flat().map((date) => {
                             const dateStr = ymd(date);
@@ -520,7 +524,7 @@ export default function CourseCalendarPage() {
                                         outlineOffset: '-2px',
                                     }}
                                 >
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
                                         <div className="cal-date">{date.getDate()}</div>
                                         {daySchedules.length > 0 && (
                                             <span
@@ -628,20 +632,11 @@ export default function CourseCalendarPage() {
                             );
                         })}
                     </div>
+                    </div>
                 </div>
 
                 {/* 우측 사이드 패널 — 선택한 날짜의 전체 강의 목록(칸에서 넘쳐 +N건으로 가려진 것 포함). 항상 자리를 차지한다. */}
-                <div
-                    className="card"
-                    style={{
-                        width: 300,
-                        flexShrink: 0,
-                        maxHeight: 640,
-                        overflowY: 'auto',
-                        position: 'sticky',
-                        top: 16,
-                    }}
-                >
+                <div className="card cal-side-panel">
                     <div className="card-h">
                         <span className="section-title">
                             {selectedDate ? `${selectedDate} 강의 목록` : '날짜를 선택해주세요'}
@@ -773,7 +768,7 @@ export default function CourseCalendarPage() {
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                        <div className="cal-schedule-form">
                             <div className="field">
                                 <label>시간대</label>
                                 <select value={sessionType} onChange={(e) => setSessionType(e.target.value as SessionType)}>
