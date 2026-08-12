@@ -5,6 +5,7 @@ import { ASSIGN_ROLES, formatDateCol } from './assign/roles';
 import type { AssignRole } from './assign/roles';
 import { getCourses } from '../api/courses';
 import type { CourseSummary } from '../api/courses';
+import { statusLabel, compareCourseStatus } from '../utils/courseStatus';
 import {
   getCourseDailyStaff,
   getCourseDailyStaffCandidates,
@@ -157,7 +158,16 @@ export default function AssignPage() {
   }, [courses]);
 
   const coursesInYear = useMemo(
-    () => courses.filter((c) => yearOf(c) === selectedYear),
+    () =>
+      // 원본(courses) 불변 유지 위해 새 배열로 정렬.
+      // 1차: 상태 라이프사이클(예정→모집중→…→완료, 취소·미지정은 뒤), 2차: 전체회차(courseNumber) 오름차순
+      courses
+        .filter((c) => yearOf(c) === selectedYear)
+        .sort((a, b) => {
+          const byStatus = compareCourseStatus(a.status, b.status);
+          if (byStatus !== 0) return byStatus;
+          return (a.courseNumber ?? 0) - (b.courseNumber ?? 0);
+        }),
     [courses, selectedYear],
   );
 
@@ -468,11 +478,11 @@ export default function AssignPage() {
   const rowDefs = ASSIGN_ROLES.flatMap((role) =>
     role.multi
       ? Array.from({ length: counselorCount }, (_, i) => ({
-        role,
-        rowKey: counselorRowKey(i),
-        label: counselorCount > 1 ? `${role.label} ${i + 1}` : role.label,
-        counselorIdx: i,
-      }))
+          role,
+          rowKey: counselorRowKey(i),
+          label: counselorCount > 1 ? `${role.label} ${i + 1}` : role.label,
+          counselorIdx: i,
+        }))
       : [{ role, rowKey: role.key, label: role.label, counselorIdx: -1 }],
   );
 
@@ -525,7 +535,7 @@ export default function AssignPage() {
           >
             {coursesInYear.map((c) => (
               <option key={c.courseId} value={c.courseId}>
-                {c.regionName} {c.localCourseNumber}회차 ({c.status}) ▾
+                {c.regionName} {c.localCourseNumber}회차 ({statusLabel(c.status)}) ▾
               </option>
             ))}
           </select>

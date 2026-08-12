@@ -10,6 +10,7 @@ import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import QrModal from '../components/QrModal';
+import { statusLabel } from '../utils/courseStatus';
 import { useTableSort } from '../hooks/useTableSort';
 import { SortableTh } from '../components/SortableTh';
 
@@ -46,18 +47,6 @@ const EMPTY_FORM: CourseCreateRequest = {
   location: '',
   planSubmitDate: '',
 };
-
-function statusLabel(status?: CourseStatus) {
-  const labels: Record<string, string> = {
-    PLANNED: '예정',
-    OPEN: '모집중',
-    CLOSED: '모집마감',
-    IN_PROGRESS: '교육중',
-    COMPLETED: '완료',
-    CANCELED: '취소',
-  };
-  return status ? (labels[status] ?? status) : '-';
-}
 
 function statusClass(status?: CourseStatus) {
   if (status === 'OPEN' || status === 'IN_PROGRESS') return 'info';
@@ -542,19 +531,29 @@ export default function RoundsPage() {
             {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
             <div className="field full">
               <label>교육 일정 (1~5일차)</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
-                {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map((key, index) => (
-                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>{index + 1}일차</label>
-                    <input
-                      type="date"
-                      value={form[key]}
-                      onChange={(event) => updateForm(key, event.target.value)}
-                      required
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                ))}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+                  gap: '8px',
+                }}
+              >
+                {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map(
+                  (key, index) => (
+                    <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
+                        {index + 1}일차
+                      </label>
+                      <input
+                        type="date"
+                        value={form[key]}
+                        onChange={(event) => updateForm(key, event.target.value)}
+                        required
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ),
+                )}
               </div>
             </div>
 

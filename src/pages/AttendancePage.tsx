@@ -5,6 +5,7 @@ import type { CourseSummary, CourseParticipant } from '../api/courses';
 import { getAttendances, getCompletionRisk } from '../api/attendances';
 import type { AttendanceListItem, CompletionRiskItem, RiskStatus } from '../api/attendances';
 import { AttendanceApiModal, BulkAttendanceModal } from '../components/ParticipantModals';
+import { statusLabel, compareCourseStatusOngoingFirst } from '../utils/courseStatus';
 
 const STATUS_TO_KOR: Record<string, string> = {
   ATTEND: '출석',
@@ -13,14 +14,14 @@ const STATUS_TO_KOR: Record<string, string> = {
 };
 
 // 회차 드롭다운 표시 라벨 — 지역 + 전체회차(기수) + 지역회차를 함께 보여준다.
-// 예: "서울 양천 전체3기 · 2회차 (OPEN)"
+// 예: "서울 양천 전체3기 · 2회차 (교육중)"
 // 지역회차(localCourseNumber)가 없으면 courseName으로 대체(기존 로직 유지).
 function courseOptionLabel(c: CourseSummary): string {
   const region = c.regionName ?? '';
   const overallRound = c.courseNumber != null ? `전체${c.courseNumber}기` : null;
   const localRound = c.localCourseNumber != null ? `${c.localCourseNumber}회차` : null;
   const roundText = [overallRound, localRound].filter(Boolean).join(' · ') || (c.courseName ?? '');
-  const statusText = c.status ? ` (${c.status})` : '';
+  const statusText = c.status ? ` (${statusLabel(c.status)})` : '';
   return [region, roundText].filter(Boolean).join(' ') + statusText;
 }
 
@@ -50,10 +51,17 @@ export default function AttendancePage() {
     getCourses({ size: 100 })
       .then((res) => {
         const list = res.data?.data?.content ?? [];
-        setCourses(list);
-        // 첫 번째 회차를 기본 선택
-        if (list.length > 0 && !selectedCourseNo) {
-          setSelectedCourseNo(String(list[0].courseId ?? ''));
+        // 교육중(진행 중) 회차를 먼저 확인하도록 정렬 — 1차 상태(교육중 우선), 2차 전체회차 오름차순.
+        // 원본 불변 유지 위해 새 배열로 정렬.
+        const sorted = [...list].sort((a, b) => {
+          const byStatus = compareCourseStatusOngoingFirst(a.status, b.status);
+          if (byStatus !== 0) return byStatus;
+          return (a.courseNumber ?? 0) - (b.courseNumber ?? 0);
+        });
+        setCourses(sorted);
+        // 첫 번째(정렬 후 교육중 우선) 회차를 기본 선택
+        if (sorted.length > 0 && !selectedCourseNo) {
+          setSelectedCourseNo(String(sorted[0].courseId ?? ''));
         }
       })
       .catch((err) => console.error('회차 목록 조회 실패:', err));
@@ -73,7 +81,7 @@ export default function AttendancePage() {
       .then((res) => {
         const list = res.data?.data?.content ?? [];
         const map: Record<string, AttendanceListItem> = {};
-        list.forEach(att => {
+        list.forEach((att) => {
           if (att.courseParticipantId != null && att.dayNo != null) {
             map[`${att.courseParticipantId}_${att.dayNo}`] = att;
           }
@@ -99,7 +107,7 @@ export default function AttendancePage() {
         }
 
         const map: Record<number, CompletionRiskItem> = {};
-        items.forEach(item => {
+        items.forEach((item) => {
           map[item.courseParticipantId] = item;
         });
         setRiskMap(map);
@@ -115,9 +123,7 @@ export default function AttendancePage() {
       setRiskMap({});
       return;
     }
-    const matched = courses.find(
-      (c) => String(c.courseId) === selectedCourseNo
-    );
+    const matched = courses.find((c) => String(c.courseId) === selectedCourseNo);
     if (!matched) {
       setCourseParticipants([]);
       setAttendancesMap({});
@@ -129,12 +135,17 @@ export default function AttendancePage() {
 
   const canEdit = roleConfig.can.attend === 1;
 
-  const handleCellClick = (courseParticipantId: number, participantName: string, dayNo: number, attendanceId?: number) => {
+  const handleCellClick = (
+    courseParticipantId: number,
+    participantName: string,
+    dayNo: number,
+    attendanceId?: number,
+  ) => {
     setSelectedCell({
       courseParticipantId,
       participantName,
       dayNo,
-      attendanceId
+      attendanceId,
     });
   };
 
@@ -147,25 +158,39 @@ export default function AttendancePage() {
 
   const getRiskLabel = (status?: RiskStatus) => {
     switch (status) {
-      case 'PASS': return '수료 완료';
-      case 'SAFE': return '수료 가능';
-      case 'WARNING': return '주의';
-      case 'DANGER': return '위험';
-      case 'FAIL': return '수료 불가';
-      case 'UNKNOWN': return '산정불가';
-      default: return '미정';
+      case 'PASS':
+        return '수료 완료';
+      case 'SAFE':
+        return '수료 가능';
+      case 'WARNING':
+        return '주의';
+      case 'DANGER':
+        return '위험';
+      case 'FAIL':
+        return '수료 불가';
+      case 'UNKNOWN':
+        return '산정불가';
+      default:
+        return '미정';
     }
   };
 
   const getRiskClass = (status?: RiskStatus) => {
     switch (status) {
-      case 'PASS': return 'ok';
-      case 'SAFE': return 'ok';
-      case 'WARNING': return 'warning';
-      case 'DANGER': return 'danger';
-      case 'FAIL': return 'danger';
-      case 'UNKNOWN': return 'neutral';
-      default: return '';
+      case 'PASS':
+        return 'ok';
+      case 'SAFE':
+        return 'ok';
+      case 'WARNING':
+        return 'warning';
+      case 'DANGER':
+        return 'danger';
+      case 'FAIL':
+        return 'danger';
+      case 'UNKNOWN':
+        return 'neutral';
+      default:
+        return '';
     }
   };
 
@@ -175,8 +200,10 @@ export default function AttendancePage() {
   // bulkDayNo 기준으로 이미 출석 기록이 있는 courseParticipantId 집합 (중복 등록 방지용)
   const alreadyRecordedIds = new Set(
     courseParticipants
-      .filter((cp) => attendancesMap[`${cp.courseParticipantId}_${bulkDayNo}`]?.attendanceId != null)
-      .map((cp) => cp.courseParticipantId)
+      .filter(
+        (cp) => attendancesMap[`${cp.courseParticipantId}_${bulkDayNo}`]?.attendanceId != null,
+      )
+      .map((cp) => cp.courseParticipantId),
   );
 
   return (
@@ -184,7 +211,7 @@ export default function AttendancePage() {
       <div className="perm-bar">
         <span className="pb-ic">✅</span>
         <span id="perm-attend-txt">
-          {canEdit ? "배정 회차 출결 입력 가능 (진행자)" : "출결 현황 조회만 가능"}
+          {canEdit ? '배정 회차 출결 입력 가능 (진행자)' : '출결 현황 조회만 가능'}
         </span>
       </div>
 
@@ -193,10 +220,16 @@ export default function AttendancePage() {
           <span className="ico">회차</span>
           <select
             value={selectedCourseNo}
-            onChange={e => setSelectedCourseNo(e.target.value)}
-            style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+            onChange={(e) => setSelectedCourseNo(e.target.value)}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              fontWeight: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
           >
-            {courses.map(c => (
+            {courses.map((c) => (
               <option key={c.courseId} value={String(c.courseId)}>
                 {courseOptionLabel(c)} ▾
               </option>
@@ -210,11 +243,19 @@ export default function AttendancePage() {
               <span className="ico">일차</span>
               <select
                 value={bulkDayNo}
-                onChange={e => setBulkDayNo(Number(e.target.value))}
-                style={{ border: 'none', background: 'transparent', fontWeight: 'inherit', outline: 'none', cursor: 'pointer' }}
+                onChange={(e) => setBulkDayNo(Number(e.target.value))}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontWeight: 'inherit',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
               >
-                {[1, 2, 3, 4, 5].map(d => (
-                  <option key={d} value={d}>{d}일차 ▾</option>
+                {[1, 2, 3, 4, 5].map((d) => (
+                  <option key={d} value={d}>
+                    {d}일차 ▾
+                  </option>
                 ))}
               </select>
             </span>
@@ -252,7 +293,9 @@ export default function AttendancePage() {
               <tbody id="attend-rows">
                 {courseParticipants.map((cp) => {
                   const displayName = cp.participantName ?? cp.name ?? '이름없음';
-                  const daysData = [1, 2, 3, 4, 5].map(d => attendancesMap[`${cp.courseParticipantId}_${d}`]);
+                  const daysData = [1, 2, 3, 4, 5].map(
+                    (d) => attendancesMap[`${cp.courseParticipantId}_${d}`],
+                  );
                   const riskInfo = riskMap[cp.courseParticipantId];
                   const rStatus = riskInfo?.riskStatus;
 
@@ -264,21 +307,43 @@ export default function AttendancePage() {
                       {[1, 2, 3, 4, 5].map((d, dIdx) => {
                         const att = daysData[dIdx];
                         const statusStr = att?.status ? STATUS_TO_KOR[att.status] : '—';
-                        const timeDetail = att?.checkInTime || att?.checkOutTime
-                          ? `\n입 ${att.checkInTime ? att.checkInTime.substring(0, 5) : '-'} / 퇴 ${att.checkOutTime ? att.checkOutTime.substring(0, 5) : '-'}`
-                          : '';
+                        const timeDetail =
+                          att?.checkInTime || att?.checkOutTime
+                            ? `\n입 ${att.checkInTime ? att.checkInTime.substring(0, 5) : '-'} / 퇴 ${att.checkOutTime ? att.checkOutTime.substring(0, 5) : '-'}`
+                            : '';
                         const hasLeave = att?.leaves && att.leaves.length > 0;
 
                         return (
                           <td
                             key={d}
-                            onClick={() => handleCellClick(cp.courseParticipantId, displayName, d, att?.attendanceId)}
+                            onClick={() =>
+                              handleCellClick(
+                                cp.courseParticipantId,
+                                displayName,
+                                d,
+                                att?.attendanceId,
+                              )
+                            }
                             style={{ cursor: 'pointer', whiteSpace: 'pre-wrap', lineHeight: '1.4' }}
                           >
                             <span className={`att-cell ${getAttDayClass(att?.status)}`}>
                               {statusStr}
-                              {timeDetail && <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>{timeDetail}</div>}
-                              {hasLeave && <div style={{ fontSize: '10px', color: 'var(--danger)', marginTop: '2px' }}>조퇴/외출</div>}
+                              {timeDetail && (
+                                <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+                                  {timeDetail}
+                                </div>
+                              )}
+                              {hasLeave && (
+                                <div
+                                  style={{
+                                    fontSize: '10px',
+                                    color: 'var(--danger)',
+                                    marginTop: '2px',
+                                  }}
+                                >
+                                  조퇴/외출
+                                </div>
+                              )}
                             </span>
                           </td>
                         );
@@ -293,7 +358,10 @@ export default function AttendancePage() {
                 })}
                 {courseParticipants.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                    <td
+                      colSpan={7}
+                      style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
+                    >
                       해당 회차에 배정된 참여자가 없습니다.
                     </td>
                   </tr>
@@ -303,7 +371,9 @@ export default function AttendancePage() {
           </div>
         </div>
       </div>
-      <p className="note">※ 진행자가 당일 출결을 입력 · QR 먹통 시 수기 대체 입력 · 누적 미달 시 수료 위험 경고</p>
+      <p className="note">
+        ※ 진행자가 당일 출결을 입력 · QR 먹통 시 수기 대체 입력 · 누적 미달 시 수료 위험 경고
+      </p>
 
       {/* 개별 셀 상세 모달 */}
       {selectedCell && (
