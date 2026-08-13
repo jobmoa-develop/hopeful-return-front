@@ -52,20 +52,7 @@ function staffRoleLabel(role?: string | null) {
     return STAFF_ROLE_LABELS[role] ?? role;
 }
 
-// 지역명 -> 고정 색상 팔레트 매핑용
-const REGION_COLOR_PALETTE = [
-    '#dbeafe', '#dcfce7', '#fef9c3', '#fde2e2', '#ede9fe',
-    '#ffe4e6', '#e0f2fe', '#fef3c7', '#d1fae5', '#e2e8f0',
-];
-
-function colorForRegion(regionName?: string) {
-    if (!regionName) return '#f1f4f8';
-    let hash = 0;
-    for (let i = 0; i < regionName.length; i++) {
-        hash = (hash * 31 + regionName.charCodeAt(i)) >>> 0;
-    }
-    return REGION_COLOR_PALETTE[hash % REGION_COLOR_PALETTE.length];
-}
+// 지역명 -> 고유 색상은 컴포넌트 내 regionColorMap(HSL 균등 분배)에서 계산한다(겹침 방지).
 
 type CalendarEvent = {
     courseId: number;
@@ -117,6 +104,20 @@ export default function CourseCalendarPage() {
     );
     const canManageStaffSchedules = Boolean(user?.roles?.some((r) => SCHEDULE_MANAGE_ROLES.includes(r)));
 
+    // 전체열람 역할(관리자 등)은 전체/내 일정 뷰를 전환할 수 있다. 기본은 '내 일정'(본인 배정 우선).
+    // 관리자도 인력으로 배정될 수 있어, 일반 사용자처럼 본인 배정 회차·가용일을 먼저 보게 한다.
+    const canViewAll = Boolean(user?.roles?.some((r) => UNRESTRICTED_ROLES.includes(r)));
+    const [viewMode, setViewMode] = useState<'mine' | 'all'>('mine');
+    // 배정 회차만 보여주고 개인 배정 계산을 수행하는 유효 플래그.
+    // 제한 역할은 항상 내 일정, 전체열람 역할은 토글에 따름.
+    const showOnlyMine = isRestricted || (canViewAll && viewMode === 'mine');
+
+    // 관리자 전용 라벨(N기 강좌명)은 '전체 보기'에서만. 내 일정에선 관리자도 필드 형식(지역·회차·일차).
+    const useAdminLabel = !showOnlyMine && isAdmin;
+    // 세션 배지(내 배정 시간대) 노출 기준 — 사용자 계정에 강사(LECTURER) 역할이 있는지.
+    const hasLecturer = Boolean(user?.roles?.includes('LECTURER'));
+    const hasOtherThanLecturer = Boolean(user?.roles?.some((r) => r !== 'LECTURER'));
+
     // 1) 강좌는 한 번만 넉넉히 받아와서 클라이언트에서 월별로 필터링
     useEffect(() => {
         let active = true;
@@ -149,11 +150,12 @@ export default function CourseCalendarPage() {
             return;
         }
 
-        if (!isRestricted) {
+        if (!showOnlyMine) {
             setVisibleCourses(courses);
         }
 
-        if (isAdmin) {
+        // 전체 뷰(관리자 전체 보기 등)에서는 개인 배정 맵 계산·per-course 호출을 건너뛴다.
+        if (!showOnlyMine) {
             setMyStaffRoleByCourse(new Map());
             return;
         }
@@ -197,7 +199,7 @@ export default function CourseCalendarPage() {
                     }
                 });
                 setMyStaffRoleByCourse(roleMap);
-                if (isRestricted) {
+                if (showOnlyMine) {
                     setVisibleCourses(courses.filter((c) => c.courseId && assignedIds.has(c.courseId)));
                 }
             })
@@ -208,7 +210,7 @@ export default function CourseCalendarPage() {
         return () => {
             active = false;
         };
-    }, [courses, isRestricted, user, isAdmin]);
+    }, [courses, showOnlyMine, user]);
 
     // 2-1) 내가 course_staff로 배정된 강좌 전체에서: 날짜별 인력 배정(course-daily-staff)에서
     //      내 담당 세션(오전/오후/전체)과, 실제 내가 배정된 날짜 집합을 뽑는다.
@@ -221,7 +223,7 @@ export default function CourseCalendarPage() {
             .filter((c) => c.courseId && myStaffRoleByCourse.has(c.courseId))
             .map((c) => c.courseId as number);
 
-        if (isAdmin || !user || staffedCourseIds.length === 0) {
+        if (!showOnlyMine || !user || staffedCourseIds.length === 0) {
             setMySessionByCourseDate(new Map());
             setMyAssignedDatesByCourse(new Map());
             setDailyStaffError(null);
@@ -282,7 +284,7 @@ export default function CourseCalendarPage() {
         return () => {
             active = false;
         };
-    }, [isAdmin, visibleCourses, myStaffRoleByCourse, user]);
+    }, [showOnlyMine, visibleCourses, myStaffRoleByCourse, user]);
 
     const year = cursor.getFullYear();
     const month = cursor.getMonth(); // 0-based
@@ -314,7 +316,7 @@ export default function CourseCalendarPage() {
 
             const myRole = myStaffRoleByCourse.get(c.courseId);
             const shouldFilterByAssignedDate =
-                isRestricted && myRole != null && DAY_FILTER_STAFF_ROLES.has(myRole);
+                showOnlyMine && myRole != null && DAY_FILTER_STAFF_ROLES.has(myRole);
             const assignedDates = shouldFilterByAssignedDate
                 ? myAssignedDatesByCourse.get(c.courseId)
                 : null;
@@ -338,7 +340,7 @@ export default function CourseCalendarPage() {
             });
         }
         return map;
-    }, [visibleCourses, myStaffRoleByCourse, isRestricted, myAssignedDatesByCourse]);
+    }, [visibleCourses, myStaffRoleByCourse, showOnlyMine, myAssignedDatesByCourse]);
 
     // 날짜(YYYY-MM-DD) -> 내 근무 가능 여부 일정 목록
     const schedulesByDate = useMemo(() => {
@@ -376,6 +378,21 @@ export default function CourseCalendarPage() {
         }
         return result;
     }, [year, month]);
+
+    // 지역별 고유색 — 전체 강좌의 지역명을 정렬 후 HSL 색상환에 균등 분배해 겹치지 않게 한다.
+    const regionColorMap = useMemo(() => {
+        const names = Array.from(
+            new Set(courses.map((c) => c.regionName).filter((n): n is string => !!n)),
+        ).sort((a, b) => a.localeCompare(b, 'ko'));
+        const total = Math.max(names.length, 1);
+        const map = new Map<string, string>();
+        names.forEach((name, i) => {
+            const hue = Math.round((i * 360) / total);
+            map.set(name, `hsl(${hue}, 70%, 85%)`);
+        });
+        return map;
+    }, [courses]);
+    const colorFor = (name?: string | null) => (name ? regionColorMap.get(name) ?? '#f1f4f8' : '#f1f4f8');
 
     const today = ymd(new Date());
     const selectedSchedules = selectedDate ? schedulesByDate.get(selectedDate) ?? [] : [];
@@ -438,9 +455,27 @@ export default function CourseCalendarPage() {
                             </button>
                         </div>
                         <div className="cal-header-right">
+                            {canViewAll && (
+                                <div className="seg" style={{ display: 'flex', gap: 4, marginRight: 8 }}>
+                                    <button
+                                        className={`btn ${viewMode === 'mine' ? 'primary' : ''}`}
+                                        type="button"
+                                        onClick={() => setViewMode('mine')}
+                                    >
+                                        내 일정
+                                    </button>
+                                    <button
+                                        className={`btn ${viewMode === 'all' ? 'primary' : ''}`}
+                                        type="button"
+                                        onClick={() => setViewMode('all')}
+                                    >
+                                        전체 보기
+                                    </button>
+                                </div>
+                            )}
                             <span className="muted" style={{ fontSize: 12 }}>
                                 {isLoading || isFiltering ? '불러오는 중...' : `총 ${visibleCourses.length}개 강좌`}
-                                {isRestricted && !isLoading && !isFiltering ? ' (내 담당 강좌만 표시)' : ''}
+                                {showOnlyMine && !isLoading && !isFiltering ? ' (내 담당 강좌만 표시)' : ''}
                             </span>
                             {canManageStaffSchedules && (
                                 <button
@@ -469,14 +504,15 @@ export default function CourseCalendarPage() {
                                             width: 10,
                                             height: 10,
                                             borderRadius: 3,
-                                            background: colorForRegion(name),
+                                            background: colorFor(name),
                                             display: 'inline-block',
                                         }}
                                     />
                                     {name}
                                 </span>
                             ))}
-                            {!isAdmin && (
+                            {/* 세션(내 배정 시간대) 범례는 강사 역할 계정만 — 세션 배지도 강사만 셀에 노출하므로 */}
+                            {hasLecturer && (
                                 <span className="cal-legend-right" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, marginLeft: 'auto' }}>
                                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                         <span style={{ padding: '1px 6px', borderRadius: 4, background: SESSION_BADGE_COLOR.AM, fontWeight: 700 }}>오전</span>
@@ -486,8 +522,9 @@ export default function CourseCalendarPage() {
                                     내 배정 시간대
                                 </span>
                             )}
-                            {isAdmin && (
-                                <span className="cal-legend-right" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, marginLeft: 'auto' }}>
+                            {/* 가용 여부 범례는 내 일정 뷰에서(본인 가용일 관리) */}
+                            {showOnlyMine && (
+                                <span className="cal-legend-right" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, marginLeft: hasLecturer ? 12 : 'auto' }}>
                                     <span className="chip ok" style={{ padding: '1px 7px' }}>가능</span>
                                     <span className="chip danger" style={{ padding: '1px 7px' }}>불가</span>
                                     내 근무 가능 여부
@@ -542,9 +579,8 @@ export default function CourseCalendarPage() {
                                             // 내가 배정된 회차에서만: 그 날짜 담당 세션(오전/오후/전체)
                                             const mySession = mySessionByCourseDate.get(`${ev.courseId}_${dateStr}`);
 
-                                            // 관리자: 기존 표시 형식(전체회차 · 강좌명 · N일차) 그대로 유지.
-                                            // 그 외: 지역 + 지역회차 + (세션 배정 데이터가 있으면) 세션 + N일차.
-                                            const eventLabel = isAdmin
+                                            // 전체 보기(관리자): 전체회차 · 강좌명 · N일차. 내 일정(관리자 포함): 지역 · 지역회차 · N일차.
+                                            const eventLabel = useAdminLabel
                                                 ? `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName} · ${ev.dayIndex + 1}일차`
                                                 : `${ev.regionName ?? ''} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''} ${ev.dayIndex + 1}일차`.replace(/\s+/g, ' ').trim();
 
@@ -553,7 +589,7 @@ export default function CourseCalendarPage() {
                                                     key={`${ev.courseId}-${idx}`}
                                                     className={`cal-event ${ev.dayIndex === 0 ? 'cal-event-start' : ev.dayIndex === 4 ? 'cal-event-end' : ''}`}
                                                     style={{
-                                                        background: colorForRegion(ev.regionName),
+                                                        background: colorFor(ev.regionName),
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         gap: 4,
@@ -565,23 +601,8 @@ export default function CourseCalendarPage() {
                                                         navigate(`/rounds/${ev.courseId}`);
                                                     }}
                                                 >
-                                                    {/* 관리자 화면: 강사는 오전/오후/전체 배지, 그 외 역할은 역할명 배지를 맨 앞에 고정 노출(기존 방식 유지) */}
-                                                    {isAdmin && mySession && (
-                                                        <span
-                                                            style={{
-                                                                flexShrink: 0,
-                                                                fontSize: 9.5,
-                                                                fontWeight: 700,
-                                                                padding: '1px 5px',
-                                                                borderRadius: 4,
-                                                                background: SESSION_BADGE_COLOR[mySession],
-                                                                color: '#1a1a1a',
-                                                            }}
-                                                        >
-                                                            {SESSION_TYPE_LABELS[mySession]}
-                                                        </span>
-                                                    )}
-                                                    {isAdmin && roleLabel && !mySession && (
+                                                    {/* 역할 배지 — 강사 단독 계정이면 숨기고 세션만(요청 5), 그 외엔 역할 표시(비강사·강사+타역할) */}
+                                                    {roleLabel && !(hasLecturer && !hasOtherThanLecturer) && (
                                                         <span
                                                             style={{
                                                                 flexShrink: 0,
@@ -596,8 +617,8 @@ export default function CourseCalendarPage() {
                                                             {roleLabel}
                                                         </span>
                                                     )}
-                                                    {/* 관리자 외: 세션 배정 데이터가 있는 계정만 오전/오후/전체 배지 노출 */}
-                                                    {!isAdmin && mySession && (
+                                                    {/* 세션(내 배정 시간대) 배지 — 강사 역할 계정만 셀에 인라인. 비강사는 우측 리스트에서 확인 */}
+                                                    {hasLecturer && mySession && (
                                                         <span
                                                             style={{
                                                                 flexShrink: 0,
@@ -635,11 +656,12 @@ export default function CourseCalendarPage() {
                     </div>
                 </div>
 
-                {/* 우측 사이드 패널 — 선택한 날짜의 전체 강의 목록(칸에서 넘쳐 +N건으로 가려진 것 포함). 항상 자리를 차지한다. */}
+                {/* 우측 사이드 패널 — 날짜 클릭 후에만 표시(선택 날짜의 전체 강의 목록, +N건 가려진 것 포함). */}
+                {selectedDate && (
                 <div className="card cal-side-panel">
                     <div className="card-h">
                         <span className="section-title">
-                            {selectedDate ? `${selectedDate} 강의 목록` : '날짜를 선택해주세요'}
+                            {selectedDate} 강의 목록
                         </span>
                         {selectedDate && (
                             <button
@@ -653,16 +675,10 @@ export default function CourseCalendarPage() {
                         )}
                     </div>
                     <div className="card-b">
-                        {!selectedDate && (
-                            <div className="muted" style={{ fontSize: 12 }}>
-                                캘린더의 날짜를 클릭하면 그날 예정된 강의 전체 목록이 여기 표시됩니다. (+N건으로 가려진 항목도 모두 포함)
-                            </div>
-                        )}
-                        {selectedDate && selectedDayEvents.length === 0 && (
+                        {selectedDayEvents.length === 0 && (
                             <div className="muted" style={{ fontSize: 12 }}>해당 날짜에 예정된 강의가 없습니다.</div>
                         )}
-                        {selectedDate &&
-                            selectedDayEvents.map((ev, idx) => {
+                        {selectedDayEvents.map((ev, idx) => {
                                 const roleLabel = staffRoleLabel(myStaffRoleByCourse.get(ev.courseId));
                                 const mySession = mySessionByCourseDate.get(`${ev.courseId}_${selectedDate}`);
                                 return (
@@ -681,12 +697,12 @@ export default function CourseCalendarPage() {
                                                     width: 8,
                                                     height: 8,
                                                     borderRadius: 2,
-                                                    background: colorForRegion(ev.regionName),
+                                                    background: colorFor(ev.regionName),
                                                     display: 'inline-block',
                                                 }}
                                             />
                                             <span style={{ fontSize: 12.5, fontWeight: 600 }}>
-                                                {isAdmin
+                                                {useAdminLabel
                                                     ? `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName}`
                                                     : `${ev.regionName ?? '-'} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''}`}
                                             </span>
@@ -718,7 +734,7 @@ export default function CourseCalendarPage() {
                                             )}
                                         </div>
                                         <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                                            {isAdmin
+                                            {useAdminLabel
                                                 ? `${ev.dayIndex + 1}일차`
                                                 : `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName} · ${ev.dayIndex + 1}일차`}
                                         </div>
@@ -727,6 +743,7 @@ export default function CourseCalendarPage() {
                             })}
                     </div>
                 </div>
+                )}
             </div>
 
             {/* 선택한 날짜의 근무 가능 여부 등록 패널 */}
@@ -801,7 +818,7 @@ export default function CourseCalendarPage() {
             <p className="note">
                 날짜 칸의 강좌 일정을 클릭하면 해당 강좌 상세 화면으로, 빈 곳을 클릭하면 우측 패널에 그 날짜의 강의 목록이 표시되고 근무 가능 여부도 등록할 수 있습니다.
                 취소된 강좌는 캘린더에 표시되지 않습니다.
-                {isRestricted ? ' 진행자·행정인력·PL·강사로 배정된 경우, 회차 전체 기간이 아니라 실제 배정된 날짜만 캘린더에 표시됩니다(상담사는 회차 전체 기간이 표시됩니다).' : ''}
+                {showOnlyMine ? ' 진행자·행정인력·PL·강사로 배정된 경우, 회차 전체 기간이 아니라 실제 배정된 날짜만 캘린더에 표시됩니다(상담사는 회차 전체 기간이 표시됩니다).' : ''}
                 {canManageStaffSchedules ? ' 다른 근무자의 일정은 "근무자 일정 관리"에서 등록할 수 있습니다.' : ''}
             </p>
         </section>
