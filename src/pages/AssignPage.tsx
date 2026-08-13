@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useRole } from '../context/RoleContext';
 import { ASSIGN_ROLES, formatDateCol } from './assign/roles';
@@ -11,6 +11,10 @@ import {
   getCourseDailyStaffCandidates,
   saveCourseDailyStaff,
 } from '../api/courseDailyStaff';
+import AssignSmsModal from '../components/AssignSmsModal';
+import type { AssignSmsStaff } from '../components/AssignSmsModal';
+import { sendCourseStaffSms } from '../api/courseStaffSms';
+import type { SendCourseStaffSmsGroup, SendCourseStaffSmsResult } from '../api/courseStaffSms';
 import type {
   AssignConflict,
   AssignUnavailable,
@@ -70,6 +74,15 @@ function getErrorMessage(error: unknown) {
 const yearOf = (c: CourseSummary): number | undefined =>
   c.year ?? (c.day1Date ? Number(c.day1Date.slice(0, 4)) : undefined);
 
+// ISO 날짜(yyyy-MM-dd) → "M/d"(예: 2026-08-18 → 8/18). 문자열 파싱으로 TZ 이슈 회피.
+const formatMonthDay = (iso?: string): string | undefined => {
+  if (!iso) return undefined;
+  const [, m, d] = iso.slice(0, 10).split('-');
+  const month = Number(m);
+  const day = Number(d);
+  return month && day ? `${month}/${day}` : undefined;
+};
+
 // 강좌의 교육일(day1~day5) → ISO 배열(빈 값 제외)
 const courseDates = (c?: CourseSummary): string[] =>
   [c?.day1Date, c?.day2Date, c?.day3Date, c?.day4Date, c?.day5Date].filter((d): d is string =>
@@ -118,6 +131,20 @@ export default function AssignPage() {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [candidates, setCandidates] = useState<StaffCandidate[]>([]);
   const [nameById, setNameById] = useState<Record<number, string>>({});
+  const [phoneById, setPhoneById] = useState<Record<number, string>>({});
+
+  // 배정 안내 문자 모달
+  const [showSmsModal, setShowSmsModal] = useState(false);
+  const [smsDiff, setSmsDiff] = useState<{
+    isFirstAssignment: boolean;
+    assignedNew: AssignSmsStaff[];
+    changed: AssignSmsStaff[];
+    removed: AssignSmsStaff[];
+  } | null>(null);
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState<SendCourseStaffSmsResult | null>(null);
+  // 저장 후 후처리(저장만/저장및발송) — setState 즉시 반영 안 되므로 ref 로 doSave 에 전달
+  const smsActionRef = useRef<{ mode: 'save' | 'send'; groups: SendCourseStaffSmsGroup[] } | null>(null);
 
   const [selectedYear, setSelectedYear] = useState<number | undefined>();
   const [selectedCourseId, setSelectedCourseId] = useState<number | undefined>();
@@ -235,12 +262,19 @@ export default function AssignPage() {
         nameById: assignNames,
       } = buildGridFromAssignments(assignments);
       const candNames: Record<number, string> = {};
+      const phones: Record<number, string> = {};
       candidateList.forEach((c) => {
         candNames[c.userId] = c.name;
+        if (c.phone) phones[c.userId] = c.phone;
+      });
+      // 배정 인원(제외 대상 포함)의 전화번호도 확보
+      assignments.forEach((a) => {
+        if (a.phone) phones[a.userId] = a.phone;
       });
 
       setCandidates(candidateList);
       setNameById({ ...candNames, ...assignNames });
+      setPhoneById(phones);
       setGrid(nextGrid);
       setOriginalGrid(structuredClone(nextGrid)); // 신규/수정 비교 기준 스냅샷
       setCounselorCount(nextCount);
@@ -451,6 +485,18 @@ export default function AssignPage() {
       setUnavailableBlock(null);
       await loadCourseAssignment(selectedCourseId);
       setSaveMessage(`${wasEditing ? '수정' : '저장'} 완료: ${response.data.saved}건`);
+
+      // 모달에서 저장/발송이 트리거된 경우 후처리
+      const action = smsActionRef.current;
+      if (action) {
+        smsActionRef.current = null;
+        if (action.mode === 'send' && action.groups.length > 0) {
+          await runSendSms(action.groups); // 모달 유지, 결과를 우측 패널에 표시
+        } else {
+          setShowSmsModal(false); // 저장만 → 모달 닫기
+          setSmsResult(null);
+        }
+      }
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 409) {
         const items = (error.response.data?.data as (AssignConflict | AssignUnavailable)[]) ?? [];
@@ -458,21 +504,133 @@ export default function AssignPage() {
         // override 없이 메시지만 노출(confirmConflicts 재요청 없음).
         const isUnavailable = items.length > 0 && (items[0] as AssignConflict).courseName == null;
         if (isUnavailable) {
+          smsActionRef.current = null; // 하드 블록 — 발송 진행 불가
           setUnavailableBlock(items as AssignUnavailable[]);
           setErrorMessage(getErrorMessage(error));
           return;
         }
+        // 중복 확인 모달로 진행 — smsActionRef 유지(확인 후 confirmSaveMove 에서 이어서 발송)
         setSaveConflict(items as AssignConflict[]);
         return;
       }
+      smsActionRef.current = null;
       setErrorMessage(getErrorMessage(error));
+      if (showSmsModal) {
+        alert(getErrorMessage(error));
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleSave = () => void doSave(false);
+  // 저장 성공 후 실제 문자 발송(모달 우측 패널에 결과 표시)
+  const runSendSms = async (groups: SendCourseStaffSmsGroup[]) => {
+    if (!selectedCourseId) return;
+    setSmsSending(true);
+    try {
+      const { data } = await sendCourseStaffSms({ courseId: selectedCourseId, groups });
+      setSmsResult(data.data);
+    } catch (error) {
+      alert(getErrorMessage(error));
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
   const confirmSaveMove = () => void doSave(true);
+
+  // rowKey → 배정 역할 라벨(상담사 다중행은 counselor-N)
+  const roleLabelForRowKey = (rowKey: string): string => {
+    const role = rowKey.startsWith('counselor-')
+      ? ASSIGN_ROLES.find((r) => r.multi)
+      : ASSIGN_ROLES.find((r) => r.key === rowKey);
+    return role?.label ?? '';
+  };
+
+  // 그리드에서 인물 단위 수집(userId → 역할 라벨). 동일 인물 다중 역할이면 첫 역할.
+  const collectPersons = (g: Grid): Map<number, string> => {
+    const map = new Map<number, string>();
+    Object.entries(g).forEach(([rowKey, byDate]) => {
+      const label = roleLabelForRowKey(rowKey);
+      Object.values(byDate).forEach((uid) => {
+        if (uid != null && !map.has(uid)) map.set(uid, label);
+      });
+    });
+    return map;
+  };
+
+  // 변경된 셀(slot)에 연루된 인물 = 그 셀의 이전 담당자 + 새 담당자. 일부 날짜만 교체돼도 포착.
+  const collectChangedInvolved = (original: Grid, current: Grid): Set<number> => {
+    const involved = new Set<number>();
+    const rowKeys = new Set([...Object.keys(original), ...Object.keys(current)]);
+    rowKeys.forEach((rk) => {
+      const oRow = original[rk] ?? {};
+      const cRow = current[rk] ?? {};
+      const cellDates = new Set([...Object.keys(oRow), ...Object.keys(cRow)]);
+      cellDates.forEach((d) => {
+        const oldVal = oRow[d];
+        const newVal = cRow[d];
+        if (oldVal !== newVal) {
+          if (oldVal != null) involved.add(oldVal);
+          if (newVal != null) involved.add(newVal);
+        }
+      });
+    });
+    return involved;
+  };
+
+  // 배정 저장/수정 버튼 → 변경 인원 계산 후 문자 모달 오픈(PM 고정 인력은 그리드 밖이라 자연히 제외)
+  const openSmsFlow = () => {
+    if (!selectedCourse || !selectedCourseId) return;
+    const before = collectPersons(originalGrid);
+    const after = collectPersons(grid);
+    const isFirst = !hasExistingAssignments;
+    const toStaff = (uid: number, roleLabel: string): AssignSmsStaff => ({
+      userId: uid,
+      name: nameById[uid] ?? `#${uid}`,
+      phone: phoneById[uid],
+      roleLabel,
+    });
+
+    let assignedNew: AssignSmsStaff[] = [];
+    let changed: AssignSmsStaff[] = [];
+    let removed: AssignSmsStaff[] = [];
+    if (isFirst) {
+      assignedNew = [...after].map(([uid, role]) => toStaff(uid, role));
+    } else {
+      // 제외(ASSIGN_REMOVED): 회차에서 완전히 빠진 인원(어느 날짜에도 없음).
+      // 변동(ASSIGN_CHANGED): 변경된 셀에 연루됐고 여전히 배정된 인원(신규 추가 + 일부 날짜 교체로
+      //   자리를 잃었지만 다른 날짜엔 남은 이전 담당자 포함) → '인력변동' 안내.
+      const involved = collectChangedInvolved(originalGrid, grid);
+      changed = [...after]
+        .filter(([uid]) => involved.has(uid))
+        .map(([uid, role]) => toStaff(uid, role));
+      removed = [...before]
+        .filter(([uid]) => !after.has(uid))
+        .map(([uid, role]) => toStaff(uid, role));
+    }
+    smsActionRef.current = null;
+    setSmsDiff({ isFirstAssignment: isFirst, assignedNew, changed, removed });
+    setSmsResult(null);
+    setShowSmsModal(true);
+  };
+
+  const closeSmsModal = () => {
+    if (isSaving || smsSending) return;
+    smsActionRef.current = null;
+    setShowSmsModal(false);
+    setSmsResult(null);
+  };
+
+  const handleModalSaveOnly = () => {
+    smsActionRef.current = { mode: 'save', groups: [] };
+    void doSave(false);
+  };
+
+  const handleModalSaveAndSend = (groups: SendCourseStaffSmsGroup[]) => {
+    smsActionRef.current = { mode: 'send', groups };
+    void doSave(false);
+  };
 
   // 표에 렌더할 행 목록(상담사는 counselorCount 만큼 확장)
   const rowDefs = ASSIGN_ROLES.flatMap((role) =>
@@ -792,7 +950,7 @@ export default function AssignPage() {
                   {saveMessage}
                 </span>
               )}
-              <button className="btn primary" disabled={controlsDisabled} onClick={handleSave}>
+              <button className="btn primary" disabled={controlsDisabled} onClick={openSmsFlow}>
                 {isSaving
                   ? hasExistingAssignments
                     ? '수정 중…'
@@ -883,6 +1041,25 @@ export default function AssignPage() {
         상담사는 1명 이상 등록할 수 있으며 일괄 적용과 수가 연동됩니다. PM은 {pmLabel}으로
         고정됩니다.
       </p>
+
+      {smsDiff && (
+        <AssignSmsModal
+          open={showSmsModal}
+          region={selectedCourse?.regionName}
+          round={selectedCourse?.localCourseNumber}
+          startDate={formatMonthDay(selectedCourse?.day1Date)}
+          isFirstAssignment={smsDiff.isFirstAssignment}
+          assignedNew={smsDiff.assignedNew}
+          changed={smsDiff.changed}
+          removed={smsDiff.removed}
+          saving={isSaving}
+          smsSending={smsSending}
+          smsResult={smsResult}
+          onCancel={closeSmsModal}
+          onSaveOnly={handleModalSaveOnly}
+          onSaveAndSend={handleModalSaveAndSend}
+        />
+      )}
     </section>
   );
 }
