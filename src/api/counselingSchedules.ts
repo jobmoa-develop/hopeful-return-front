@@ -18,6 +18,15 @@ export type CounselingScheduleItem = {
   completed: boolean;
 };
 
+// 상담사 본인 근무 불가일 (BE CounselingScheduleResponse.UnavailabilityItem과 동일)
+export type CounselorUnavailabilityItem = {
+  counselorId: number | null;
+  counselorName: string | null;
+  date: string | null; // "YYYY-MM-DD"
+  sessionType: 'AM' | 'PM' | 'FULL' | string | null;
+  memo: string | null;
+};
+
 export type CounselingScheduleParams = {
   from?: string; // "YYYY-MM-DD" 포함
   to?: string; // "YYYY-MM-DD" 포함
@@ -30,8 +39,10 @@ export type CounselingScheduleParams = {
 
 // 상담 시작일 기준 상담 일정 조회 (전 회차·전 상담사) — 권한: ADMIN/OPERATOR/COUNSELOR
 export function getCounselingSchedules(params: CounselingScheduleParams) {
-  return apiClient.get<ApiResponse<{ schedules: CounselingScheduleItem[] }>>(
-    '/api/counseling-schedules',
-    { params },
-  );
+  return apiClient.get<
+    ApiResponse<{
+      schedules: CounselingScheduleItem[];
+      unavailabilities: CounselorUnavailabilityItem[];
+    }>
+  >('/api/counseling-schedules', { params });
 }
