@@ -26,6 +26,8 @@ import type { AttendanceListItem, AttendanceStatus, CompletionRiskItem } from '.
 import { getParticipantMemos } from '../api/participantMemos';
 import type { ParticipantMemoItem } from '../api/participantMemos';
 import { deleteParticipant } from '../api/participants';
+import { getCourse } from '../api/courses';
+import type { CourseDetail } from '../api/courses';
 import {
   CounselorEditModal,
   CounselingSessionModal,
@@ -43,6 +45,12 @@ type StepState = 'done' | 'current' | 'idle';
 function formatDateTime(value: string | null | undefined): string {
   if (!value) return '';
   return `${value.slice(5, 10)} ${value.slice(11, 16)}`;
+}
+
+// "YYYY-MM-DD" → "MM-DD" — 출결 카드의 일차별 실제 교육일 표시용
+function formatDayLabel(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.slice(5, 10);
 }
 
 function slotOf(
@@ -65,6 +73,8 @@ export default function ParticipantDetailPage() {
   const [attendances, setAttendances] = useState<AttendanceListItem[]>([]);
   const [riskInfo, setRiskInfo] = useState<CompletionRiskItem | null>(null);
   const [memos, setMemos] = useState<ParticipantMemoItem[]>([]);
+  // 일차(dayNo)별 실제 교육일 — index 0 = 1일차(day1Date) ... index 4 = 5일차(day5Date)
+  const [courseDayDates, setCourseDayDates] = useState<(string | null)[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<
     'counselor' | 'session' | 'memo' | 'status' | 'edit' | null
@@ -89,8 +99,23 @@ export default function ParticipantDetailPage() {
               setRiskInfo(items.find((it) => it.courseParticipantId === cpId) ?? null);
             })
             .catch(() => setRiskInfo(null));
+
+          // 일차(dayNo)별 실제 교육일 — 강좌의 day1Date~day5Date를 그대로 배열로 보관
+          getCourse(d.courseId)
+            .then((r) => {
+              const course = r.data.data as CourseDetail;
+              setCourseDayDates([
+                course.day1Date ?? null,
+                course.day2Date ?? null,
+                course.day3Date ?? null,
+                course.day4Date ?? null,
+                course.day5Date ?? null,
+              ]);
+            })
+            .catch(() => setCourseDayDates([]));
         } else {
           setRiskInfo(null);
+          setCourseDayDates([]);
         }
       })
       .catch((err) => setError(apiErrorMessage(err, '참여자 정보를 불러오지 못했습니다.')));
@@ -468,9 +493,18 @@ export default function ParticipantDetailPage() {
                         : record?.status === 'ABSENT'
                           ? 'danger'
                           : '';
+                  const dayDate = courseDayDates[day - 1];
                   return (
                     <div className={`att-day ${cls}`} key={day}>
                       <div className="d">{day}일</div>
+                      {dayDate && (
+                        <div
+                          className="dd"
+                          style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '2px' }}
+                        >
+                          {formatDayLabel(dayDate)}
+                        </div>
+                      )}
                       <div className="s">{label}</div>
                     </div>
                   );
