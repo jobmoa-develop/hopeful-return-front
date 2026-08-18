@@ -1035,7 +1035,7 @@ table.data tbody tr:hover {
 
 .kv .v {
     font-weight: 600;
-    text-align: right
+    text-align: left
 }
 
 .att-grid {
@@ -2020,6 +2020,36 @@ table.data tbody tr:hover {
 .cal-event-more {
     font-size: 10px;
     color: var(--muted);
+}
+
+/* 상담사 캘린더 — 근무 불가일 오버레이 */
+.cal-event-unavail {
+    background: #fde3e3;
+    color: #b42318;
+    border-left: 3px solid #f04438;
+}
+
+.cal-unavail-row td {
+    background: #fff5f5;
+}
+
+.chip.cal-chip-unavail {
+    background: #fde3e3;
+    color: #b42318;
+    font-weight: 600;
+}
+
+/* 월 뷰 2단 레이아웃 — 캘린더(좌) + 선택일 상세(우) */
+.cal-month-layout {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.cal-month-side {
+    flex: 0 0 400px;
+    max-width: 100%;
 }
 
 /* Course Calendar Page Responsive Styles (iPhone SE & Mobile) */

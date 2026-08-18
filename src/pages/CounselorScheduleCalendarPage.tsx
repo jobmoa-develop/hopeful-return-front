@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { getCounselingSchedules } from '../api/counselingSchedules';
-import type { CounselingScheduleItem } from '../api/counselingSchedules';
+import type { CounselingScheduleItem, CounselorUnavailabilityItem } from '../api/counselingSchedules';
 import { COUNSELING_TYPE_LABELS } from '../api/courseParticipants';
 import type { CounselingType } from '../api/courseParticipants';
 import { getRegions, groupRegionsByParent } from '../api/regions';
@@ -47,6 +47,13 @@ function typeLabel(t: CounselingType | string | null) {
   if (!t) return '';
   return COUNSELING_TYPE_LABELS[t as CounselingType] ?? String(t);
 }
+// 근무 불가 시간대 라벨 — AM/PM/FULL → 오전/오후/종일
+function sessionLabel(t: string | null) {
+  if (t === 'AM') return '오전';
+  if (t === 'PM') return '오후';
+  if (t === 'FULL') return '종일';
+  return t ?? '';
+}
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -54,13 +61,15 @@ const DEFAULT_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
 
 type CounselorCol = { id: number; name: string };
 
-// 일자별 표 — 헤더=상담사, 좌축=시간
+// 일자별 표 — 헤더=상담사, 좌축=시간. 근무 불가(세션 기반)는 최상단 고정 "불가" 행에 표시.
 function DayScheduleTable({
   dayItems,
+  dayUnavail,
   counselors,
   hours,
 }: {
   dayItems: CounselingScheduleItem[];
+  dayUnavail: CounselorUnavailabilityItem[];
   counselors: CounselorCol[];
   hours: number[];
 }) {
@@ -80,6 +89,28 @@ function DayScheduleTable({
         </tr>
       </thead>
       <tbody>
+        {dayUnavail.length > 0 && (
+          <tr className="cal-unavail-row">
+            <td style={{ fontWeight: 600 }}>불가</td>
+            {counselors.map((c) => {
+              const blocks = dayUnavail.filter((u) => u.counselorId === c.id);
+              return (
+                <td key={c.id} style={{ verticalAlign: 'top' }}>
+                  {blocks.map((b, i) => (
+                    <span
+                      key={i}
+                      className="chip cal-chip-unavail"
+                      style={{ display: 'block', margin: '2px 0' }}
+                      title={`근무 불가 · ${sessionLabel(b.sessionType)}${b.memo ? ` · ${b.memo}` : ''}`}
+                    >
+                      🚫 {sessionLabel(b.sessionType)}{b.memo ? ` · ${b.memo}` : ''}
+                    </span>
+                  ))}
+                </td>
+              );
+            })}
+          </tr>
+        )}
         {hours.map((h) => (
           <tr key={h}>
             <td style={{ fontWeight: 600, color: '#69768a' }}>{String(h).padStart(2, '0')}:00</td>
@@ -131,6 +162,7 @@ export default function CounselorScheduleCalendarPage() {
   const counselorNameInput = useDebounceSearch('', 300);
   const counselorName = counselorNameInput.debouncedValue.trim();
   const [items, setItems] = useState<CounselingScheduleItem[]>([]);
+  const [unavail, setUnavail] = useState<CounselorUnavailabilityItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -175,8 +207,14 @@ export default function CounselorScheduleCalendarPage() {
     Object.assign(params, buildRoundParams(regionFilter, courseNumber));
     if (counselorName.trim()) params.counselorName = counselorName.trim();
     getCounselingSchedules(params)
-      .then(({ data: res }) => setItems(res.data?.schedules ?? []))
-      .catch(() => setItems([]))
+      .then(({ data: res }) => {
+        setItems(res.data?.schedules ?? []);
+        setUnavail(res.data?.unavailabilities ?? []);
+      })
+      .catch(() => {
+        setItems([]);
+        setUnavail([]);
+      })
       .finally(() => setLoading(false));
   }, [range.from, range.to, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, counselorName]);
 
@@ -191,16 +229,32 @@ export default function CounselorScheduleCalendarPage() {
     return map;
   }, [items]);
 
-  // 표 뷰(주/일)용: 전체 범위의 상담사 컬럼·시간 행
+  const unavailByDate = useMemo(() => {
+    const map = new Map<string, CounselorUnavailabilityItem[]>();
+    for (const u of unavail) {
+      if (!u.date) continue;
+      const list = map.get(u.date) ?? [];
+      list.push(u);
+      map.set(u.date, list);
+    }
+    return map;
+  }, [unavail]);
+
+  // 표 뷰(주/일)용: 상담사 컬럼 = (세션 보유) ∪ (근무 불가 보유). 불가만 있어도 열로 노출한다.
   const counselors = useMemo<CounselorCol[]>(() => {
     const map = new Map<number, string>();
     for (const it of items) {
       if (it.counselorId != null) map.set(it.counselorId, it.counselorName ?? `#${it.counselorId}`);
     }
+    for (const u of unavail) {
+      if (u.counselorId != null && !map.has(u.counselorId)) {
+        map.set(u.counselorId, u.counselorName ?? `#${u.counselorId}`);
+      }
+    }
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items]);
+  }, [items, unavail]);
 
   const hours = useMemo<number[]>(() => {
     const present = new Set<number>();
@@ -256,6 +310,7 @@ export default function CounselorScheduleCalendarPage() {
   }, [view, cursor, year, month]);
 
   const selectedItems = selectedDate ? itemsByDate.get(selectedDate) ?? [] : [];
+  const selectedUnavail = selectedDate ? unavailByDate.get(selectedDate) ?? [] : [];
   const weekDays = useMemo(() => {
     const s = startOfWeek(cursor);
     return Array.from({ length: 7 }, (_, i) => addDays(s, i));
@@ -316,83 +371,123 @@ export default function CounselorScheduleCalendarPage() {
       </div>
 
       {view === 'month' && (
-        <div className="card">
-          <div className="card-b">
-            <div className="cal-grid">
-              {WEEKDAYS.map((w) => (
-                <div key={w} className="cal-weekday">{w}</div>
-              ))}
-              {weeks.flat().map((d) => {
-                const key = ymd(d);
-                const inMonth = d.getMonth() === month;
-                const dayItems = itemsByDate.get(key) ?? [];
-                return (
-                  <div
-                    key={key}
-                    className={`cal-cell ${!inMonth ? 'cal-cell-muted' : ''} ${key === today ? 'cal-cell-today' : ''}`}
-                    onClick={() => setSelectedDate(key === selectedDate ? null : key)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div style={{ fontSize: '12px', fontWeight: 600 }}>{d.getDate()}</div>
-                    {dayItems.slice(0, 2).map((it) => (
-                      <div
-                        key={it.courseParticipantCounselorId}
-                        className="cal-event"
-                        style={{ background: colorForName(it.counselorName) }}
-                        title={`${it.counselorName ?? ''} · ${it.participantName ?? ''} · ${typeLabel(it.counselingType)}`}
-                      >
-                        {hhmm(it.startedAt)} {it.counselorName ?? ''}·{it.participantName ?? ''}
-                      </div>
-                    ))}
-                    {dayItems.length > 2 && (
-                      <div className="cal-event cal-event-more">+{dayItems.length - 2}건</div>
-                    )}
-                  </div>
-                );
-              })}
+        <div className="cal-month-layout">
+          <div className="card" style={{ flex: 1, minWidth: 0 }}>
+            <div className="card-b">
+              <div className="cal-grid">
+                {WEEKDAYS.map((w) => (
+                  <div key={w} className="cal-weekday">{w}</div>
+                ))}
+                {weeks.flat().map((d) => {
+                  const key = ymd(d);
+                  const inMonth = d.getMonth() === month;
+                  const dayItems = itemsByDate.get(key) ?? [];
+                  const dayUnavail = unavailByDate.get(key) ?? [];
+                  return (
+                    <div
+                      key={key}
+                      className={`cal-cell ${!inMonth ? 'cal-cell-muted' : ''} ${key === today ? 'cal-cell-today' : ''}`}
+                      onClick={() => setSelectedDate(key === selectedDate ? null : key)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <div style={{ fontSize: '12px', fontWeight: 600 }}>{d.getDate()}</div>
+                      {dayItems.slice(0, 2).map((it) => (
+                        <div
+                          key={it.courseParticipantCounselorId}
+                          className="cal-event"
+                          style={{ background: colorForName(it.counselorName) }}
+                          title={`${it.counselorName ?? ''} · ${it.participantName ?? ''} · ${typeLabel(it.counselingType)}`}
+                        >
+                          {hhmm(it.startedAt)} {it.counselorName ?? ''}·{it.participantName ?? ''}
+                        </div>
+                      ))}
+                      {dayItems.length > 2 && (
+                        <div className="cal-event cal-event-more">+{dayItems.length - 2}건</div>
+                      )}
+                      {dayUnavail.slice(0, 2).map((u, i) => (
+                        <div
+                          key={`u${i}`}
+                          className="cal-event cal-event-unavail"
+                          title={`근무 불가 · ${u.counselorName ?? ''} · ${sessionLabel(u.sessionType)}${u.memo ? ` · ${u.memo}` : ''}`}
+                        >
+                          🚫 {u.counselorName ?? ''} {sessionLabel(u.sessionType)}
+                        </div>
+                      ))}
+                      {dayUnavail.length > 2 && (
+                        <div className="cal-event cal-event-more">+{dayUnavail.length - 2} 불가</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {view === 'month' && selectedDate && (
-        <div className="card" style={{ marginTop: '14px' }}>
-          <div className="card-h">
-            <strong>{selectedDate} 상담 일정 ({selectedItems.length}건)</strong>
-          </div>
-          <div className="card-b">
-            {selectedItems.length === 0 ? (
-              <p className="muted" style={{ fontSize: '12.5px' }}>해당 날짜의 상담 일정이 없습니다.</p>
-            ) : (
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th>시간</th><th>상담사</th><th>참여자</th><th>지역</th><th>회차</th><th>상담 구분</th><th>상태</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedItems
-                    .slice()
-                    .sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''))
-                    .map((it) => (
-                      <tr key={it.courseParticipantCounselorId}>
-                        <td>{hhmm(it.startedAt)}</td>
-                        <td>
-                          <span className="chip" style={{ background: colorForName(it.counselorName) }}>
-                            {it.counselorName ?? '-'}
-                          </span>
-                        </td>
-                        <td>{it.participantName ?? '-'}</td>
-                        <td>{it.regionName ?? '-'}</td>
-                        <td>{it.courseNumber ?? '-'}회</td>
-                        <td>{typeLabel(it.counselingType)}</td>
-                        <td>{it.completed ? '완료' : '진행'}</td>
+          {selectedDate && (
+            <div className="card cal-month-side">
+              <div className="card-h">
+                <strong>{selectedDate} 상담 일정 ({selectedItems.length}건)</strong>
+              </div>
+              <div className="card-b" style={{ overflowX: 'auto' }}>
+                {selectedItems.length === 0 ? (
+                  <p className="muted" style={{ fontSize: '12.5px' }}>해당 날짜의 상담 일정이 없습니다.</p>
+                ) : (
+                  <table className="data">
+                    <thead>
+                      <tr>
+                        <th>시간</th><th>상담사</th><th>참여자</th><th>지역</th><th>회차</th><th>상담 구분</th><th>상태</th>
                       </tr>
-                    ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+                    </thead>
+                    <tbody>
+                      {selectedItems
+                        .slice()
+                        .sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''))
+                        .map((it) => (
+                          <tr key={it.courseParticipantCounselorId}>
+                            <td>{hhmm(it.startedAt)}</td>
+                            <td>
+                              <span className="chip" style={{ background: colorForName(it.counselorName) }}>
+                                {it.counselorName ?? '-'}
+                              </span>
+                            </td>
+                            <td>{it.participantName ?? '-'}</td>
+                            <td>{it.regionName ?? '-'}</td>
+                            <td>{it.courseNumber ?? '-'}회</td>
+                            <td>{typeLabel(it.counselingType)}</td>
+                            <td>{it.completed ? '완료' : '진행'}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {selectedUnavail.length > 0 && (
+                  <div style={{ marginTop: '14px' }}>
+                    <strong style={{ fontSize: '13px', color: '#b42318' }}>
+                      근무 불가 ({selectedUnavail.length}건)
+                    </strong>
+                    <table className="data" style={{ marginTop: '6px' }}>
+                      <thead>
+                        <tr><th>상담사</th><th>시간대</th><th>사유</th></tr>
+                      </thead>
+                      <tbody>
+                        {selectedUnavail
+                          .slice()
+                          .sort((a, b) => (a.counselorName ?? '').localeCompare(b.counselorName ?? ''))
+                          .map((u, i) => (
+                            <tr key={i}>
+                              <td>{u.counselorName ?? '-'}</td>
+                              <td>{sessionLabel(u.sessionType)}</td>
+                              <td>{u.memo ?? '-'}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -401,6 +496,7 @@ export default function CounselorScheduleCalendarPage() {
           <div className="card-b">
             <DayScheduleTable
               dayItems={itemsByDate.get(ymd(cursor)) ?? []}
+              dayUnavail={unavailByDate.get(ymd(cursor)) ?? []}
               counselors={counselors}
               hours={hours}
             />
@@ -413,6 +509,7 @@ export default function CounselorScheduleCalendarPage() {
           {weekDays.map((d) => {
             const key = ymd(d);
             const dayItems = itemsByDate.get(key) ?? [];
+            const dayUnavail = unavailByDate.get(key) ?? [];
             return (
               <div key={key} className="card">
                 <div className="card-h">
@@ -421,7 +518,12 @@ export default function CounselorScheduleCalendarPage() {
                   </strong>
                 </div>
                 <div className="card-b">
-                  <DayScheduleTable dayItems={dayItems} counselors={counselors} hours={hours} />
+                  <DayScheduleTable
+                    dayItems={dayItems}
+                    dayUnavail={dayUnavail}
+                    counselors={counselors}
+                    hours={hours}
+                  />
                 </div>
               </div>
             );
