@@ -637,7 +637,7 @@ export default function StaffScheduleManagePage() {
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
                                         {myDaySchedules.map((s) => (
                                             <span
-                                                key={s.staffScheduleId}
+                                                key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
                                                 className={`chip ${s.isAvailable ? 'ok' : 'danger'}`}
                                                 style={{ fontSize: 9, padding: '0 4px' }}
                                             >
@@ -717,7 +717,7 @@ export default function StaffScheduleManagePage() {
                                         <div style={{ marginBottom: 14 }}>
                                             {selectedMySchedules.map((s) => (
                                                 <div
-                                                    key={s.staffScheduleId}
+                                                    key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
                                                     style={{
                                                         display: 'flex',
                                                         alignItems: 'center',

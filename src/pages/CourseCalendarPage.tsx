@@ -842,7 +842,7 @@ export default function CourseCalendarPage() {
                             <div style={{ marginBottom: 14 }}>
                                 {selectedSchedules.map((s) => (
                                     <div
-                                        key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
+                                        key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}-${s.sessionType}`}
                                         style={{
                                             display: 'flex',
                                             alignItems: 'center',
