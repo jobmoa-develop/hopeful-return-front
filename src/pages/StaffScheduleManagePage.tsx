@@ -327,8 +327,10 @@ export default function StaffScheduleManagePage() {
     };
 
     const handleToggleAvailable = async (s: StaffScheduleItem) => {
+        if (s.staffScheduleId == null) return;
+        const staffScheduleId = s.staffScheduleId;
         try {
-            await updateStaffSchedule(s.staffScheduleId, { isAvailable: !s.isAvailable });
+            await updateStaffSchedule(staffScheduleId, { isAvailable: !s.isAvailable });
             loadMySchedules();
             loadAllSchedules();
         } catch {
@@ -739,7 +741,7 @@ export default function StaffScheduleManagePage() {
                                                         className="btn"
                                                         style={{ marginLeft: 'auto', padding: '3px 8px', fontSize: 11 }}
                                                         type="button"
-                                                        onClick={() => handleDeleteSchedule(s.staffScheduleId)}
+                                                        onClick={() => s.staffScheduleId != null && handleDeleteSchedule(s.staffScheduleId)}
                                                     >
                                                         삭제
                                                     </button>
