@@ -23,6 +23,7 @@ export type UserDetail = {
     locked: boolean;
     createdAt: string;
     canSendSms: boolean;
+    canSendEmail: boolean;
 };
 
 export type UserListItem = {
@@ -32,6 +33,7 @@ export type UserListItem = {
     roleNames: UserRoleNameValue[];
     enabled: boolean;
     canSendSms: boolean;
+    canSendEmail: boolean;
 };
 
 export type UserListResponse = {
@@ -101,6 +103,14 @@ export function deleteUser(userId: number) {
 export function updateSmsPermission(userId: number, payload: { canSendSms: boolean }) {
     return apiClient.patch<ApiResponse<{ userId: number; canSendSms: boolean }>>(
         `/api/users/${userId}/sms-permission`,
+        payload
+    );
+}
+
+// PATCH /api/users/{userId}/email-permission - 메일 발송(근무불가 알림 수신) 권한 변경 (권한: ADMIN, HEAD_OFFICE)
+export function updateEmailPermission(userId: number, payload: { canSendEmail: boolean }) {
+    return apiClient.patch<ApiResponse<{ userId: number; canSendEmail: boolean }>>(
+        `/api/users/${userId}/email-permission`,
         payload
     );
 }
