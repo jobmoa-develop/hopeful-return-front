@@ -6,7 +6,6 @@ import {
   deleteCourse,
   getCourse,
   getCourseParticipants,
-  getCourseStaffs,
   getCourseStaffSmsHistory,
   updateCourse,
   updateCourseStatus,
@@ -14,14 +13,15 @@ import {
 import type {
   CourseDetail,
   CourseParticipant,
-  CourseStaff,
   CourseStaffSmsHistoryItem,
   CourseUpdateRequest,
 } from '../api/courses';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
-import { roleNameLabel } from '../api/userRoles'; // ROLE_NAME_LABELS 매핑만 재사용
+import { getCourseDailyStaff } from '../api/courseDailyStaff';
+import type { CourseDailyStaffItem } from '../api/courseDailyStaff';
+import { ASSIGN_ROLES, formatDateCol } from './assign/roles';
 import { ParticipantEnrollModal } from '../components/ParticipantModals';
 import { notifyCourseScheduleChange } from '../api/courses';
 import { CourseChangeNotifyModal } from '../components/CourseChangeNotifyModal';
@@ -58,6 +58,27 @@ function formatBreakMinutesLabel(totalMinutes?: number): string {
   if (h > 0) parts.push(`${h}시간`);
   if (m > 0) parts.push(`${m}분`);
   return parts.join(' ');
+}
+
+// 회차 교육일(day1~day5) → 표시용 { iso, day(일차) }[] (값 있는 날짜만, 입력 순서 유지)
+function courseEducationDates(course: CourseDetail): { iso: string; day: number }[] {
+  return [course.day1Date, course.day2Date, course.day3Date, course.day4Date, course.day5Date]
+    .map((iso, idx) => ({ iso, day: idx + 1 }))
+    .filter((d): d is { iso: string; day: number } => Boolean(d.iso));
+}
+
+// 특정 역할(역할+세션)·날짜 셀에 배정된 인력 이름 목록(상담사 등 다중이면 여럿)
+function namesForCell(
+  dailyStaff: CourseDailyStaffItem[],
+  staffRole: string,
+  sessionType: string,
+  iso: string,
+): string[] {
+  return dailyStaff
+    .filter(
+      (a) => a.staffRole === staffRole && a.sessionType === sessionType && a.scheduleDate === iso,
+    )
+    .map((a) => a.name ?? `#${a.userId}`);
 }
 
 // 강좌 수정 시 "변경 감지" 대상 필드 — 이 중 하나라도 원래 값과 달라지면 문자 발송 여부 팝업을 띄운다.
@@ -224,7 +245,7 @@ export default function RoundDetailPage() {
   const navigate = useNavigate();
   const { roleConfig } = useRole();
   const [course, setCourse] = useState<CourseDetail | null>(null);
-  const [staffs, setStaffs] = useState<CourseStaff[]>([]);
+  const [dailyStaff, setDailyStaff] = useState<CourseDailyStaffItem[]>([]);
 
   const [participants, setParticipants] = useState<CourseParticipant[]>([]);
   const [participantKeyword, setParticipantKeyword] = useState('');
@@ -302,10 +323,10 @@ export default function RoundDetailPage() {
     if (!courseId) return;
     setIsStaffsLoading(true);
     try {
-      const { data: response } = await getCourseStaffs(courseId);
-      setStaffs(response.data.staffs ?? []);
+      const { data: response } = await getCourseDailyStaff(courseId);
+      setDailyStaff(response.data.assignments ?? []);
     } catch {
-      setStaffs([]);
+      setDailyStaff([]);
     } finally {
       setIsStaffsLoading(false);
     }
@@ -558,6 +579,13 @@ export default function RoundDetailPage() {
       )
       : 0;
   const minPercent = course.capacity ? Math.min(100, Math.round((course.minimumCapacity / course.capacity) * 100)) : 0;
+
+  // 강좌 담당자 표: 교육일(일차) 컬럼 × 역할 행. 배정이 하나라도 있는 역할만 표시.
+  const eduDates = courseEducationDates(course);
+  const staffRows = ASSIGN_ROLES.map((role) => ({
+    role,
+    cells: eduDates.map((d) => namesForCell(dailyStaff, role.staffRole, role.session, d.iso)),
+  })).filter((r) => r.cells.some((names) => names.length > 0));
 
   return (
     <section className="view active" id="view-round-detail">
@@ -863,23 +891,37 @@ export default function RoundDetailPage() {
           </button>
         </div>
         <div className="card-b">
-          {staffs.length === 0 ? (
-            <div className="muted">등록된 담당자가 없습니다.</div>
+          {eduDates.length === 0 || staffRows.length === 0 ? (
+            <div className="muted">등록된 배정이 없습니다.</div>
           ) : (
-            <div className="detail-grid" style={{ gap: '0 28px' }}>
-              {staffs.map((staff, index) => {
-                const roleLabel = staff.staffRole ? roleNameLabel(staff.staffRole) : '담당자';
-
-                return (
-                  <div className="assignee" key={staff.courseStaffId ?? staff.userId ?? index}>
-                    <div className="ra">{roleLabel.slice(0, 2)}</div>
-                    <div>
-                      <div className="rr">{roleLabel}</div>
-                      <div className="rnm">{staff.name ?? `담당자 #${staff.userId ?? index + 1}`}</div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="tbl-wrap">
+              <table className="att-table assign-table">
+                <thead>
+                  <tr>
+                    <th className="nm-col">역할</th>
+                    {eduDates.map((d) => (
+                      <th key={d.iso}>
+                        <div>{d.day}일차</div>
+                        <div className="muted" style={{ fontWeight: 400 }}>
+                          {formatDateCol(d.iso)}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {staffRows.map(({ role, cells }) => (
+                    <tr key={role.key}>
+                      <td className="nm-col">
+                        <div className="pname">{role.label}</div>
+                      </td>
+                      {cells.map((names, i) => (
+                        <td key={eduDates[i].iso}>{names.length > 0 ? names.join(', ') : '—'}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
