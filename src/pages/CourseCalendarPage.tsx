@@ -434,6 +434,9 @@ export default function CourseCalendarPage() {
     };
 
     const handleDeleteSchedule = async (s: StaffScheduleItem) => {
+        // 합성 상담사 배정행(staff_schedule 행 없음)은 읽기 전용 — 삭제 불가
+        if (s.staffScheduleId == null) return;
+        const staffScheduleId = s.staffScheduleId;
         // 배정된 날짜 삭제는 사유 입력 + 관리자 알림이 필요 → 모달로 처리
         if (s.courseStaffId != null) {
             openDeleteModal(s);
@@ -442,7 +445,7 @@ export default function CourseCalendarPage() {
         // 미배정 일정은 기존처럼 간단 확인 후 삭제
         if (!window.confirm('이 일정을 삭제하시겠습니까?')) return;
         try {
-            await deleteStaffSchedule(s.staffScheduleId);
+            await deleteStaffSchedule(staffScheduleId);
             loadMySchedules();
         } catch {
             alert('삭제에 실패했습니다.');
@@ -461,7 +464,8 @@ export default function CourseCalendarPage() {
 
     // 배정된 날짜 삭제(DELETE). 사유(reason)는 필수이며 배정 관리자에게 알림 메일 본문의 '사유'로 전달된다.
     const confirmDelete = async () => {
-        if (!deleteTarget) return;
+        if (!deleteTarget || deleteTarget.staffScheduleId == null) return;
+        const staffScheduleId = deleteTarget.staffScheduleId;
         const reason = deleteReason.trim();
         if (!reason) {
             alert('삭제 사유를 입력해주세요.');
@@ -469,7 +473,7 @@ export default function CourseCalendarPage() {
         }
         setIsDeleting(true);
         try {
-            await deleteStaffSchedule(deleteTarget.staffScheduleId, reason);
+            await deleteStaffSchedule(staffScheduleId, reason);
             closeDeleteModal();
             loadMySchedules();
         } catch {
@@ -492,7 +496,8 @@ export default function CourseCalendarPage() {
 
     // '가능' 일정을 '불가'로 변경(PUT). 사유(memo)는 필수이며 배정 회차면 알림 메일 본문의 '사유'로 전달된다.
     const confirmSetUnavailable = async () => {
-        if (!unavailableTarget) return;
+        if (!unavailableTarget || unavailableTarget.staffScheduleId == null) return;
+        const staffScheduleId = unavailableTarget.staffScheduleId;
         const reason = unavailableReason.trim();
         if (!reason) {
             alert('불가 사유를 입력해주세요.');
@@ -500,7 +505,7 @@ export default function CourseCalendarPage() {
         }
         setIsUpdatingUnavail(true);
         try {
-            await updateStaffSchedule(unavailableTarget.staffScheduleId, {
+            await updateStaffSchedule(staffScheduleId, {
                 isAvailable: false,
                 memo: reason,
             });
@@ -837,7 +842,7 @@ export default function CourseCalendarPage() {
                             <div style={{ marginBottom: 14 }}>
                                 {selectedSchedules.map((s) => (
                                     <div
-                                        key={s.staffScheduleId}
+                                        key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}-${s.sessionType}`}
                                         style={{
                                             display: 'flex',
                                             alignItems: 'center',
@@ -854,26 +859,29 @@ export default function CourseCalendarPage() {
                                             <span className="chip" style={{ fontSize: 11 }} title="이 날짜에 인력으로 배정되어 있습니다">배정됨</span>
                                         )}
                                         {s.memo && <span className="muted" style={{ fontSize: 12 }}>{s.memo}</span>}
-                                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                                            {s.isAvailable && (
+                                        {/* 합성 상담사 배정행(staffScheduleId 없음)은 읽기 전용 → 액션 숨김 */}
+                                        {s.staffScheduleId != null && (
+                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                                                {s.isAvailable && (
+                                                    <button
+                                                        className="btn"
+                                                        style={{ padding: '3px 8px', fontSize: 11 }}
+                                                        type="button"
+                                                        onClick={() => openUnavailableModal(s)}
+                                                    >
+                                                        불가로 변경
+                                                    </button>
+                                                )}
                                                 <button
                                                     className="btn"
                                                     style={{ padding: '3px 8px', fontSize: 11 }}
                                                     type="button"
-                                                    onClick={() => openUnavailableModal(s)}
+                                                    onClick={() => handleDeleteSchedule(s)}
                                                 >
-                                                    불가로 변경
+                                                    삭제
                                                 </button>
-                                            )}
-                                            <button
-                                                className="btn"
-                                                style={{ padding: '3px 8px', fontSize: 11 }}
-                                                type="button"
-                                                onClick={() => handleDeleteSchedule(s)}
-                                            >
-                                                삭제
-                                            </button>
-                                        </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

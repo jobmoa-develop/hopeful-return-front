@@ -327,8 +327,10 @@ export default function StaffScheduleManagePage() {
     };
 
     const handleToggleAvailable = async (s: StaffScheduleItem) => {
+        if (s.staffScheduleId == null) return;
+        const staffScheduleId = s.staffScheduleId;
         try {
-            await updateStaffSchedule(s.staffScheduleId, { isAvailable: !s.isAvailable });
+            await updateStaffSchedule(staffScheduleId, { isAvailable: !s.isAvailable });
             loadMySchedules();
             loadAllSchedules();
         } catch {
@@ -635,7 +637,7 @@ export default function StaffScheduleManagePage() {
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
                                         {myDaySchedules.map((s) => (
                                             <span
-                                                key={s.staffScheduleId}
+                                                key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
                                                 className={`chip ${s.isAvailable ? 'ok' : 'danger'}`}
                                                 style={{ fontSize: 9, padding: '0 4px' }}
                                             >
@@ -715,7 +717,7 @@ export default function StaffScheduleManagePage() {
                                         <div style={{ marginBottom: 14 }}>
                                             {selectedMySchedules.map((s) => (
                                                 <div
-                                                    key={s.staffScheduleId}
+                                                    key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
                                                     style={{
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -739,7 +741,7 @@ export default function StaffScheduleManagePage() {
                                                         className="btn"
                                                         style={{ marginLeft: 'auto', padding: '3px 8px', fontSize: 11 }}
                                                         type="button"
-                                                        onClick={() => handleDeleteSchedule(s.staffScheduleId)}
+                                                        onClick={() => s.staffScheduleId != null && handleDeleteSchedule(s.staffScheduleId)}
                                                     >
                                                         삭제
                                                     </button>

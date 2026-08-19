@@ -4,7 +4,9 @@ import type { ApiResponse, PageData } from './courses';
 export type SessionType = 'AM' | 'PM' | 'FULL';
 
 export type StaffScheduleItem = {
-  staffScheduleId: number;
+  // 합성 상담사 배정행(course_daily_counselor 병합, /me)은 staff_schedule 행이 없어 null →
+  // FE 에서 읽기 전용으로 렌더(불가 변경·삭제 불가).
+  staffScheduleId: number | null;
   userId: number;
   userName: string;
   scheduleDate: string; // "YYYY-MM-DD"
