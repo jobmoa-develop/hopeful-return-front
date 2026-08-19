@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import {
     getMyStaffSchedules,
     createStaffSchedule,
+    updateStaffSchedule,
     deleteStaffSchedule,
     SESSION_TYPE_LABELS,
 } from '../api/staffSchedules';
@@ -84,6 +85,14 @@ export default function CourseCalendarPage() {
     const [isAvailable, setIsAvailable] = useState(true);
     const [memo, setMemo] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    // 기존 '가능' 일정을 '불가'로 변경하기 위한 확인 모달 대상(null이면 닫힘)과 처리 중 플래그
+    const [unavailableTarget, setUnavailableTarget] = useState<StaffScheduleItem | null>(null);
+    const [unavailableReason, setUnavailableReason] = useState('');
+    const [isUpdatingUnavail, setIsUpdatingUnavail] = useState(false);
+    // 배정된 날짜 삭제 확인 모달(사유 입력·관리자 알림). 미배정 삭제는 기존 window.confirm 유지.
+    const [deleteTarget, setDeleteTarget] = useState<StaffScheduleItem | null>(null);
+    const [deleteReason, setDeleteReason] = useState('');
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // 강좌별 "내 배정 역할" — 회차마다 역할이 다를 수 있으므로 courseId 단위로 저장 (getCourseStaffs 기반)
     const [myStaffRoleByCourse, setMyStaffRoleByCourse] = useState<Map<number, string>>(new Map());
@@ -424,13 +433,83 @@ export default function CourseCalendarPage() {
         }
     };
 
-    const handleDeleteSchedule = async (staffScheduleId: number) => {
+    const handleDeleteSchedule = async (s: StaffScheduleItem) => {
+        // 배정된 날짜 삭제는 사유 입력 + 관리자 알림이 필요 → 모달로 처리
+        if (s.courseStaffId != null) {
+            openDeleteModal(s);
+            return;
+        }
+        // 미배정 일정은 기존처럼 간단 확인 후 삭제
         if (!window.confirm('이 일정을 삭제하시겠습니까?')) return;
         try {
-            await deleteStaffSchedule(staffScheduleId);
+            await deleteStaffSchedule(s.staffScheduleId);
             loadMySchedules();
         } catch {
             alert('삭제에 실패했습니다.');
+        }
+    };
+
+    const openDeleteModal = (s: StaffScheduleItem) => {
+        setDeleteTarget(s);
+        setDeleteReason(s.memo ?? '');
+    };
+
+    const closeDeleteModal = () => {
+        setDeleteTarget(null);
+        setDeleteReason('');
+    };
+
+    // 배정된 날짜 삭제(DELETE). 사유(reason)는 필수이며 배정 관리자에게 알림 메일 본문의 '사유'로 전달된다.
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        const reason = deleteReason.trim();
+        if (!reason) {
+            alert('삭제 사유를 입력해주세요.');
+            return;
+        }
+        setIsDeleting(true);
+        try {
+            await deleteStaffSchedule(deleteTarget.staffScheduleId, reason);
+            closeDeleteModal();
+            loadMySchedules();
+        } catch {
+            alert('삭제에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    // '불가로 변경' 확인 모달 열기 — 기존 메모가 있으면 사유 기본값으로 채운다.
+    const openUnavailableModal = (s: StaffScheduleItem) => {
+        setUnavailableTarget(s);
+        setUnavailableReason(s.memo ?? '');
+    };
+
+    const closeUnavailableModal = () => {
+        setUnavailableTarget(null);
+        setUnavailableReason('');
+    };
+
+    // '가능' 일정을 '불가'로 변경(PUT). 사유(memo)는 필수이며 배정 회차면 알림 메일 본문의 '사유'로 전달된다.
+    const confirmSetUnavailable = async () => {
+        if (!unavailableTarget) return;
+        const reason = unavailableReason.trim();
+        if (!reason) {
+            alert('불가 사유를 입력해주세요.');
+            return;
+        }
+        setIsUpdatingUnavail(true);
+        try {
+            await updateStaffSchedule(unavailableTarget.staffScheduleId, {
+                isAvailable: false,
+                memo: reason,
+            });
+            closeUnavailableModal();
+            loadMySchedules();
+        } catch {
+            alert('변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        } finally {
+            setIsUpdatingUnavail(false);
         }
     };
 
@@ -771,19 +850,38 @@ export default function CourseCalendarPage() {
                                             {s.isAvailable ? '가능' : '불가'}
                                         </span>
                                         <span style={{ fontWeight: 600, fontSize: 13 }}>{SESSION_TYPE_LABELS[s.sessionType]}</span>
+                                        {s.courseStaffId != null && (
+                                            <span className="chip" style={{ fontSize: 11 }} title="이 날짜에 인력으로 배정되어 있습니다">배정됨</span>
+                                        )}
                                         {s.memo && <span className="muted" style={{ fontSize: 12 }}>{s.memo}</span>}
-                                        <button
-                                            className="btn"
-                                            style={{ marginLeft: 'auto', padding: '3px 8px', fontSize: 11 }}
-                                            type="button"
-                                            onClick={() => handleDeleteSchedule(s.staffScheduleId)}
-                                        >
-                                            삭제
-                                        </button>
+                                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                                            {s.isAvailable && (
+                                                <button
+                                                    className="btn"
+                                                    style={{ padding: '3px 8px', fontSize: 11 }}
+                                                    type="button"
+                                                    onClick={() => openUnavailableModal(s)}
+                                                >
+                                                    불가로 변경
+                                                </button>
+                                            )}
+                                            <button
+                                                className="btn"
+                                                style={{ padding: '3px 8px', fontSize: 11 }}
+                                                type="button"
+                                                onClick={() => handleDeleteSchedule(s)}
+                                            >
+                                                삭제
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         )}
+
+                        <p className="muted" style={{ fontSize: 11.5, margin: '0 0 12px' }}>
+                            · 배정된 날짜(<span style={{ fontWeight: 600 }}>배정됨</span>)를 '불가'로 변경하면 배정 관리자에게 자동으로 알림이 발송됩니다.
+                        </p>
 
                         <div className="cal-schedule-form">
                             <div className="field">
@@ -821,6 +919,120 @@ export default function CourseCalendarPage() {
                 {showOnlyMine ? ' 진행자·행정인력·PL·강사로 배정된 경우, 회차 전체 기간이 아니라 실제 배정된 날짜만 캘린더에 표시됩니다(상담사는 회차 전체 기간이 표시됩니다).' : ''}
                 {canManageStaffSchedules ? ' 다른 근무자의 일정은 "근무자 일정 관리"에서 등록할 수 있습니다.' : ''}
             </p>
+
+            {/* '가능' → '불가' 변경 확인 모달 (경고·사유 입력 포함) */}
+            {unavailableTarget && (
+                <div
+                    className="modal-overlay open"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget && !isUpdatingUnavail) closeUnavailableModal();
+                    }}
+                >
+                    <div className="modal" style={{ maxWidth: 420 }}>
+                        <div className="modal-h">
+                            <h3>⚠ 근무 불가로 변경</h3>
+                            <button className="x" type="button" onClick={closeUnavailableModal} disabled={isUpdatingUnavail}>✕</button>
+                        </div>
+                        <div className="modal-b">
+                            <p style={{ margin: '0 0 12px' }}>
+                                <strong>{unavailableTarget.scheduleDate}</strong>
+                                {' '}({SESSION_TYPE_LABELS[unavailableTarget.sessionType]})을 <strong>'불가'</strong>로 변경합니다.
+                            </p>
+                            {unavailableTarget.courseStaffId != null ? (
+                                <p
+                                    className="chip danger"
+                                    style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.5, padding: '10px 12px', borderRadius: 8 }}
+                                >
+                                    ❗ 이 날짜는 배정된 회차입니다. 변경 시 배정 관리자에게 알림(사유 포함)이 발송됩니다.
+                                </p>
+                            ) : (
+                                <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+                                    · 미배정 일정이라 별도 알림은 발송되지 않습니다.
+                                </p>
+                            )}
+                            <div className="field full" style={{ marginTop: 14 }}>
+                                <label>
+                                    불가 사유<span className="req"> *</span>
+                                </label>
+                                <textarea
+                                    value={unavailableReason}
+                                    onChange={(e) => setUnavailableReason(e.target.value)}
+                                    placeholder="예: 개인 사정, 병원 예약 등"
+                                    maxLength={255}
+                                    rows={3}
+                                    disabled={isUpdatingUnavail}
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-f">
+                            <button className="btn" type="button" onClick={closeUnavailableModal} disabled={isUpdatingUnavail}>취소</button>
+                            <button
+                                className="btn primary"
+                                type="button"
+                                onClick={confirmSetUnavailable}
+                                disabled={isUpdatingUnavail || !unavailableReason.trim()}
+                            >
+                                {isUpdatingUnavail ? '변경 중...' : '불가로 변경'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 배정된 날짜 삭제 확인 모달 (사유 입력·관리자 알림) */}
+            {deleteTarget && (
+                <div
+                    className="modal-overlay open"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget && !isDeleting) closeDeleteModal();
+                    }}
+                >
+                    <div className="modal" style={{ maxWidth: 420 }}>
+                        <div className="modal-h">
+                            <h3>⚠ 배정 일정 삭제</h3>
+                            <button className="x" type="button" onClick={closeDeleteModal} disabled={isDeleting}>✕</button>
+                        </div>
+                        <div className="modal-b">
+                            <p style={{ margin: '0 0 12px' }}>
+                                <strong>{deleteTarget.scheduleDate}</strong>
+                                {' '}({SESSION_TYPE_LABELS[deleteTarget.sessionType]}) 일정을 <strong>삭제</strong>합니다.
+                            </p>
+                            <p
+                                className="chip danger"
+                                style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.5, padding: '10px 12px', borderRadius: 8 }}
+                            >
+                                ❗ 이 날짜는 배정된 회차입니다. 삭제 시 배정 관리자에게 알림(사유 포함)이 발송됩니다.
+                            </p>
+                            <div className="field full" style={{ marginTop: 14 }}>
+                                <label>
+                                    삭제 사유<span className="req"> *</span>
+                                </label>
+                                <textarea
+                                    value={deleteReason}
+                                    onChange={(e) => setDeleteReason(e.target.value)}
+                                    placeholder="예: 개인 사정, 병원 예약 등"
+                                    maxLength={255}
+                                    rows={3}
+                                    disabled={isDeleting}
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-f">
+                            <button className="btn" type="button" onClick={closeDeleteModal} disabled={isDeleting}>취소</button>
+                            <button
+                                className="btn primary"
+                                type="button"
+                                onClick={confirmDelete}
+                                disabled={isDeleting || !deleteReason.trim()}
+                            >
+                                {isDeleting ? '삭제 중...' : '삭제'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </section>
     );
 }

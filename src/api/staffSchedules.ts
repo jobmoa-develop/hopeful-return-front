@@ -11,7 +11,9 @@ export type StaffScheduleItem = {
   sessionType: SessionType;
   isAvailable: boolean;
   memo: string | null;
-  // 목록 조회(StaffScheduleListResponse.Item)에는 없고,
+  // 배정 연결 ID(course_staff). null/미포함이면 미배정 일정.
+  // 목록·본인 조회(StaffScheduleListResponse.Item), 단건/등록/수정(StaffScheduleResponse) 모두 포함.
+  courseStaffId?: number | null;
   // 단건 조회/등록/수정(StaffScheduleResponse)에만 존재
   createdAt?: string;
   updatedAt?: string;
@@ -68,8 +70,11 @@ export function updateStaffSchedule(staffScheduleId: number, payload: UpdateStaf
   return apiClient.put<ApiResponse<StaffScheduleItem>>(`/api/staff-schedules/${staffScheduleId}`, payload);
 }
 
-export function deleteStaffSchedule(staffScheduleId: number) {
-  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(`/api/staff-schedules/${staffScheduleId}`);
+// reason: 배정된 날짜(course_staff) 삭제 시 관리자 알림 메일 본문에 포함될 사유. 미배정 삭제는 생략.
+export function deleteStaffSchedule(staffScheduleId: number, reason?: string) {
+  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(`/api/staff-schedules/${staffScheduleId}`, {
+    params: reason ? { reason } : undefined,
+  });
 }
 
 // BulkStaffScheduleRequest 와 1:1 매칭
