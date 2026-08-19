@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { isAxiosError } from 'axios';
 import { useRole } from '../context/RoleContext';
-import { getUsers, updateSmsPermission, roleNameLabel, ROLE_NAME_OPTIONS } from '../api/users';
+import { getUsers, updateSmsPermission, updateEmailPermission, roleNameLabel, ROLE_NAME_OPTIONS } from '../api/users';
 import type { UserListItem } from '../api/users';
 
 const PAGE_SIZE = 20;
@@ -98,10 +98,10 @@ export default function SmsPermissionPage() {
 
     const handleToggleSms = async (user: UserListItem, checked: boolean) => {
         if (!canManageSms) return;
-        
+
         // Optimistic update
         setUsers(prev => prev.map(u => u.userId === user.userId ? { ...u, canSendSms: checked } : u));
-        
+
         try {
             await updateSmsPermission(user.userId, { canSendSms: checked });
             alert('문자 발송 권한이 변경되었습니다.\n※ 대상 계정은 재로그인 후 변경 권한이 적용됩니다.');
@@ -112,11 +112,28 @@ export default function SmsPermissionPage() {
         }
     };
 
+    // 메일 발송(근무불가 알림 수신) 권한 토글. 서버측 수신자 필터라 즉시 반영(재로그인 불필요).
+    const handleToggleEmail = async (user: UserListItem, checked: boolean) => {
+        if (!canManageSms) return;
+
+        // Optimistic update
+        setUsers(prev => prev.map(u => u.userId === user.userId ? { ...u, canSendEmail: checked } : u));
+
+        try {
+            await updateEmailPermission(user.userId, { canSendEmail: checked });
+            alert('메일 발송(알림 수신) 권한이 변경되었습니다.');
+        } catch (error) {
+            // Revert on error
+            setUsers(prev => prev.map(u => u.userId === user.userId ? { ...u, canSendEmail: !checked } : u));
+            alert(getErrorMessage(error));
+        }
+    };
+
     return (
         <section className="view active" id="view-sms-permission">
             <div className="perm-bar">
                 <span className="pb-ic">✉</span>
-                문자 발송 권한 관리 · {canManageSms ? '문자 발송 권한 부여 및 회수 가능' : '조회만 가능 (관리자/본사 전용)'}
+                발송 권한 관리 · {canManageSms ? '문자·메일 발송 권한 부여 및 회수 가능' : '조회만 가능 (관리자/본사 전용)'}
             </div>
 
             {errorMessage && (
@@ -188,18 +205,19 @@ export default function SmsPermissionPage() {
                                 <th>이름</th>
                                 <th>역할</th>
                                 <th>문자 발송 권한</th>
+                                <th>메일 발송 권한</th>
                             </tr>
                         </thead>
                         <tbody>
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
+                                    <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
                                         불러오는 중…
                                     </td>
                                 </tr>
                             ) : users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={4} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
+                                    <td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
                                         표시할 직원이 없습니다.
                                     </td>
                                 </tr>
@@ -237,6 +255,17 @@ export default function SmsPermissionPage() {
                                                     )}
                                                 </div>
                                             </td>
+                                            <td>
+                                                <label className="chk">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={u.canSendEmail}
+                                                        disabled={!canManageSms}
+                                                        onChange={(e) => void handleToggleEmail(u, e.target.checked)}
+                                                    />
+                                                    {u.canSendEmail ? '발송 가능' : '불가'}
+                                                </label>
+                                            </td>
                                         </tr>
                                     );
                                 })
@@ -270,7 +299,10 @@ export default function SmsPermissionPage() {
                     </div>
                 )}
             </div>
-            <p className="note">※ 문자 발송 권한 부여 및 회수는 관리자(ADMIN) 및 본사(HEAD_OFFICE) 계정만 가능합니다.</p>
+            <p className="note">
+                ※ 문자·메일 발송 권한 부여 및 회수는 관리자(ADMIN) 및 본사(HEAD_OFFICE) 계정만 가능합니다.
+                메일 발송 권한은 근무불가 알림 메일의 수신 대상을 결정하며, 변경 시 즉시 반영됩니다.
+            </p>
         </section>
     );
 }

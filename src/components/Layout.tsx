@@ -64,7 +64,7 @@ const PAGE_META = [
   { match: (path: string) => path === '/attendance', crumb: '단계 관리', title: '출결 · 현장' },
   { match: (path: string) => path === '/follow-up', crumb: '관리', title: '사후관리' },
   { match: (path: string) => path === '/users', crumb: '관리', title: '직원 관리' },
-  { match: (path: string) => path === '/users/sms-permission', crumb: '관리', title: '문자 권한 관리' },
+  { match: (path: string) => path === '/users/sms-permission', crumb: '관리', title: '발송 권한 관리' },
 ];
 
 export default function Layout() {
@@ -264,7 +264,7 @@ export default function Layout() {
               className={`nav-item ${isNavActive('smsPermission') ? 'active' : ''}`}
               onClick={() => setIsSidebarOpen(false)}
             >
-              <span className="ic">💬</span>문자 권한 관리
+              <span className="ic">💬</span>발송 권한 관리
             </Link>
           )}
 
