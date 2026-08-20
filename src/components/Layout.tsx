@@ -128,6 +128,14 @@ export default function Layout() {
   return (
     <div className="app">
       <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`} id="sidebar">
+        <button
+          className="sidebar-close"
+          type="button"
+          aria-label="메뉴 닫기"
+          onClick={() => setIsSidebarOpen(false)}
+        >
+          ✕
+        </button>
         <div className="brand">
           <div className="mark">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -280,6 +288,15 @@ export default function Layout() {
 
         <div className="sidebar-foot">디자인 시안 v0.2 · 데이터 가상</div>
       </aside>
+
+      {/* 모바일: 사이드바 열림 시 백드롭 — GNB 영역 외 클릭 시 닫힘 */}
+      {isSidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       <div className="main">
         <header className="topbar">
