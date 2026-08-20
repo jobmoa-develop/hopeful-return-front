@@ -460,7 +460,7 @@ export default function ParticipantsPage() {
 
       <div className="card">
         <div className="tbl-wrap">
-          <table className="data">
+          <table className="data cards">
             <thead>
               <tr>
                 {canSelect && (
@@ -495,7 +495,7 @@ export default function ParticipantsPage() {
                 return (
                   <tr key={p.participantId} onClick={() => handleRowClick(p)}>
                     {canSelect && (
-                      <td onClick={(ev) => ev.stopPropagation()}>
+                      <td className="no-label" onClick={(ev) => ev.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={cpId != null && selectedIds.has(cpId)}
@@ -505,17 +505,17 @@ export default function ParticipantsPage() {
                         />
                       </td>
                     )}
-                    <td>
+                    <td data-label="참여자">
                       <div className="pname">{p.name}</div>
                       <div className="cell-sub">{p.matchKey ?? p.phone}</div>
                     </td>
-                    <td>{roundLabel(p)}</td>
-                    <td>
+                    <td data-label="지역 / 회차">{roundLabel(p)}</td>
+                    <td data-label="진행상태">
                       <span className={`chip ${statusChipClass(e?.status)}`}>
                         {statusLabel(e?.status)}
                       </span>
                     </td>
-                    <td>
+                    <td data-label="사전상담">
                       {e ? (
                         <span className={`chip ${e.preCounselingCompleted ? 'ok' : 'warn'}`}>
                           {e.preCounselingCompleted ? '완료' : '미완료'}
@@ -524,7 +524,7 @@ export default function ParticipantsPage() {
                         <span className="chip neutral">—</span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="출결">
                       {att != null ? (
                         <div className="mini-prog">
                           <div className="bar">
@@ -538,7 +538,7 @@ export default function ParticipantsPage() {
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="상담사">
                       {e ? (
                         <div
                           style={{
@@ -574,9 +574,9 @@ export default function ParticipantsPage() {
                         <span className="muted">—</span>
                       )}
                     </td>
-                    <td>{e?.completionDate ?? '—'}</td>
+                    <td data-label="수료일">{e?.completionDate ?? '—'}</td>
                     {canDeleteEnrollment && (
-                      <td onClick={(ev) => ev.stopPropagation()}>
+                      <td className="cell-actions" data-label="관리" onClick={(ev) => ev.stopPropagation()}>
                         {cpId != null ? (
                           <button
                             className="btn danger"
@@ -605,6 +605,7 @@ export default function ParticipantsPage() {
               {!loading && filteredList.length === 0 && (
                 <tr>
                   <td
+                    className="no-label"
                     colSpan={7 + (canSelect ? 1 : 0) + (canDeleteEnrollment ? 1 : 0)}
                     style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
                   >

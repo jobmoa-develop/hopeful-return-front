@@ -461,7 +461,7 @@ function ParticipantSmsHistorySection() {
 
       <div className="card">
         <div className="tbl-wrap">
-          <table className="data">
+          <table className="data cards">
             <thead>
               <tr>
                 <th style={{ width: '150px' }}>발송일시</th>
@@ -476,18 +476,18 @@ function ParticipantSmsHistorySection() {
             <tbody>
               {items.map((r) => (
                 <tr key={r.smsId} onClick={() => openDetail(r.smsId)} style={{ cursor: 'pointer' }}>
-                  <td className="tnum" style={{ fontSize: '12px' }}>
+                  <td className="tnum" data-label="발송일시" style={{ fontSize: '12px' }}>
                     {whenLabel(r)}
                   </td>
-                  <td>
+                  <td data-label="수신자">
                     <div className="pname">{r.participantName ?? '—'}</div>
                     <div className="cell-sub">{r.phone ?? ''}</div>
                   </td>
-                  <td>{roundLabel(r)}</td>
-                  <td>
+                  <td data-label="지역 / 회차">{roundLabel(r)}</td>
+                  <td data-label="형식">
                     <span className={`chip ${formatChip(r.messageFormat)}`}>{r.messageFormat}</span>
                   </td>
-                  <td style={{ maxWidth: '360px' }}>
+                  <td data-label="제목 / 본문" style={{ maxWidth: '360px' }}>
                     {r.title && <div className="pname">{r.title}</div>}
                     <div
                       className="cell-sub"
@@ -497,15 +497,15 @@ function ParticipantSmsHistorySection() {
                       {r.content}
                     </div>
                   </td>
-                  <td>
+                  <td data-label="상태">
                     <span className={`chip ${statusChip(r.sendStatus)}`}>{statusLabel(r.sendStatus)}</span>
                   </td>
-                  <td>{r.senderName ?? '—'}</td>
+                  <td data-label="발송자">{r.senderName ?? '—'}</td>
                 </tr>
               ))}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                  <td className="no-label" colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
                     조건에 일치하는 발송 내역이 없습니다.
                   </td>
                 </tr>
@@ -935,7 +935,7 @@ function StaffSmsHistorySection() {
 
       <div className="card">
         <div className="tbl-wrap">
-          <table className="data">
+          <table className="data cards">
             <thead>
               <tr>
                 <th style={{ width: '150px' }}>발송일시</th>
@@ -950,18 +950,18 @@ function StaffSmsHistorySection() {
             <tbody>
               {items.map((r) => (
                 <tr key={r.courseStaffSmsId} onClick={() => setDetail(r)} style={{ cursor: 'pointer' }}>
-                  <td className="tnum" style={{ fontSize: '12px' }}>
+                  <td className="tnum" data-label="발송일시" style={{ fontSize: '12px' }}>
                     {fmtDateTime(r.sentAt ?? null)}
                   </td>
-                  <td>
+                  <td data-label="수신 담당자">
                     <div className="pname">{r.userName ?? `담당자 #${r.userId}`}</div>
                     <div className="cell-sub">{r.userPhone ?? ''}</div>
                   </td>
-                  <td>{staffRoundLabel(r)}</td>
-                  <td>
+                  <td data-label="지역 / 회차">{staffRoundLabel(r)}</td>
+                  <td data-label="종류">
                     <span className="chip info">{staffNotifyTypeLabel(r.notifyType)}</span>
                   </td>
-                  <td style={{ maxWidth: '360px' }}>
+                  <td data-label="내용" style={{ maxWidth: '360px' }}>
                     <div
                       className="cell-sub"
                       title={r.content}
@@ -970,15 +970,15 @@ function StaffSmsHistorySection() {
                       {r.content}
                     </div>
                   </td>
-                  <td>
+                  <td data-label="상태">
                     <span className={`chip ${staffStatusChip(r.sendStatus)}`}>{staffStatusLabel(r.sendStatus)}</span>
                   </td>
-                  <td>{r.sentByName ?? (r.sentBy ? `#${r.sentBy}` : '시스템')}</td>
+                  <td data-label="발송자">{r.sentByName ?? (r.sentBy ? `#${r.sentBy}` : '시스템')}</td>
                 </tr>
               ))}
               {!loading && items.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
+                  <td className="no-label" colSpan={7} style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}>
                     조건에 일치하는 발송 내역이 없습니다.
                   </td>
                 </tr>

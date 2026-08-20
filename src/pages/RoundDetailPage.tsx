@@ -720,7 +720,7 @@ export default function RoundDetailPage() {
             {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
             <div className="field full">
               <label>교육 일정 (1~5일차)</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
+              <div className="rd-day-grid">
                 {([
                   ['day1Date', '1일차'],
                   ['day2Date', '2일차'],
@@ -982,7 +982,7 @@ export default function RoundDetailPage() {
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="card-h">
           <span className="section-title">강좌 참여자</span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div className="rd-enroll-tools">
             <button className="btn primary" type="button" onClick={() => setIsEnrollOpen(true)}>
               + 참여자 등록
             </button>

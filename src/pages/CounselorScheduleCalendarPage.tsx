@@ -77,7 +77,8 @@ function DayScheduleTable({
     return <p className="muted" style={{ fontSize: '12.5px', padding: '8px 2px' }}>해당 조건의 상담 일정이 없습니다.</p>;
   }
   return (
-    <table className="data" style={{ tableLayout: 'fixed' }}>
+    <div className="tbl-wrap">
+    <table className="data day-sched" style={{ tableLayout: 'fixed' }}>
       <thead>
         <tr>
           <th style={{ width: '56px' }}>시간</th>
@@ -141,6 +142,7 @@ function DayScheduleTable({
         ))}
       </tbody>
     </table>
+    </div>
   );
 }
 
