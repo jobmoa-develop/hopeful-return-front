@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { getCourses, getCourseStaffs } from '../api/courses';
 import type { CourseSummary } from '../api/courses';
 import { getCourseDailyStaff } from '../api/courseDailyStaff';
@@ -70,6 +71,9 @@ function ymd(date: Date) {
 
 export default function CourseCalendarPage() {
     const navigate = useNavigate();
+    const isMobile = useIsMobile();
+    // 모바일: 날짜 탭 시 그날 상세를 모달로 표시(데스크톱은 우측 사이드 패널).
+    const [dayModalOpen, setDayModalOpen] = useState(false);
     const { user } = useAuth();
     const [cursor, setCursor] = useState(() => new Date());
     const [courses, setCourses] = useState<CourseSummary[]>([]);
@@ -408,10 +412,13 @@ export default function CourseCalendarPage() {
     const selectedDayEvents = selectedDate ? eventsByDate.get(selectedDate) ?? [] : [];
 
     const handleSelectDate = (dateStr: string) => {
-        setSelectedDate(dateStr === selectedDate ? null : dateStr);
+        const next = dateStr === selectedDate ? null : dateStr;
+        setSelectedDate(next);
         setSessionType('FULL');
         setIsAvailable(true);
         setMemo('');
+        // 모바일에서 날짜 선택 시 상세 모달을 연다(데스크톱은 사이드 패널로 표시).
+        if (isMobile && next) setDayModalOpen(true);
     };
 
     const handleSaveSchedule = async () => {
@@ -517,6 +524,164 @@ export default function CourseCalendarPage() {
             setIsUpdatingUnavail(false);
         }
     };
+
+    // 선택일 강의 상세 목록 — 데스크톱 사이드 패널과 모바일 상세 모달에서 공유한다.
+    // 항목 클릭 시 해당 회차로 이동(+모바일 모달 닫기).
+    const renderDayDetail = () => (
+        <>
+            {selectedDayEvents.length === 0 && (
+                <div className="muted" style={{ fontSize: 12 }}>해당 날짜에 예정된 강의가 없습니다.</div>
+            )}
+            {selectedDayEvents.map((ev, idx) => {
+                const roleLabel = staffRoleLabel(myStaffRoleByCourse.get(ev.courseId));
+                const mySession = mySessionByCourseDate.get(`${ev.courseId}_${selectedDate}`);
+                return (
+                    <div
+                        key={`${ev.courseId}-${idx}`}
+                        onClick={() => { setDayModalOpen(false); navigate(`/rounds/${ev.courseId}`); }}
+                        style={{
+                            padding: '8px 4px',
+                            borderBottom: '1px solid var(--line-soft)',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
+                            <span
+                                style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 2,
+                                    background: colorFor(ev.regionName),
+                                    display: 'inline-block',
+                                }}
+                            />
+                            <span style={{ fontSize: 12.5, fontWeight: 600 }}>
+                                {useAdminLabel
+                                    ? `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName}`
+                                    : `${ev.regionName ?? '-'} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''}`}
+                            </span>
+                            {mySession && (
+                                <span
+                                    style={{
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        padding: '1px 5px',
+                                        borderRadius: 4,
+                                        background: SESSION_BADGE_COLOR[mySession],
+                                    }}
+                                >
+                                    {SESSION_TYPE_LABELS[mySession]}
+                                </span>
+                            )}
+                            {roleLabel && (
+                                <span
+                                    style={{
+                                        fontSize: 10,
+                                        fontWeight: 700,
+                                        padding: '1px 5px',
+                                        borderRadius: 4,
+                                        background: '#e2e8f0',
+                                    }}
+                                >
+                                    {roleLabel}
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                            {useAdminLabel
+                                ? `${ev.dayIndex + 1}일차`
+                                : `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName} · ${ev.dayIndex + 1}일차`}
+                        </div>
+                    </div>
+                );
+            })}
+        </>
+    );
+
+    // 근무 가능 여부(등록/확인/불가 전환/삭제) — 데스크톱 하단 카드와 모바일 상세 모달에서 공유한다.
+    const renderAvailability = () => (
+        <>
+            {selectedSchedules.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                    {selectedSchedules.map((s) => (
+                        <div
+                            key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}-${s.sessionType}`}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 10,
+                                padding: '8px 0',
+                                borderBottom: '1px solid var(--line-soft)',
+                            }}
+                        >
+                            <span className={`chip ${s.isAvailable ? 'ok' : 'danger'}`}>
+                                {s.isAvailable ? '가능' : '불가'}
+                            </span>
+                            <span style={{ fontWeight: 600, fontSize: 13 }}>{SESSION_TYPE_LABELS[s.sessionType]}</span>
+                            {s.courseStaffId != null && (
+                                <span className="chip" style={{ fontSize: 11 }} title="이 날짜에 인력으로 배정되어 있습니다">배정됨</span>
+                            )}
+                            {s.memo && <span className="muted" style={{ fontSize: 12 }}>{s.memo}</span>}
+                            {/* 합성 상담사 배정행(staffScheduleId 없음)은 읽기 전용 → 액션 숨김 */}
+                            {s.staffScheduleId != null && (
+                                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                                    {s.isAvailable && (
+                                        <button
+                                            className="btn"
+                                            style={{ padding: '3px 8px', fontSize: 11 }}
+                                            type="button"
+                                            onClick={() => openUnavailableModal(s)}
+                                        >
+                                            불가로 변경
+                                        </button>
+                                    )}
+                                    <button
+                                        className="btn"
+                                        style={{ padding: '3px 8px', fontSize: 11 }}
+                                        type="button"
+                                        onClick={() => handleDeleteSchedule(s)}
+                                    >
+                                        삭제
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <p className="muted" style={{ fontSize: 11.5, margin: '0 0 12px' }}>
+                · 배정된 날짜(<span style={{ fontWeight: 600 }}>배정됨</span>)를 '불가'로 변경하면 배정 관리자에게 자동으로 알림이 발송됩니다.
+            </p>
+
+            <div className="cal-schedule-form">
+                <div className="field">
+                    <label>시간대</label>
+                    <select value={sessionType} onChange={(e) => setSessionType(e.target.value as SessionType)}>
+                        {SESSION_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                                {SESSION_TYPE_LABELS[t]}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div className="field">
+                    <label>가능 여부</label>
+                    <select value={isAvailable ? '1' : '0'} onChange={(e) => setIsAvailable(e.target.value === '1')}>
+                        <option value="1">가능</option>
+                        <option value="0">불가</option>
+                    </select>
+                </div>
+                <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                    <label>메모</label>
+                    <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 오전만 가능" />
+                </div>
+                <button className="btn primary" type="button" onClick={handleSaveSchedule} disabled={isSaving}>
+                    {isSaving ? '저장 중...' : '+ 일정 등록'}
+                </button>
+            </div>
+        </>
+    );
 
     return (
         <section className="view active" id="view-calendar">
@@ -667,6 +832,8 @@ export default function CourseCalendarPage() {
                                             const eventLabel = useAdminLabel
                                                 ? `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName} · ${ev.dayIndex + 1}일차`
                                                 : `${ev.regionName ?? ''} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''} ${ev.dayIndex + 1}일차`.replace(/\s+/g, ' ').trim();
+                                            // 모바일: 배지를 숨기는 대신 지역·지역회차를 노출(일차는 상세 모달에서). 좁은 셀에서도 지역·회차 식별.
+                                            const cellLabelMobile = `${ev.regionName ?? ''} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''}`.replace(/\s+/g, ' ').trim() || eventLabel;
 
                                             return (
                                                 <div
@@ -682,12 +849,15 @@ export default function CourseCalendarPage() {
                                                     title={`${ev.regionName ?? ''} ${ev.courseName} (${ev.courseNumber ?? '-'}기) - ${ev.dayIndex + 1}일차${roleLabel ? ` · ${roleLabel}` : ''}${mySession ? ` · ${SESSION_TYPE_LABELS[mySession]}` : ''}`}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        navigate(`/rounds/${ev.courseId}`);
+                                                        // 모바일: 이벤트 탭도 그날 상세 모달을 연다(데스크톱만 회차로 직접 이동).
+                                                        if (isMobile) handleSelectDate(dateStr);
+                                                        else navigate(`/rounds/${ev.courseId}`);
                                                     }}
                                                 >
                                                     {/* 역할 배지 — 강사 단독 계정이면 숨기고 세션만(요청 5), 그 외엔 역할 표시(비강사·강사+타역할) */}
                                                     {roleLabel && !(hasLecturer && !hasOtherThanLecturer) && (
                                                         <span
+                                                            className="cal-ev-role"
                                                             style={{
                                                                 flexShrink: 0,
                                                                 fontSize: 9.5,
@@ -704,6 +874,7 @@ export default function CourseCalendarPage() {
                                                     {/* 세션(내 배정 시간대) 배지 — 강사 역할 계정만 셀에 인라인. 비강사는 우측 리스트에서 확인 */}
                                                     {hasLecturer && mySession && (
                                                         <span
+                                                            className="cal-ev-session"
                                                             style={{
                                                                 flexShrink: 0,
                                                                 fontSize: 9.5,
@@ -726,7 +897,7 @@ export default function CourseCalendarPage() {
                                                             minWidth: 0,
                                                         }}
                                                     >
-                                                        {eventLabel}
+                                                        {isMobile ? cellLabelMobile : eventLabel}
                                                     </span>
                                                 </div>
                                             );
@@ -759,164 +930,42 @@ export default function CourseCalendarPage() {
                         )}
                     </div>
                     <div className="card-b">
-                        {selectedDayEvents.length === 0 && (
-                            <div className="muted" style={{ fontSize: 12 }}>해당 날짜에 예정된 강의가 없습니다.</div>
-                        )}
-                        {selectedDayEvents.map((ev, idx) => {
-                                const roleLabel = staffRoleLabel(myStaffRoleByCourse.get(ev.courseId));
-                                const mySession = mySessionByCourseDate.get(`${ev.courseId}_${selectedDate}`);
-                                return (
-                                    <div
-                                        key={`${ev.courseId}-${idx}`}
-                                        onClick={() => navigate(`/rounds/${ev.courseId}`)}
-                                        style={{
-                                            padding: '8px 4px',
-                                            borderBottom: '1px solid var(--line-soft)',
-                                            cursor: 'pointer',
-                                        }}
-                                    >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, flexWrap: 'wrap' }}>
-                                            <span
-                                                style={{
-                                                    width: 8,
-                                                    height: 8,
-                                                    borderRadius: 2,
-                                                    background: colorFor(ev.regionName),
-                                                    display: 'inline-block',
-                                                }}
-                                            />
-                                            <span style={{ fontSize: 12.5, fontWeight: 600 }}>
-                                                {useAdminLabel
-                                                    ? `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName}`
-                                                    : `${ev.regionName ?? '-'} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''}`}
-                                            </span>
-                                            {mySession && (
-                                                <span
-                                                    style={{
-                                                        fontSize: 10,
-                                                        fontWeight: 700,
-                                                        padding: '1px 5px',
-                                                        borderRadius: 4,
-                                                        background: SESSION_BADGE_COLOR[mySession],
-                                                    }}
-                                                >
-                                                    {SESSION_TYPE_LABELS[mySession]}
-                                                </span>
-                                            )}
-                                            {roleLabel && (
-                                                <span
-                                                    style={{
-                                                        fontSize: 10,
-                                                        fontWeight: 700,
-                                                        padding: '1px 5px',
-                                                        borderRadius: 4,
-                                                        background: '#e2e8f0',
-                                                    }}
-                                                >
-                                                    {roleLabel}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                                            {useAdminLabel
-                                                ? `${ev.dayIndex + 1}일차`
-                                                : `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName} · ${ev.dayIndex + 1}일차`}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                        {renderDayDetail()}
                     </div>
                 </div>
                 )}
             </div>
 
-            {/* 선택한 날짜의 근무 가능 여부 등록 패널 */}
-            {selectedDate && (
+            {/* 모바일: 날짜 탭 시 그날 강의 상세를 모달로(공용 .modal 풀스크린 CSS). 항목 클릭 → 해당 회차 이동. */}
+            {isMobile && dayModalOpen && selectedDate && (
+                <div
+                    className="modal-overlay open"
+                    onClick={(e) => { if (e.target === e.currentTarget) setDayModalOpen(false); }}
+                >
+                    <div className="modal">
+                        <div className="modal-h">
+                            <h3>{selectedDate} 일정</h3>
+                            <button className="x" type="button" onClick={() => setDayModalOpen(false)}>✕</button>
+                        </div>
+                        <div className="modal-b">
+                            <div className="section-title" style={{ marginBottom: 8 }}>강의 목록</div>
+                            {renderDayDetail()}
+                            <div className="section-title" style={{ margin: '18px 0 8px' }}>근무 가능 여부</div>
+                            {renderAvailability()}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 선택한 날짜의 근무 가능 여부 — 데스크톱 하단 카드(모바일은 상세 모달로 이관) */}
+            {selectedDate && !isMobile && (
                 <div className="card" style={{ marginTop: 18 }}>
                     <div className="card-h">
                         <span className="section-title">{selectedDate} 근무 가능 여부</span>
                         {isScheduleLoading && <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>불러오는 중...</span>}
                     </div>
                     <div className="card-b">
-                        {selectedSchedules.length > 0 && (
-                            <div style={{ marginBottom: 14 }}>
-                                {selectedSchedules.map((s) => (
-                                    <div
-                                        key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}-${s.sessionType}`}
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 10,
-                                            padding: '8px 0',
-                                            borderBottom: '1px solid var(--line-soft)',
-                                        }}
-                                    >
-                                        <span className={`chip ${s.isAvailable ? 'ok' : 'danger'}`}>
-                                            {s.isAvailable ? '가능' : '불가'}
-                                        </span>
-                                        <span style={{ fontWeight: 600, fontSize: 13 }}>{SESSION_TYPE_LABELS[s.sessionType]}</span>
-                                        {s.courseStaffId != null && (
-                                            <span className="chip" style={{ fontSize: 11 }} title="이 날짜에 인력으로 배정되어 있습니다">배정됨</span>
-                                        )}
-                                        {s.memo && <span className="muted" style={{ fontSize: 12 }}>{s.memo}</span>}
-                                        {/* 합성 상담사 배정행(staffScheduleId 없음)은 읽기 전용 → 액션 숨김 */}
-                                        {s.staffScheduleId != null && (
-                                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                                                {s.isAvailable && (
-                                                    <button
-                                                        className="btn"
-                                                        style={{ padding: '3px 8px', fontSize: 11 }}
-                                                        type="button"
-                                                        onClick={() => openUnavailableModal(s)}
-                                                    >
-                                                        불가로 변경
-                                                    </button>
-                                                )}
-                                                <button
-                                                    className="btn"
-                                                    style={{ padding: '3px 8px', fontSize: 11 }}
-                                                    type="button"
-                                                    onClick={() => handleDeleteSchedule(s)}
-                                                >
-                                                    삭제
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-
-                        <p className="muted" style={{ fontSize: 11.5, margin: '0 0 12px' }}>
-                            · 배정된 날짜(<span style={{ fontWeight: 600 }}>배정됨</span>)를 '불가'로 변경하면 배정 관리자에게 자동으로 알림이 발송됩니다.
-                        </p>
-
-                        <div className="cal-schedule-form">
-                            <div className="field">
-                                <label>시간대</label>
-                                <select value={sessionType} onChange={(e) => setSessionType(e.target.value as SessionType)}>
-                                    {SESSION_TYPES.map((t) => (
-                                        <option key={t} value={t}>
-                                            {SESSION_TYPE_LABELS[t]}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="field">
-                                <label>가능 여부</label>
-                                <select value={isAvailable ? '1' : '0'} onChange={(e) => setIsAvailable(e.target.value === '1')}>
-                                    <option value="1">가능</option>
-                                    <option value="0">불가</option>
-                                </select>
-                            </div>
-                            <div className="field" style={{ flex: 1, minWidth: 160 }}>
-                                <label>메모</label>
-                                <input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 오전만 가능" />
-                            </div>
-                            <button className="btn primary" type="button" onClick={handleSaveSchedule} disabled={isSaving}>
-                                {isSaving ? '저장 중...' : '+ 일정 등록'}
-                            </button>
-                        </div>
+                        {renderAvailability()}
                     </div>
                 </div>
             )}
