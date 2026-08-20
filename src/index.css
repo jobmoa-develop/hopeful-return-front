@@ -27,6 +27,17 @@
     --font: "Pretendard", "Pretendard Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", sans-serif;
 }
 
+/*
+ * 반응형 breakpoint 표준 (max-width 기준, 데스크톱 우선)
+ * 네이티브 @media 는 var() 를 못 쓰므로 값은 아래 3단으로 통일해 직접 기입한다.
+ *   1024px  — 태블릿/좁은 데스크톱
+ *   768px   — 모바일 (목록 테이블 카드화 발동, 사이드바 오프캔버스)
+ *   480px   — 소형폰 폴리시
+ * 새 @media 를 추가할 땐 반드시 위 3개 값 중 하나만 사용할 것.
+ * 공용 모바일 규칙(카드 테이블 .data.cards / 필터바 / 모달 풀스크린)은 파일 하단
+ * "mobile foundation (≤768px)" 섹션에 모아 둔다.
+ */
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -306,7 +317,7 @@ button {
 
 .content {
     padding: 26px;
-    max-width: 1280px;
+    max-width: 1600px;
     width: 100%
 }
 
@@ -1350,7 +1361,7 @@ table.data tbody tr:hover {
     line-height: 1.7
 }
 
-@media (max-width:1080px) {
+@media (max-width: 1024px) {
     .kpis {
         grid-template-columns: repeat(2, 1fr)
     }
@@ -1368,7 +1379,7 @@ table.data tbody tr:hover {
     }
 }
 
-@media (max-width:760px) {
+@media (max-width: 768px) {
     .sidebar {
         transform: translateX(-100%);
         transition: transform .2s
@@ -1380,10 +1391,6 @@ table.data tbody tr:hover {
 
     .main {
         margin-left: 0
-    }
-
-    .searchbox {
-        display: none
     }
 
     .kpis {
@@ -1774,7 +1781,7 @@ table.data tbody tr:hover {
     cursor: pointer;
 }
 
-@media(max-width:560px) {
+@media (max-width: 768px) {
     .form-grid {
         grid-template-columns: 1fr
     }
@@ -1934,7 +1941,7 @@ table.data tbody tr:hover {
     cursor: pointer
 }
 
-@media(max-width:760px) {
+@media (max-width: 768px) {
     .assign-card .ac-b {
         grid-template-columns: 1fr
     }
@@ -2113,7 +2120,7 @@ table.data tbody tr:hover {
     flex-wrap: wrap;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
     .cal-page-layout {
         flex-direction: column;
         align-items: stretch;
@@ -2125,7 +2132,7 @@ table.data tbody tr:hover {
     }
 }
 
-@media (max-width: 560px) {
+@media (max-width: 480px) {
     .content {
         padding: 14px 12px;
     }
@@ -2277,7 +2284,7 @@ table.data tbody tr:hover {
     gap: 16px
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
     .sms-grid {
         grid-template-columns: 1fr
     }
@@ -2509,5 +2516,285 @@ table.data tbody tr:hover {
 .btn.tiny.danger-btn {
     color: var(--danger);
     border-color: var(--danger)
+}
+
+/* =====================================================================
+ * mobile foundation (≤768px)
+ * 전 페이지 공용 모바일 규칙. 개별 페이지는 아래 클래스를 opt-in 으로 쓴다.
+ *   - 목록 테이블: <table class="data cards"> + 각 td 에 data-label="컬럼명"
+ *   - 라벨 생략 셀: td.no-label
+ *   - 버튼 모음 셀: td.cell-actions
+ * ===================================================================== */
+@media (max-width: 768px) {
+
+    /* --- 목록 테이블 → 카드형 (.data.cards opt-in) --- */
+    table.data.cards,
+    table.data.cards tbody {
+        display: block;
+        width: 100%;
+    }
+
+    /* 헤더는 화면 밖으로(스크린리더 접근성 유지) */
+    table.data.cards thead {
+        position: absolute;
+        left: -9999px;
+        top: -9999px;
+    }
+
+    table.data.cards tr {
+        display: block;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        margin-bottom: 12px;
+        padding: 2px 2px;
+    }
+
+    table.data.cards td {
+        display: block;
+        position: relative;
+        white-space: normal;
+        text-align: right;
+        padding: 9px 14px 9px 42%;
+        min-height: 40px;
+        border-bottom: 1px solid var(--line-soft);
+    }
+
+    /* 데스크톱의 tr:last-child td{border:none} 을 카드 내부에서 되살림 */
+    table.data.cards tr:last-child td {
+        border-bottom: 1px solid var(--line-soft);
+    }
+
+    table.data.cards tr td:last-child {
+        border-bottom: none;
+    }
+
+    table.data.cards td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 14px;
+        top: 9px;
+        width: 36%;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: var(--muted-2);
+        white-space: normal;
+        line-height: 1.4;
+    }
+
+    /* 라벨 생략 셀(체크박스 등) */
+    table.data.cards td.no-label {
+        padding-left: 14px;
+        text-align: left;
+    }
+
+    table.data.cards td.no-label::before {
+        content: none;
+    }
+
+    /* 버튼 모음 셀: 우측 정렬 + 줄바꿈 */
+    table.data.cards td.cell-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+        justify-content: flex-end;
+    }
+
+    /* --- 필터바 세로 스택 + 고정폭(inline) 무력화 --- */
+    .filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filters > * {
+        width: 100%;
+        margin-left: 0 !important;
+    }
+
+    .filters .searchbox,
+    .filters .select {
+        width: 100% !important;
+    }
+
+    /* 공용 지역 필터(inline display:inline-block; min-width:140) 전체폭화 */
+    .filters .region-select-wrap {
+        width: 100% !important;
+        display: block !important;
+    }
+
+    .filters .count {
+        text-align: right;
+    }
+
+    .filters .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* --- 모달 풀스크린 --- */
+    .modal-overlay {
+        padding: 0;
+    }
+
+    .modal,
+    .modal.sms-modal {
+        width: 100%;
+        max-width: 100%;
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100vh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
+    /* 본문이 늘어나고 푸터(버튼)는 하단 고정 */
+    .modal-b {
+        flex: 1;
+    }
+}
+
+/* =====================================================================
+ * 매트릭스형 테이블(출결·인력배정·상담사 일정): 카드화 부적합.
+ * 가로 스크롤(.tbl-wrap) + 첫 컬럼 sticky 로 처리한다.
+ * ===================================================================== */
+@media (max-width: 768px) {
+
+    /* 열이 뭉개지지 않도록 최소 폭 확보 → .tbl-wrap 이 가로 스크롤 */
+    .att-table {
+        min-width: 560px;
+    }
+
+    .assign-table {
+        min-width: 620px;
+    }
+
+    table.data.day-sched {
+        min-width: 520px;
+    }
+
+    /* 첫 컬럼(참여자/역할/시간) 고정 */
+    .att-table td.nm-col,
+    .att-table th.nm-col,
+    .assign-table td.nm-col,
+    .assign-table th.nm-col,
+    table.data.day-sched th:first-child,
+    table.data.day-sched td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: var(--surface);
+    }
+
+    .att-table thead th.nm-col,
+    .assign-table thead th.nm-col,
+    table.data.day-sched thead th:first-child {
+        background: #fafbfd;
+        z-index: 2;
+    }
+
+    /* 출결 상단 도구(회차·일차 select + 버튼) 세로 스택 */
+    .att-tools {
+        flex-wrap: wrap;
+    }
+
+    .att-tools > * {
+        flex: 1 1 auto;
+    }
+}
+
+/* =====================================================================
+ * 레이아웃 폴리시 (topbar) — 모바일에서 상단 바 요소 넘침 방지
+ * ===================================================================== */
+@media (max-width: 768px) {
+    .topbar {
+        padding: 0 12px;
+        gap: 10px;
+    }
+
+    /* 실시간 시계는 부가 정보 → 모바일에서 숨김(공간 확보) */
+    .kst-clock {
+        display: none !important;
+    }
+}
+
+@media (max-width: 480px) {
+    /* 사용자 영역: 아바타만 유지, 이름/역할은 생략해 로그아웃 버튼 자리 확보 */
+    .user .u-name,
+    .user .u-role {
+        display: none;
+    }
+}
+
+/* =====================================================================
+ * 상세 페이지(detail) — 모바일 레이아웃 정리
+ * 상세 페이지들은 공용 클래스 대신 inline style이 많아 모바일에서 버튼이
+ * 겹치거나 넘친다. 공용 클래스 규칙 + RoundDetail inline 전환용 유틸 클래스.
+ * ===================================================================== */
+
+/* RoundDetail 5일차 날짜 그리드(inline repeat(5,...) 대체) — 데스크톱 5열 */
+.rd-day-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+}
+
+/* RoundDetail 강좌 참여자 검색 도구(inline marginLeft:auto flex 대체) — 데스크톱 우측 정렬 */
+.rd-enroll-tools {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+@media (max-width: 768px) {
+    /* 상세 헤더 액션 버튼: 세로 스택·전체폭 */
+    .detail-head {
+        flex-wrap: wrap;
+    }
+
+    .detail-head .actions {
+        margin-left: 0;
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .detail-head .actions > * {
+        width: 100%;
+    }
+
+    /* 카드 헤더: inline marginLeft:auto 무력화 → 제목-버튼 겹침 방지(버튼은 아래 줄로 wrap) */
+    .card-h {
+        flex-wrap: wrap;
+    }
+
+    .card-h > * {
+        margin-left: 0 !important;
+    }
+
+    /* 5일차 그리드: 모바일 2열(날짜 input 폭 확보) */
+    .rd-day-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* 참여자 검색 도구: 세로 스택·줄바꿈 */
+    .rd-enroll-tools {
+        margin-left: 0;
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    .rd-enroll-tools > * {
+        flex: 1 1 140px;
+    }
+
+    .rd-enroll-tools input {
+        width: auto !important;
+        flex: 1 1 120px;
+    }
 }
 

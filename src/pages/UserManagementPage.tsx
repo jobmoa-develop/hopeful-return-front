@@ -375,7 +375,7 @@ export default function UserManagementPage() {
                 </div>
 
                 <div className="tbl-wrap">
-                    <table className="data">
+                    <table className="data cards">
                         <thead>
                             <tr>
                                 <th>로그인 ID</th>
@@ -388,35 +388,35 @@ export default function UserManagementPage() {
                         <tbody>
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan={canWrite ? 5 : 4} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
+                                    <td className="no-label" colSpan={canWrite ? 5 : 4} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
                                         불러오는 중…
                                     </td>
                                 </tr>
                             ) : users.length === 0 ? (
                                 <tr>
-                                    <td colSpan={canWrite ? 5 : 4} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
+                                    <td className="no-label" colSpan={canWrite ? 5 : 4} style={{ textAlign: 'center', padding: 24, color: 'var(--muted)' }}>
                                         표시할 직원이 없습니다.
                                     </td>
                                 </tr>
                             ) : (
                                 users.map((u) => (
                                     <tr key={u.userId} onClick={() => void openEdit(u.userId)}>
-                                        <td className="pname">{u.loginId}</td>
-                                        <td>{u.name}</td>
-                                        <td>
+                                        <td className="pname" data-label="로그인 ID">{u.loginId}</td>
+                                        <td data-label="이름">{u.name}</td>
+                                        <td data-label="역할">
                                             {u.roleNames.map((rn) => (
                                                 <span className="chip info" key={rn} style={{ marginRight: 4 }}>
                                                     {roleNameLabel(rn)}
                                                 </span>
                                             ))}
                                         </td>
-                                        <td>
+                                        <td data-label="상태">
                                             <span className={`chip ${u.enabled ? 'ok' : 'neutral'}`}>
                                                 {u.enabled ? '활성' : '비활성'}
                                             </span>
                                         </td>
                                         {canWrite && (
-                                            <td onClick={(e) => e.stopPropagation()}>
+                                            <td className="cell-actions" data-label="관리" onClick={(e) => e.stopPropagation()}>
                                                 <button className="btn tiny" type="button" onClick={() => void openEdit(u.userId)}>
                                                     수정
                                                 </button>{' '}

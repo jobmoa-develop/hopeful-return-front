@@ -633,7 +633,7 @@ export default function RoundsPage() {
           </span>
         </div>
         <div className="tbl-wrap">
-          <table className="data">
+          <table className="data cards">
             <thead>
               <tr>
                 <th>강좌명</th>
@@ -656,25 +656,25 @@ export default function RoundsPage() {
                     if (course.courseId) navigate(`/rounds/${course.courseId}`);
                   }}
                 >
-                  <td className="pname">{course.courseName ?? `강좌 #${course.courseId}`}</td>
-                  <td>{course.regionName ?? course.regionId ?? '-'}</td>
-                  <td className="tnum">{course.courseNumber ? `${course.courseNumber}기` : '-'}</td>
-                  <td className="tnum">
+                  <td className="pname" data-label="강좌명">{course.courseName ?? `강좌 #${course.courseId}`}</td>
+                  <td data-label="지역">{course.regionName ?? course.regionId ?? '-'}</td>
+                  <td className="tnum" data-label="전체회차">{course.courseNumber ? `${course.courseNumber}기` : '-'}</td>
+                  <td className="tnum" data-label="지역회차">
                     {course.localCourseNumber ? `${course.localCourseNumber}회차` : '-'}
                   </td>
-                  <td className="tnum">
+                  <td className="tnum" data-label="정원">
                     {course.currentParticipants ?? 0}
                     <span className="muted"> / {course.capacity ?? '-'}</span>
                   </td>
-                  <td>{course.location ?? '-'}</td>
-                  <td>
+                  <td data-label="교육장">{course.location ?? '-'}</td>
+                  <td data-label="상태">
                     <span className={`chip ${statusClass(course.status)}`}>
                       {statusLabel(course.status)}
                     </span>
                   </td>
-                  <td className="tnum">{formatCourseSchedule(course)}</td>
-                  <td className="tnum">{course.planSubmitDate ?? '-'}</td>
-                  <td>
+                  <td className="tnum" data-label="개강일정">{formatCourseSchedule(course)}</td>
+                  <td className="tnum" data-label="계획서 제출일">{course.planSubmitDate ?? '-'}</td>
+                  <td className="cell-actions" data-label="QR">
                     <button
                       className="btn"
                       type="button"
@@ -693,6 +693,7 @@ export default function RoundsPage() {
               {!isLoading && courses.length === 0 && (
                 <tr>
                   <td
+                    className="no-label"
                     colSpan={10}
                     style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
                   >

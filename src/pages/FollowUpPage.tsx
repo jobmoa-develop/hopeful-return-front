@@ -191,7 +191,7 @@ export default function FollowUpPage() {
 
       <div className="card">
         <div className="tbl-wrap">
-          <table className="data">
+          <table className="data cards">
             <thead>
               <tr>
                 <SortableTh column="participantName" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
@@ -216,27 +216,27 @@ export default function FollowUpPage() {
                   onClick={() => setDetailItem(it)}
                   style={{ cursor: 'pointer' }}
                 >
-                  <td>
+                  <td data-label="참여자">
                     <div className="pname">{it.name}</div>
                     <div className="cell-sub">{it.matchKey ?? '—'}</div>
                   </td>
-                  <td>{roundLabel(it)}</td>
-                  <td>{it.completionDate ?? '—'}</td>
-                  <td>
+                  <td data-label="지역 / 회차">{roundLabel(it)}</td>
+                  <td data-label="수료일">{it.completionDate ?? '—'}</td>
+                  <td data-label="취업">
                     {it.employmentDate ? (
                       <span className="chip ok">취업 · {it.employmentDate}</span>
                     ) : (
                       <span className="chip warn">미취업</span>
                     )}
                   </td>
-                  <td>
+                  <td data-label="숲체험">
                     {it.forestProgramDate ? (
                       <span className="chip info">{it.forestProgramDate}</span>
                     ) : (
                       <span className="chip neutral">—</span>
                     )}
                   </td>
-                  <td>
+                  <td data-label="국취 연계">
                     {it.nationalProgramDate ? (
                       <span className="chip info">
                         {it.nationalProgramDate}
@@ -246,7 +246,7 @@ export default function FollowUpPage() {
                       <span className="chip neutral">—</span>
                     )}
                   </td>
-                  <td>
+                  <td data-label="상담">
                     {it.counselCount > 0 ? (
                       <span className="muted tnum" style={{ fontSize: '12px' }}>
                         {it.counselCount}회{it.lastCounselDate ? ` · ${it.lastCounselDate}` : ''}
@@ -260,6 +260,7 @@ export default function FollowUpPage() {
               {!loading && filteredList.length === 0 && (
                 <tr>
                   <td
+                    className="no-label"
                     colSpan={7}
                     style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
                   >

@@ -200,7 +200,7 @@ export default function ConsultingPage() {
 
       <div className="card">
         <div className="tbl-wrap">
-          <table className="data">
+          <table className="data cards">
             <thead>
               <tr>
                 <SortableTh column="participantName" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
@@ -226,20 +226,20 @@ export default function ConsultingPage() {
                     key={p.courseParticipantId}
                     onClick={() => navigate(`/participants/${p.courseParticipantId}`)}
                   >
-                    <td>
+                    <td data-label="참여자">
                       <div className="pname">{p.participantName}</div>
                       <div className="cell-sub">{p.matchKey ?? p.phone}</div>
                     </td>
-                    <td>{roundText(p)}</td>
-                    <td>
+                    <td data-label="지역 / 회차">{roundText(p)}</td>
+                    <td data-label="진행상태">
                       <span className={`chip ${CP_STATUS_CHIP[st] ?? 'neutral'}`}>
                         {CP_STATUS_LABELS[st] ?? p.status ?? '—'}
                       </span>
                     </td>
-                    {SLOT_COLUMNS.map(({ type }) => {
+                    {SLOT_COLUMNS.map(({ type, label }) => {
                       const slot = p.counselors.find((c) => c.status === type);
                       return (
-                        <td key={type}>
+                        <td key={type} data-label={label}>
                           {slot ? (
                             <>
                               <span className={`chip ${slot.completed ? 'ok' : 'warn'}`}>
@@ -255,7 +255,7 @@ export default function ConsultingPage() {
                         </td>
                       );
                     })}
-                    <td onClick={(ev) => ev.stopPropagation()}>
+                    <td className="cell-actions" data-label="조치" onClick={(ev) => ev.stopPropagation()}>
                       {canConsult ? (
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                           <button
@@ -287,6 +287,7 @@ export default function ConsultingPage() {
               {!loading && items.length === 0 && (
                 <tr>
                   <td
+                    className="no-label"
                     colSpan={7}
                     style={{ textAlign: 'center', padding: '32px', color: 'var(--muted)' }}
                   >
