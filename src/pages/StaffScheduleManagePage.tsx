@@ -11,8 +11,10 @@ import {
     deleteStaffSchedule,
     createStaffSchedulesBulk,
     SESSION_TYPE_LABELS,
+    SESSION_BADGE_COLORS,
 } from '../api/staffSchedules';
 import type { StaffScheduleItem, SessionType } from '../api/staffSchedules';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const DAY_KEYS = ['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -22,6 +24,10 @@ const REGION_COLOR_PALETTE = [
     '#dbeafe', '#dcfce7', '#fef9c3', '#fde2e2', '#ede9fe',
     '#ffe4e6', '#e0f2fe', '#fef3c7', '#d1fae5', '#e2e8f0',
 ];
+
+// 회차에 배정된 인력(course_staff_id 有)은 "가능"과 구분되게 별도 색으로 표시한다.
+const ASSIGNED_CHIP_BG = '#e0e7ff';
+const ASSIGNED_CHIP_FG = '#3730a3';
 
 function colorForRegion(regionName?: string) {
     if (!regionName) return '#f1f4f8';
@@ -47,6 +53,8 @@ type DayStaffSummary = {
     userId: number;
     userName: string;
     available: boolean;
+    assigned: boolean;        // 이 날 회차에 배정됨(course_staff_id 有)
+    courseName: string | null; // 배정된 회차명(지역+회차)
     entries: StaffScheduleItem[];
 };
 
@@ -85,6 +93,7 @@ async function fetchAllMonthSchedules(fromDate: string, toDate: string): Promise
 
 export default function StaffScheduleManagePage() {
     const navigate = useNavigate();
+    const isMobile = useIsMobile();
     const [cursor, setCursor] = useState(() => new Date());
 
     // 강좌 (배경 정보)
@@ -225,15 +234,22 @@ export default function StaffScheduleManagePage() {
         const grouped = new Map<string, Map<number, DayStaffSummary>>();
         allSchedules.forEach((s) => {
             const dayMap = grouped.get(s.scheduleDate) ?? new Map<number, DayStaffSummary>();
+            const isAssigned = s.courseStaffId != null;
             const existing = dayMap.get(s.userId);
             if (existing) {
                 existing.entries.push(s);
                 if (s.isAvailable) existing.available = true;
+                if (isAssigned) {
+                    existing.assigned = true;
+                    existing.courseName = existing.courseName ?? s.courseName ?? null;
+                }
             } else {
                 dayMap.set(s.userId, {
                     userId: s.userId,
                     userName: s.userName,
                     available: s.isAvailable,
+                    assigned: isAssigned,
+                    courseName: isAssigned ? s.courseName ?? null : null,
                     entries: [s],
                 });
             }
@@ -479,7 +495,7 @@ export default function StaffScheduleManagePage() {
                         </div>
                         <div className="field" style={{ minWidth: 200 }}>
                             <label>요일</label>
-                            <div style={{ display: 'flex', gap: 6 }}>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                                 {WEEKDAYS.map((w, idx) => (
                                     <button
                                         key={w}
@@ -550,6 +566,10 @@ export default function StaffScheduleManagePage() {
                         가능/불가 혼재
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span className="chip" style={{ background: ASSIGNED_CHIP_BG, color: ASSIGNED_CHIP_FG, fontSize: 10, padding: '0 5px' }}>📌 배정됨</span>
+                        회차 배정(회차명 표시)
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <span style={{ width: 14, height: 14, borderRadius: 3, background: '#fff', border: '1px solid var(--line)', display: 'inline-block' }} />
                         미등록
                     </span>
@@ -576,7 +596,8 @@ export default function StaffScheduleManagePage() {
                             : summarizeAvailability(dayStaff);
 
                         const isSelected = dateStr === selectedDate;
-                        const previewStaff = dayStaff.slice(0, 4);
+                        const previewLimit = isMobile ? 2 : 4;
+                        const previewStaff = dayStaff.slice(0, previewLimit);
 
                         return (
                             <div
@@ -585,7 +606,8 @@ export default function StaffScheduleManagePage() {
                                 className={`cal-cell ${inMonth ? '' : 'cal-cell-muted'} ${dateStr === today ? 'cal-cell-today' : ''}`}
                                 style={{
                                     cursor: 'pointer',
-                                    height: 128,
+                                    height: isMobile ? 'auto' : 128,
+                                    minHeight: isMobile ? 84 : undefined,
                                     overflow: 'hidden',
                                     background: inMonth ? CELL_BG[availability] : undefined,
                                     outline: isSelected ? '2px solid var(--navy-600)' : 'none',
@@ -614,16 +636,21 @@ export default function StaffScheduleManagePage() {
                                     {dayEvents.length > 1 && <div className="cal-event-more">+{dayEvents.length - 1}건</div>}
                                 </div>
 
-                                {/* 대상자 미선택: 전 직원 가능/불가 이름 미리보기 */}
+                                {/* 대상자 미선택: 전 직원 가능/불가/배정 이름 미리보기 */}
                                 {!selectedUserId && dayStaff.length > 0 && (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
                                         {previewStaff.map((s) => (
                                             <span
                                                 key={s.userId}
-                                                className={`chip ${s.available ? 'ok' : 'danger'}`}
-                                                style={{ fontSize: 9, padding: '0 4px' }}
+                                                className={`chip ${s.assigned ? '' : s.available ? 'ok' : 'danger'}`}
+                                                style={{
+                                                    fontSize: 9,
+                                                    padding: '0 4px',
+                                                    ...(s.assigned ? { background: ASSIGNED_CHIP_BG, color: ASSIGNED_CHIP_FG } : {}),
+                                                }}
+                                                title={s.assigned ? `${s.userName} · ${s.courseName ?? '배정'} 배정` : s.userName}
                                             >
-                                                {s.userName}
+                                                {s.assigned ? `📌${s.userName}` : s.userName}
                                             </span>
                                         ))}
                                         {dayStaff.length > previewStaff.length && (
@@ -632,18 +659,29 @@ export default function StaffScheduleManagePage() {
                                     </div>
                                 )}
 
-                                {/* 대상자 선택: 그 사람의 세션별 배지 */}
+                                {/* 대상자 선택: 그 사람의 세션별 배지(배정이면 회차 표시) */}
                                 {selectedUserId && myDaySchedules.length > 0 && (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
-                                        {myDaySchedules.map((s) => (
-                                            <span
-                                                key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
-                                                className={`chip ${s.isAvailable ? 'ok' : 'danger'}`}
-                                                style={{ fontSize: 9, padding: '0 4px' }}
-                                            >
-                                                {SESSION_TYPE_LABELS[s.sessionType]}
-                                            </span>
-                                        ))}
+                                        {myDaySchedules.map((s) => {
+                                            const assigned = s.courseStaffId != null;
+                                            return (
+                                                <span
+                                                    key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
+                                                    style={{
+                                                        fontSize: 9,
+                                                        padding: '0 5px',
+                                                        borderRadius: 4,
+                                                        fontWeight: 700,
+                                                        color: '#1a1a1a',
+                                                        background: s.isAvailable ? SESSION_BADGE_COLORS[s.sessionType] : '#fdecec',
+                                                        border: assigned ? `1px solid ${ASSIGNED_CHIP_FG}` : 'none',
+                                                    }}
+                                                    title={assigned ? `${s.courseName ?? '배정'} 배정` : SESSION_TYPE_LABELS[s.sessionType]}
+                                                >
+                                                    {assigned ? '📌' : ''}{SESSION_TYPE_LABELS[s.sessionType]}{s.isAvailable ? '' : '(불가)'}
+                                                </span>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -690,8 +728,15 @@ export default function StaffScheduleManagePage() {
                                             borderBottom: '1px solid var(--line-soft)',
                                         }}
                                     >
-                                        <span className={`chip ${s.available ? 'ok' : 'danger'}`}>{s.available ? '가능' : '불가'}</span>
+                                        <span className={`chip ${s.assigned ? '' : s.available ? 'ok' : 'danger'}`} style={s.assigned ? { background: ASSIGNED_CHIP_BG, color: ASSIGNED_CHIP_FG } : undefined}>
+                                            {s.assigned ? '배정됨' : s.available ? '가능' : '불가'}
+                                        </span>
                                         <span style={{ fontWeight: 600, fontSize: 13 }}>{s.userName}</span>
+                                        {s.assigned && (
+                                            <span className="chip" style={{ background: ASSIGNED_CHIP_BG, color: ASSIGNED_CHIP_FG, fontSize: 11 }}>
+                                                📌 {s.courseName ?? '회차 배정'}
+                                            </span>
+                                        )}
                                         <span className="muted" style={{ fontSize: 11.5 }}>
                                             {s.entries.map((e) => `${SESSION_TYPE_LABELS[e.sessionType]}${e.isAvailable ? '' : '(불가)'}`).join(' · ')}
                                         </span>
@@ -735,7 +780,14 @@ export default function StaffScheduleManagePage() {
                                                     >
                                                         {s.isAvailable ? '가능' : '불가'}
                                                     </button>
-                                                    <span style={{ fontWeight: 600, fontSize: 13 }}>{SESSION_TYPE_LABELS[s.sessionType]}</span>
+                                                    <span style={{ fontWeight: 700, fontSize: 12, padding: '1px 7px', borderRadius: 4, background: SESSION_BADGE_COLORS[s.sessionType], color: '#1a1a1a' }}>
+                                                        {SESSION_TYPE_LABELS[s.sessionType]}
+                                                    </span>
+                                                    {s.courseStaffId != null && (
+                                                        <span className="chip" style={{ background: ASSIGNED_CHIP_BG, color: ASSIGNED_CHIP_FG, fontSize: 11 }}>
+                                                            📌 {s.courseName ?? '회차 배정'}
+                                                        </span>
+                                                    )}
                                                     {s.memo && <span className="muted" style={{ fontSize: 12 }}>{s.memo}</span>}
                                                     <button
                                                         className="btn"

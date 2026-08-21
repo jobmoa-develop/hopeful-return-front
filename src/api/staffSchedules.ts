@@ -16,6 +16,8 @@ export type StaffScheduleItem = {
   // 배정 연결 ID(course_staff). null/미포함이면 미배정 일정.
   // 목록·본인 조회(StaffScheduleListResponse.Item), 단건/등록/수정(StaffScheduleResponse) 모두 포함.
   courseStaffId?: number | null;
+  // 배정된 회차명(지역+회차, 예: "서울 3회차"). 미배정이면 null.
+  courseName?: string | null;
   // 단건 조회/등록/수정(StaffScheduleResponse)에만 존재
   createdAt?: string;
   updatedAt?: string;
@@ -108,4 +110,11 @@ export const SESSION_TYPE_LABELS: Record<SessionType, string> = {
   AM: '오전',
   PM: '오후',
   FULL: '종일',
+};
+
+// 세션(오전/오후/종일) 배지 배경색 — 강의일정·근무자 일정 캘린더에서 공용으로 쓴다(색상 통일).
+export const SESSION_BADGE_COLORS: Record<SessionType, string> = {
+  AM: '#fde68a',
+  PM: '#a5d8ff',
+  FULL: '#c3e6cb',
 };
