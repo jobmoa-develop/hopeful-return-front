@@ -12,6 +12,7 @@ import {
     updateStaffSchedule,
     deleteStaffSchedule,
     SESSION_TYPE_LABELS,
+    SESSION_BADGE_COLORS as SESSION_BADGE_COLOR,
 } from '../api/staffSchedules';
 import type { StaffScheduleItem, SessionType } from '../api/staffSchedules';
 
@@ -43,11 +44,7 @@ const STAFF_ROLE_LABELS: Record<string, string> = {
 };
 
 // AM/PM/FULL 배지 색상
-const SESSION_BADGE_COLOR: Record<SessionTypeValue, string> = {
-    AM: '#fde68a',
-    PM: '#a5d8ff',
-    FULL: '#c3e6cb',
-};
+// 세션 배지 색상은 api/staffSchedules 의 공용 SESSION_BADGE_COLORS 를 재사용한다(색상 통일·DRY).
 
 function staffRoleLabel(role?: string | null) {
     if (!role) return null;
@@ -832,8 +829,11 @@ export default function CourseCalendarPage() {
                                             const eventLabel = useAdminLabel
                                                 ? `${ev.courseNumber ? `${ev.courseNumber}기 ` : ''}${ev.courseName} · ${ev.dayIndex + 1}일차`
                                                 : `${ev.regionName ?? ''} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''} ${ev.dayIndex + 1}일차`.replace(/\s+/g, ' ').trim();
-                                            // 모바일: 배지를 숨기는 대신 지역·지역회차를 노출(일차는 상세 모달에서). 좁은 셀에서도 지역·회차 식별.
-                                            const cellLabelMobile = `${ev.regionName ?? ''} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''}`.replace(/\s+/g, ' ').trim() || eventLabel;
+                                            // 모바일 라벨: 강사(내 배정 세션 有)는 "오전/오후 + 지역"(예: "오전 서울"),
+                                            // 그 외는 지역·지역회차(일차는 상세 모달에서). 좁은 셀에서도 식별 가능하게.
+                                            const cellLabelMobile = (hasLecturer && mySession)
+                                                ? `${SESSION_TYPE_LABELS[mySession]} ${ev.regionName ?? ''}`.replace(/\s+/g, ' ').trim() || eventLabel
+                                                : `${ev.regionName ?? ''} ${ev.localCourseNumber ? `${ev.localCourseNumber}회차` : ''}`.replace(/\s+/g, ' ').trim() || eventLabel;
 
                                             return (
                                                 <div
@@ -871,8 +871,8 @@ export default function CourseCalendarPage() {
                                                             {roleLabel}
                                                         </span>
                                                     )}
-                                                    {/* 세션(내 배정 시간대) 배지 — 강사 역할 계정만 셀에 인라인. 비강사는 우측 리스트에서 확인 */}
-                                                    {hasLecturer && mySession && (
+                                                    {/* 세션(내 배정 시간대) 배지 — 강사 역할 계정만 셀에 인라인(데스크톱). 모바일은 라벨에 "오전/오후 지역"으로 이미 포함 → 중복 방지 위해 숨김 */}
+                                                    {hasLecturer && mySession && !isMobile && (
                                                         <span
                                                             className="cal-ev-session"
                                                             style={{
