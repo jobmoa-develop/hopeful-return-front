@@ -14,6 +14,8 @@ import { getFollowUpStats } from '../api/followUps';
 import type { FollowUpStatsResponse } from '../api/followUps';
 import { getRegions, groupRegionsByParent } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+import { getMyStaffSchedules, SESSION_TYPE_LABELS } from '../api/staffSchedules';
+import type { StaffScheduleItem } from '../api/staffSchedules';
 
 import { RegionSelect } from '../components/RegionSelect';
 import type { RegionFilterValue } from '../components/RegionSelect';
@@ -42,6 +44,10 @@ export default function DashboardPage() {
   const [totals, setTotals] = useState<DashboardRegionStatItem | null>(null);
   const [calendarItems, setCalendarItems] = useState<DashboardCalendarItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // 내 일정(근무자 일정) — 이번 달 본인 가용일·배정 회차 간략 표시(모든 역할이 본인 것만 열람)
+  const [mySchedules, setMySchedules] = useState<StaffScheduleItem[]>([]);
+  const [isMyLoading, setIsMyLoading] = useState(false);
 
   // ── 사후관리 집계(취업률 · 숲체험 방문률 · 국취연계률) — ADMIN/HEAD_OFFICE 전용 ──
   const canSeeFollowUpStats = roleConfig.roles.some((r) => r === 'ADMIN' || r === 'HEAD_OFFICE');
@@ -85,6 +91,27 @@ export default function DashboardPage() {
       })
       .finally(() => {
         if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [year, month]);
+
+  // 내 일정 — 이번 달 본인 근무자 일정(/me). 월이 바뀔 때마다 재조회
+  useEffect(() => {
+    let active = true;
+    setIsMyLoading(true);
+    const from = ymd(new Date(year, month, 1));
+    const to = ymd(new Date(year, month + 1, 0));
+    getMyStaffSchedules(from, to)
+      .then(({ data: res }) => {
+        if (active) setMySchedules(res.data.content ?? []);
+      })
+      .catch(() => {
+        if (active) setMySchedules([]);
+      })
+      .finally(() => {
+        if (active) setIsMyLoading(false);
       });
     return () => {
       active = false;
@@ -184,6 +211,28 @@ export default function DashboardPage() {
       })
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [calendarItems]);
+
+  // 우측 "전체 일정" 리스트는 참여자 수당 지급·수행결과보고서 제출 마감 2종만 노출한다(달력은 전체 유지).
+  const deadlineListItems = useMemo(
+    () => monthlyItems.filter((i) => i.taskType === 'ALLOWANCE_PAYMENT' || i.taskType === 'REPORT_SUBMIT'),
+    [monthlyItems],
+  );
+
+  // 내 일정 요약 — 배정된 회차(courseStaffId 有)와 순수 근무 가능일 수
+  const myAssigned = useMemo(
+    () =>
+      mySchedules
+        .filter((s) => s.courseStaffId != null)
+        .sort((a, b) => a.scheduleDate.localeCompare(b.scheduleDate)),
+    [mySchedules],
+  );
+  const myAvailableDays = useMemo(
+    () =>
+      new Set(
+        mySchedules.filter((s) => s.isAvailable && s.courseStaffId == null).map((s) => s.scheduleDate),
+      ).size,
+    [mySchedules],
+  );
 
   // 대시보드 일정 체크 토글 — 전역 공유이므로 누가 체크/해제해도 모든 사용자 화면에 반영된다.
   // 낙관적 업데이트로 먼저 화면 반영 후, 서버 요청 실패 시에만 롤백한다.
@@ -435,24 +484,75 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* 오른쪽: 이번 달 전체 일정 리스트 (D-day 임박 순) */}
+        {/* 오른쪽: 내 일정 + 마감 일정 리스트 */}
         <div className="grid" style={{ gap: '18px' }}>
+          {/* 내 일정(근무자 일정) 간략 뷰 */}
           <div className="card">
             <div className="card-h">
               <span className="section-title">
-                {year}.{String(month + 1).padStart(2, '0')} 전체 일정
+                {year}.{String(month + 1).padStart(2, '0')} 내 일정
               </span>
               <span className="chip neutral" style={{ marginLeft: 'auto' }}>
-                {monthlyItems.length}건
+                배정 {myAssigned.length}건 · 가능 {myAvailableDays}일
+              </span>
+              <span className="more" style={{ marginLeft: 10 }} onClick={() => navigate('/calendar')}>
+                전체 보기 →
+              </span>
+            </div>
+            <div className="card-b" style={{ maxHeight: 240, overflowY: 'auto' }}>
+              {isMyLoading && (
+                <p className="muted" style={{ fontSize: 12.5 }}>불러오는 중...</p>
+              )}
+              {!isMyLoading && mySchedules.length === 0 && (
+                <p className="muted" style={{ fontSize: 12.5 }}>이번 달 등록된 내 일정이 없습니다.</p>
+              )}
+              {!isMyLoading && myAssigned.length > 0 && (
+                <>
+                  <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>배정된 회차</div>
+                  {myAssigned.map((s) => (
+                    <div
+                      key={s.staffScheduleId ?? `assign-${s.courseStaffId}-${s.scheduleDate}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 2px',
+                        borderBottom: '1px solid var(--line-soft)',
+                      }}
+                    >
+                      <span className="tnum" style={{ fontSize: 12, minWidth: 82 }}>{s.scheduleDate}</span>
+                      <b style={{ fontSize: 13 }}>{s.courseName ?? '회차 배정'}</b>
+                      <span className="chip neutral" style={{ marginLeft: 'auto', fontSize: 11 }}>
+                        {SESSION_TYPE_LABELS[s.sessionType]}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+              {!isMyLoading && mySchedules.length > 0 && myAssigned.length === 0 && (
+                <p className="muted" style={{ fontSize: 12.5 }}>
+                  배정된 회차는 없고, 이번 달 근무 가능일 {myAvailableDays}일이 등록되어 있습니다.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-h">
+              <span className="section-title">
+                {year}.{String(month + 1).padStart(2, '0')} 마감 일정
+              </span>
+              <span className="chip neutral" style={{ marginLeft: 'auto' }}>
+                {deadlineListItems.length}건
               </span>
             </div>
             <div className="card-b" style={{ maxHeight: 520, overflowY: 'auto' }}>
-              {!isLoading && monthlyItems.length === 0 && (
+              {!isLoading && deadlineListItems.length === 0 && (
                 <p className="muted" style={{ fontSize: 12.5 }}>
-                  이번 달 등록된 일정이 없습니다.
+                  이번 달 수당 지급·수행결과보고서 제출 마감이 없습니다.
                 </p>
               )}
-              {monthlyItems.map((item) => {
+              {deadlineListItems.map((item) => {
                 const isHighlighted = item.date === highlightDate;
                 return (
                   <div
