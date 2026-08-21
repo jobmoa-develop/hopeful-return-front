@@ -28,6 +28,7 @@ export type CalendarTaskType =
     | 'PLAN_SUBMIT'
     | 'ATTENDANCE_INPUT'
     | 'COMPLETION_PROCESS'
+    | 'ALLOWANCE_PAYMENT'
     | 'REPORT_SUBMIT'
     | null;
 
