@@ -111,6 +111,10 @@ export type CourseUpdateRequest = {
   minimumCapacity?: number;
   location?: string;
   planSubmitDate?: string;
+  // 교육일 이동으로 배정 인력이 타 회차/근무불가일과 겹칠 때, 확인 후 재전송하면 true.
+  // 미확인(null/false)에 충돌이 있으면 409(ASSIGN_CONFLICT)로 충돌 목록을 반환한다.
+  // true면 겹친 인력을 해당 교육일 배정에서 제외하고 진행한다.
+  confirmConflicts?: boolean;
 };
 
 export type CourseStatusRequest = {

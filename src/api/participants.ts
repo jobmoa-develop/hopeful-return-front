@@ -19,12 +19,15 @@ export type EnrollmentSummary = {
 };
 
 // GET /api/participants 목록 항목 — matchKey는 표시용 참여자ID
+// 응답이 "참여자 1행 → 수강건 1행"이라 동일 participantId가 여러 항목으로 내려올 수 있다.
+// courseParticipantId는 이 행의 수강건 ID(수강 이력이 없는 참여자 행이면 null) — 목록 행 구분/상세 이동 키.
 export type ParticipantListItem = {
   participantId: number;
   name: string;
   birthYear: number | null;
   phone: string;
   matchKey: string | null;
+  courseParticipantId: number | null;
   latestEnrollment: EnrollmentSummary | null;
 };
 

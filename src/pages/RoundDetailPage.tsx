@@ -20,13 +20,24 @@ import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { getCourseDailyStaff } from '../api/courseDailyStaff';
-import type { CourseDailyStaffItem } from '../api/courseDailyStaff';
+import type { AssignConflict, CourseDailyStaffItem, StaffRoleValue } from '../api/courseDailyStaff';
 import { ASSIGN_ROLES, formatDateCol } from './assign/roles';
 import { ParticipantEnrollModal } from '../components/ParticipantModals';
 import { notifyCourseScheduleChange } from '../api/courses';
 import { CourseChangeNotifyModal } from '../components/CourseChangeNotifyModal';
+import { ConflictModal } from '../components/ConflictModal';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
+
+// 배정 역할(enum) → 표시 라벨. 강사는 AM/PM 구분 없이 '강사'로 표기(충돌 표에는 세부 세션이 별도 노출).
+const STAFF_ROLE_LABELS: Record<StaffRoleValue, string> = {
+  LECTURER: '강사',
+  COUNSELOR: '상담사',
+  STAFF: '진행자',
+  PROJECT_MANAGER: 'PM',
+  PROJECT_LEADER: 'PL',
+  ADMIN_STAFF: '행정인력',
+};
 
 // 휴게시간 입력용 시간/분 드롭다운 옵션 (실제 저장/전송 값은 이 둘을 합산한 총 분(breakMinutes))
 const BREAK_HOUR_OPTIONS = ['0', '1', '2', '3', '4'];
@@ -268,6 +279,13 @@ export default function RoundDetailPage() {
   const [pendingPayload, setPendingPayload] = useState<CourseUpdateRequest | null>(null);
   const [notifySubmitting, setNotifySubmitting] = useState(false);
 
+  // 교육일 이동으로 배정 인력이 겹칠 때(409 ASSIGN_CONFLICT) 확인 모달 + 재전송 컨텍스트
+  const [dateConflicts, setDateConflicts] = useState<AssignConflict[] | null>(null);
+  const [conflictRetry, setConflictRetry] = useState<{
+    payload: CourseUpdateRequest;
+    onSuccess: () => Promise<void>;
+  } | null>(null);
+
   // 강좌 담당자 안내 문자(상태변경·일정변경) 발송 이력
   const [staffSmsHistory, setStaffSmsHistory] = useState<CourseStaffSmsHistoryItem[]>([]);
   const [isStaffSmsHistoryLoading, setIsStaffSmsHistoryLoading] = useState(false);
@@ -444,14 +462,45 @@ export default function RoundDetailPage() {
     setIsSubmitting(true);
     setErrorMessage('');
     try {
-      await updateCourse(course.courseId, payload);
-      setIsEditOpen(false);
-      await loadCourse();
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
+      await runUpdateCourse(payload, async () => {
+        setIsEditOpen(false);
+        await loadCourse();
+      });
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  // updateCourse 공통 실행: 저장 성공 시 onSuccess, 409 충돌 시 확인 모달로 재전송 컨텍스트 보관.
+  // 교육일 이동이 배정 인력의 타 회차/근무불가일과 겹치면 BE가 409(ASSIGN_CONFLICT)로 충돌 목록을 반환한다.
+  const runUpdateCourse = async (
+    payload: CourseUpdateRequest,
+    onSuccess: () => Promise<void>,
+  ) => {
+    if (!course) return;
+    try {
+      await updateCourse(course.courseId, payload);
+      await onSuccess();
+    } catch (error) {
+      if (isAxiosError(error) && error.response?.status === 409) {
+        const items = (error.response.data?.data as AssignConflict[]) ?? [];
+        if (items.length > 0) {
+          setConflictRetry({ payload, onSuccess });
+          setDateConflicts(items);
+          return;
+        }
+      }
+      setErrorMessage(getErrorMessage(error));
+    }
+  };
+
+  // "그래도 변경" — confirmConflicts=true 로 같은 payload 재전송(겹친 인력은 해당일 배정 제외).
+  const confirmDateChange = async () => {
+    if (!conflictRetry) return;
+    const { payload, onSuccess } = conflictRetry;
+    setDateConflicts(null);
+    setConflictRetry(null);
+    await runUpdateCourse({ ...payload, confirmConflicts: true }, onSuccess);
   };
 
   const closeNotifyModal = () => {
@@ -465,13 +514,12 @@ export default function RoundDetailPage() {
     setNotifySubmitting(true);
     setErrorMessage('');
     try {
-      await updateCourse(course.courseId, pendingPayload);
-      setIsNotifyModalOpen(false);
-      setPendingPayload(null);
-      setIsEditOpen(false);
-      await loadCourse();
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
+      await runUpdateCourse(pendingPayload, async () => {
+        setIsNotifyModalOpen(false);
+        setPendingPayload(null);
+        setIsEditOpen(false);
+        await loadCourse();
+      });
     } finally {
       setNotifySubmitting(false);
     }
@@ -482,24 +530,24 @@ export default function RoundDetailPage() {
     setNotifySubmitting(true);
     setErrorMessage('');
     try {
-      await updateCourse(course.courseId, pendingPayload);
-      if (userIds.length > 0) {
-        try {
-          await notifyCourseScheduleChange(course.courseId, { userIds });
-          await loadStaffSmsHistory();
-        } catch (notifyError) {
-          // 강좌 정보 저장은 이미 성공했으므로, 발송 실패는 별도 안내만 하고 흐름을 막지 않는다.
-          setErrorMessage(
-            `${getErrorMessage(notifyError)} (강좌 정보 저장은 완료되었습니다. 문자 발송만 실패했습니다.)`,
-          );
+      // 문자 발송은 저장 성공(onSuccess) 이후에만 수행 — 충돌로 저장이 안 되면 발송하지 않는다.
+      await runUpdateCourse(pendingPayload, async () => {
+        if (userIds.length > 0) {
+          try {
+            await notifyCourseScheduleChange(course.courseId, { userIds });
+            await loadStaffSmsHistory();
+          } catch (notifyError) {
+            // 강좌 정보 저장은 이미 성공했으므로, 발송 실패는 별도 안내만 하고 흐름을 막지 않는다.
+            setErrorMessage(
+              `${getErrorMessage(notifyError)} (강좌 정보 저장은 완료되었습니다. 문자 발송만 실패했습니다.)`,
+            );
+          }
         }
-      }
-      setIsNotifyModalOpen(false);
-      setPendingPayload(null);
-      setIsEditOpen(false);
-      await loadCourse();
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
+        setIsNotifyModalOpen(false);
+        setPendingPayload(null);
+        setIsEditOpen(false);
+        await loadCourse();
+      });
     } finally {
       setNotifySubmitting(false);
     }
@@ -1051,6 +1099,32 @@ export default function RoundDetailPage() {
         onSaveAndNotify={handleSaveAndNotify}
         submitting={notifySubmitting}
       />
+
+      {dateConflicts && (
+        <ConflictModal
+          title="교육일 변경 시 배정 충돌"
+          description="다음 인력은 새 교육일에 다른 일정과 겹쳐 이 회차 배정에서 제외됩니다. 그래도 교육일을 변경하시겠습니까?"
+          detailHeader="겹치는 일정(회차 · 역할)"
+          rows={dateConflicts.map((c) => ({
+            date: c.scheduleDate,
+            name: c.name,
+            // courseName 이 없으면 타 회차가 아니라 본인 근무 불가일과 겹친 경우다.
+            detail: c.courseName
+              ? `${c.courseName} · ${STAFF_ROLE_LABELS[c.staffRole] ?? c.staffRole}`
+              : '근무 불가일',
+          }))}
+          actions={[
+            {
+              label: '취소',
+              onClick: () => {
+                setDateConflicts(null);
+                setConflictRetry(null);
+              },
+            },
+            { label: '그래도 변경', primary: true, onClick: confirmDateChange },
+          ]}
+        />
+      )}
     </section>
   );
 }
