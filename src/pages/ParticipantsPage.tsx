@@ -488,12 +488,18 @@ export default function ParticipantsPage() {
               </tr>
             </thead>
             <tbody id="p-rows">
-              {filteredList.map((p) => {
+              {filteredList.map((p, i) => {
                 const e = p.latestEnrollment;
                 const att = attendancePercent(p);
-                const cpId = e?.courseParticipantId;
+                const cpId = p.courseParticipantId;
+                // 응답이 수강건 단위 행이라 동일 참여자가 여러 회차로 여러 행이 될 수 있다.
+                // 정렬/필터로 인접했을 때만 참여자 정보를 반복 노출하지 않고 시각적으로 약화한다.
+                const sameAsPrev = i > 0 && filteredList[i - 1].participantId === p.participantId;
                 return (
-                  <tr key={p.participantId} onClick={() => handleRowClick(p)}>
+                  <tr
+                    key={cpId != null ? `cp-${cpId}` : `p-${p.participantId}`}
+                    onClick={() => handleRowClick(p)}
+                  >
                     {canSelect && (
                       <td className="no-label" onClick={(ev) => ev.stopPropagation()}>
                         <input
@@ -506,8 +512,21 @@ export default function ParticipantsPage() {
                       </td>
                     )}
                     <td data-label="참여자">
-                      <div className="pname">{p.name}</div>
-                      <div className="cell-sub">{p.matchKey ?? p.phone}</div>
+                      {sameAsPrev ? (
+                        <>
+                          <div className="pname" style={{ opacity: 0.4 }}>
+                            〃
+                          </div>
+                          <div className="cell-sub" style={{ opacity: 0.4 }}>
+                            {p.matchKey ?? p.phone}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="pname">{p.name}</div>
+                          <div className="cell-sub">{p.matchKey ?? p.phone}</div>
+                        </>
+                      )}
                     </td>
                     <td data-label="지역 / 회차">{roundLabel(p)}</td>
                     <td data-label="진행상태">
