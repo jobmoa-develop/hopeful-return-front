@@ -17,10 +17,28 @@ import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
 import { CounselingSessionModal, SlotCounselorAssignModal } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 import { useTableSort } from '../hooks/useTableSort';
+import type { SortOrder } from '../hooks/useTableSort';
+import {
+  readListState,
+  useShouldRestoreListState,
+  usePersistListState,
+} from '../hooks/useListStatePersistence';
 import { SortableTh } from '../components/SortableTh';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
+const LIST_STATE_KEY = 'consulting';
+
+// 상세 진입 후 뒤로가기 시 복원할 목록 검색/필터/페이지 스냅샷
+type ConsultingListSnapshot = {
+  searchInput: string;
+  regionFilter: RegionFilterValue;
+  courseNumber: string;
+  status: string;
+  sortBy: string;
+  sortOrder: SortOrder;
+  page: number;
+};
 const SLOT_COLUMNS: { type: CounselingType; label: string }[] = [
   { type: 'PRE_SESSION', label: '사전상담' },
   { type: 'POST_SESSION_1', label: '사후 1차' },
@@ -34,10 +52,16 @@ export default function ConsultingPage() {
   const currentUserId = user?.userId;
   const isCounselorOnly = roleConfig.role === 'COUNSELOR';
 
+  // 상세 진입 후 뒤로가기일 때만 마지막 목록 상태를 1회 복원(메뉴 새 진입은 기본값).
+  const shouldRestore = useShouldRestoreListState();
+  const [restored] = useState<ConsultingListSnapshot | null>(() =>
+    shouldRestore ? readListState<ConsultingListSnapshot>(LIST_STATE_KEY) : null,
+  );
+
   const [items, setItems] = useState<CourseParticipantListItem[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(restored?.page ?? 0);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [sessionTarget, setSessionTarget] = useState<CourseParticipantListItem | null>(null);
@@ -45,12 +69,27 @@ export default function ConsultingPage() {
 
   // 검색 필터 (서버측)
   const [regions, setRegions] = useState<RegionSummary[]>([]);
-  const searchNameInput = useDebounceSearch('', SEARCH_DEBOUNCE_MS);
+  const searchNameInput = useDebounceSearch(restored?.searchInput ?? '', SEARCH_DEBOUNCE_MS);
   const searchName = searchNameInput.debouncedValue.trim();
-  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
-  const [courseNumber, setCourseNumber] = useState('');
-  const [status, setStatus] = useState('');
-  const sort = useTableSort();
+  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>(restored?.regionFilter ?? {});
+  const [courseNumber, setCourseNumber] = useState(restored?.courseNumber ?? '');
+  const [status, setStatus] = useState(restored?.status ?? '');
+  const sort = useTableSort(restored?.sortBy ?? '', restored?.sortOrder ?? 'asc');
+
+  // 현재 검색/필터/페이지를 스냅샷으로 저장 → 상세 왕복 시 뒤로가기로 복원된다.
+  const listSnapshot = useMemo<ConsultingListSnapshot>(
+    () => ({
+      searchInput: searchNameInput.inputValue,
+      regionFilter,
+      courseNumber,
+      status,
+      sortBy: sort.sortBy,
+      sortOrder: sort.sortOrder,
+      page,
+    }),
+    [searchNameInput.inputValue, regionFilter, courseNumber, status, sort.sortBy, sort.sortOrder, page],
+  );
+  usePersistListState(LIST_STATE_KEY, listSnapshot);
 
   const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   const canConsult = roleConfig.can.consult === 1;
@@ -224,7 +263,11 @@ export default function ConsultingPage() {
                 return (
                   <tr
                     key={p.courseParticipantId}
-                    onClick={() => navigate(`/participants/${p.courseParticipantId}`)}
+                    onClick={() =>
+                      navigate(`/participants/${p.courseParticipantId}`, {
+                        state: { from: '/consulting' },
+                      })
+                    }
                   >
                     <td data-label="참여자">
                       <div className="pname">{p.participantName}</div>

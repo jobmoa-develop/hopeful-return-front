@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useLocation } from 'react-router';
 import { isAxiosError } from 'axios';
 import {
   deleteCourse,
@@ -254,6 +254,12 @@ export default function RoundDetailPage() {
   const { courseId: courseIdParam, no } = useParams<{ courseId?: string; no?: string }>();
   const courseId = Number(courseIdParam ?? no);
   const navigate = useNavigate();
+  const location = useLocation();
+  // 진입한 원래 목록(state.from)으로 복귀하며, restoreList 신호로 검색/필터 복원을 요청한다.
+  const backToList = () => {
+    const from = (location.state as { from?: string } | null)?.from ?? '/rounds';
+    navigate(from, { state: { restoreList: true } });
+  };
   const { roleConfig } = useRole();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [dailyStaff, setDailyStaff] = useState<CourseDailyStaffItem[]>([]);
@@ -588,7 +594,7 @@ export default function RoundDetailPage() {
   if (!Number.isFinite(courseId)) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
-        <button className="back" onClick={() => navigate('/rounds')}>
+        <button className="back" onClick={backToList}>
           ← 회차 목록
         </button>
         <h2>올바르지 않은 강좌 ID입니다.</h2>
@@ -599,7 +605,7 @@ export default function RoundDetailPage() {
   if (isLoading && !course) {
     return (
       <section className="view active" id="view-round-detail">
-        <button className="back" onClick={() => navigate('/rounds')}>
+        <button className="back" onClick={backToList}>
           ← 회차 목록
         </button>
         <div className="card ph">강좌 정보를 불러오는 중입니다.</div>
@@ -610,7 +616,7 @@ export default function RoundDetailPage() {
   if (!course) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
-        <button className="back" onClick={() => navigate('/rounds')}>
+        <button className="back" onClick={backToList}>
           ← 회차 목록
         </button>
         <h2>강좌 정보를 찾을 수 없습니다.</h2>
@@ -637,7 +643,7 @@ export default function RoundDetailPage() {
 
   return (
     <section className="view active" id="view-round-detail">
-      <button className="back" onClick={() => navigate('/rounds')}>
+      <button className="back" onClick={backToList}>
         ← 회차 목록
       </button>
 
