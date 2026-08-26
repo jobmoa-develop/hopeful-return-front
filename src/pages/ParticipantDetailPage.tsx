@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router';
+import { useParams, useNavigate, useLocation } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -64,6 +64,12 @@ export default function ParticipantDetailPage() {
   const { courseParticipantId } = useParams<{ courseParticipantId: string }>();
   const cpId = Number(courseParticipantId);
   const navigate = useNavigate();
+  const location = useLocation();
+  // 진입한 원래 목록(state.from)으로 복귀하며, restoreList 신호로 검색/필터 복원을 요청한다.
+  const backToList = () => {
+    const from = (location.state as { from?: string } | null)?.from ?? '/participants';
+    navigate(from, { state: { restoreList: true } });
+  };
   const { roleConfig } = useRole();
   const { user } = useAuth();
   const currentUserId = user?.userId;
@@ -178,7 +184,7 @@ export default function ParticipantDetailPage() {
     try {
       await deleteParticipant(detail.participantId);
       alert('참여자를 삭제했습니다.');
-      navigate('/participants');
+      backToList();
     } catch (err) {
       alert(apiErrorMessage(err, '참여자 삭제에 실패했습니다.'));
     }
@@ -192,7 +198,7 @@ export default function ParticipantDetailPage() {
   if (error) {
     return (
       <div style={{ textAlign: 'center', padding: '40px' }}>
-        <button className="back" onClick={() => navigate('/participants')}>
+        <button className="back" onClick={backToList}>
           ← 참여자 목록
         </button>
         <h2>{error}</h2>
@@ -234,7 +240,7 @@ export default function ParticipantDetailPage() {
 
   return (
     <section className="view active" id="view-participant-detail">
-      <button className="back" onClick={() => navigate('/participants')}>
+      <button className="back" onClick={backToList}>
         ← 참여자 목록
       </button>
 
@@ -276,7 +282,11 @@ export default function ParticipantDetailPage() {
             </button>
           )}
           {roleConfig.can.consult === 1 && (
-            <button className="btn" id="btn-consult" onClick={() => navigate('/consulting')}>
+            <button
+              className="btn"
+              id="btn-consult"
+              onClick={() => navigate('/consulting', { state: { restoreList: true } })}
+            >
               상담 관리
             </button>
           )}

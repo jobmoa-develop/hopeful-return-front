@@ -10,8 +10,24 @@ import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import QrModal from '../components/QrModal';
+import {
+  readListState,
+  useShouldRestoreListState,
+  usePersistListState,
+} from '../hooks/useListStatePersistence';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
+
+const LIST_STATE_KEY = 'rounds';
+
+// 상세 진입 후 뒤로가기 시 복원할 목록 검색/필터/페이지 스냅샷
+type RoundsListSnapshot = {
+  searchInput: string;
+  filterParentRegionId: string;
+  regionId: string;
+  status: string;
+  page: number;
+};
 
 // 이 역할들은 본인이 담당자로 배정된 회차만 목록에 노출
 const RESTRICTED_ROLES = ['LECTURER', 'STAFF', 'OPERATOR', 'PROJECT_LEADER', 'COUNSELOR'];
@@ -108,13 +124,22 @@ export default function RoundsPage() {
   const navigate = useNavigate();
   const { roleConfig } = useRole();
   const { user } = useAuth();
+
+  // 상세 진입 후 뒤로가기일 때만 마지막 목록 상태를 1회 복원(메뉴 새 진입은 기본값).
+  const shouldRestore = useShouldRestoreListState();
+  const [restored] = useState<RoundsListSnapshot | null>(() =>
+    shouldRestore ? readListState<RoundsListSnapshot>(LIST_STATE_KEY) : null,
+  );
+
   const [courses, setCourses] = useState<CourseSummary[]>([]);
-  const [regionId, setRegionId] = useState('');
-  const [filterParentRegionId, setFilterParentRegionId] = useState('');
-  const [status, setStatus] = useState('');
-  const keywordInput = useDebounceSearch('', 300);
+  const [regionId, setRegionId] = useState(restored?.regionId ?? '');
+  const [filterParentRegionId, setFilterParentRegionId] = useState(
+    restored?.filterParentRegionId ?? '',
+  );
+  const [status, setStatus] = useState(restored?.status ?? '');
+  const keywordInput = useDebounceSearch(restored?.searchInput ?? '', 300);
   const keyword = keywordInput.debouncedValue.trim();
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(restored?.page ?? 0);
   const [size] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
@@ -127,6 +152,19 @@ export default function RoundsPage() {
   const [regionsLoading, setRegionsLoading] = useState(false);
   const [expandedParentId, setExpandedParentId] = useState<number | null>(null);
   const [qrCourse, setQrCourse] = useState<CourseSummary | null>(null);
+
+  // 현재 검색/필터/페이지를 스냅샷으로 저장 → 상세 왕복 시 뒤로가기로 복원된다.
+  const listSnapshot = useMemo<RoundsListSnapshot>(
+    () => ({
+      searchInput: keywordInput.inputValue,
+      filterParentRegionId,
+      regionId,
+      status,
+      page,
+    }),
+    [keywordInput.inputValue, filterParentRegionId, regionId, status, page],
+  );
+  usePersistListState(LIST_STATE_KEY, listSnapshot);
 
   // 대표 역할(roleConfig.role) 1개만 보면 다중 역할 계정(예: ADMIN+COUNSELOR)에서
   // 대표 역할이 우연히 COUNSELOR로 뽑힐 경우 ADMIN 권한이 무시된다 → 전체 역할 배열로 판단
@@ -653,7 +691,8 @@ export default function RoundsPage() {
                 <tr
                   key={course.courseId ?? index}
                   onClick={() => {
-                    if (course.courseId) navigate(`/rounds/${course.courseId}`);
+                    if (course.courseId)
+                      navigate(`/rounds/${course.courseId}`, { state: { from: '/rounds' } });
                   }}
                 >
                   <td className="pname" data-label="강좌명">{course.courseName ?? `강좌 #${course.courseId}`}</td>

@@ -27,11 +27,32 @@ import {
 } from '../components/ParticipantModals';
 import { apiErrorMessage } from '../api/apiError';
 import { useTableSort } from '../hooks/useTableSort';
+import type { SortOrder } from '../hooks/useTableSort';
+import {
+  readListState,
+  useShouldRestoreListState,
+  usePersistListState,
+} from '../hooks/useListStatePersistence';
 import { SortableTh } from '../components/SortableTh';
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 const COUNSELING_TYPES: CounselingType[] = ['PRE_SESSION', 'POST_SESSION_1', 'POST_SESSION_2'];
+const LIST_STATE_KEY = 'participants';
+
+// 상세 진입 후 뒤로가기 시 복원할 목록 검색/필터/페이지 스냅샷
+type ParticipantsListSnapshot = {
+  searchInput: string;
+  regionFilter: RegionFilterValue;
+  courseNumberQuery: string;
+  courseNumber: number | '';
+  selectedStatus: string;
+  registerDateFrom: string;
+  registerDateTo: string;
+  sortBy: string;
+  sortOrder: SortOrder;
+  page: number;
+};
 
 function statusLabel(status: string | null | undefined): string {
   if (!status) return '—';
@@ -63,25 +84,31 @@ export default function ParticipantsPage() {
   const { user } = useAuth();
   const canSendSms = user?.canSendSms ?? false;
 
+  // 상세 진입 후 뒤로가기일 때만 마지막 목록 상태를 1회 복원(메뉴 새 진입은 기본값).
+  const shouldRestore = useShouldRestoreListState();
+  const [restored] = useState<ParticipantsListSnapshot | null>(() =>
+    shouldRestore ? readListState<ParticipantsListSnapshot>(LIST_STATE_KEY) : null,
+  );
+
   const [items, setItems] = useState<ParticipantListItem[]>([]);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(restored?.page ?? 0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const searchNameInput = useDebounceSearch('', SEARCH_DEBOUNCE_MS);
+  const searchNameInput = useDebounceSearch(restored?.searchInput ?? '', SEARCH_DEBOUNCE_MS);
   const searchName = searchNameInput.debouncedValue.trim();
   const [regions, setRegions] = useState<RegionSummary[]>([]);
   const regionGroups = useMemo(() => groupRegionsByParent(regions), [regions]);
   // 지역 필터 — 상위(서울)=parentRegionId, 하위(양천)=regionId, 전체={}.
-  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>({});
-  const [courseNumberQuery, setCourseNumberQuery] = useState('');
-  const [courseNumber, setCourseNumber] = useState<number | ''>('');
-  const [selectedStatus, setSelectedStatus] = useState('전체');
+  const [regionFilter, setRegionFilter] = useState<RegionFilterValue>(restored?.regionFilter ?? {});
+  const [courseNumberQuery, setCourseNumberQuery] = useState(restored?.courseNumberQuery ?? '');
+  const [courseNumber, setCourseNumber] = useState<number | ''>(restored?.courseNumber ?? '');
+  const [selectedStatus, setSelectedStatus] = useState(restored?.selectedStatus ?? '전체');
   // 전산 등록일 필터(최신 수강건 created_at 기준). 빈 값이면 미적용.
-  const [registerDateFrom, setRegisterDateFrom] = useState('');
-  const [registerDateTo, setRegisterDateTo] = useState('');
+  const [registerDateFrom, setRegisterDateFrom] = useState(restored?.registerDateFrom ?? '');
+  const [registerDateTo, setRegisterDateTo] = useState(restored?.registerDateTo ?? '');
 
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
@@ -103,7 +130,36 @@ export default function ParticipantsPage() {
   // 체크박스 선택 UI는 일괄 처리·문자 발송 권한 중 하나라도 있으면 노출
   const canSelect = canBulkComplete || canBulkAssignCounselor || canSendSms;
 
-  const sort = useTableSort();
+  const sort = useTableSort(restored?.sortBy ?? '', restored?.sortOrder ?? 'asc');
+
+  // 현재 검색/필터/페이지를 스냅샷으로 저장 → 상세 왕복 시 뒤로가기로 복원된다.
+  const snapshot = useMemo<ParticipantsListSnapshot>(
+    () => ({
+      searchInput: searchNameInput.inputValue,
+      regionFilter,
+      courseNumberQuery,
+      courseNumber,
+      selectedStatus,
+      registerDateFrom,
+      registerDateTo,
+      sortBy: sort.sortBy,
+      sortOrder: sort.sortOrder,
+      page,
+    }),
+    [
+      searchNameInput.inputValue,
+      regionFilter,
+      courseNumberQuery,
+      courseNumber,
+      selectedStatus,
+      registerDateFrom,
+      registerDateTo,
+      sort.sortBy,
+      sort.sortOrder,
+      page,
+    ],
+  );
+  usePersistListState(LIST_STATE_KEY, snapshot);
 
   const fetchList = useCallback(() => {
     setLoading(true);
@@ -208,7 +264,9 @@ export default function ParticipantsPage() {
       alert('수강 이력이 없는 참여자입니다. 지역·회차 등록 후 상세를 확인할 수 있습니다.');
       return;
     }
-    navigate(`/participants/${p.latestEnrollment.courseParticipantId}`);
+    navigate(`/participants/${p.latestEnrollment.courseParticipantId}`, {
+      state: { from: '/participants' },
+    });
   };
 
   const handleCounselorEdit = (e: React.MouseEvent, p: ParticipantListItem) => {
