@@ -267,9 +267,12 @@ export default function CourseCalendarPage() {
             const sessionMap = new Map<string, SessionTypeValue>();
             const assignedDates = new Map<number, Set<string>>();
             results.forEach(({ courseId, assignments }) => {
-                const myRole = myStaffRoleByCourse.get(courseId);
+                // 배정 매칭은 userId 기준으로만 한다(역할 equality 미사용). getCourseDailyStaff 는 이 회차의
+                // 실제 배정만 반환하므로 내 배정 행은 모두 유효하다. 같은 회차에 내 course_staff 로스터가
+                // 여러 개(예: 역할 변경으로 남은 옛 role 행)여도 getCourseStaffs.find 가 고른 단일 myRole 과
+                // 어긋나 배정이 통째로 사라지던 문제를 방지한다.
                 assignments.forEach((a) => {
-                    if (Number(a.userId) === Number(user.userId) && a.staffRole === myRole) {
+                    if (Number(a.userId) === Number(user.userId)) {
                         sessionMap.set(`${courseId}_${a.scheduleDate}`, a.sessionType);
                         const set = assignedDates.get(courseId) ?? new Set<string>();
                         set.add(a.scheduleDate);
