@@ -131,7 +131,7 @@ function statusLabel(status?: string) {
     COMPLETED: '완료',
     CANCELED: '폐강',
   };
-  return status ? labels[status] ?? status : '-';
+  return status ? (labels[status] ?? status) : '-';
 }
 
 function getErrorMessage(error: unknown) {
@@ -148,7 +148,7 @@ function staffSmsNotifyTypeLabel(notifyType?: string) {
     STATUS_CHANGE: '상태 변경',
     SCHEDULE_CHANGE: '일정/장소 변경',
   };
-  return notifyType ? labels[notifyType] ?? notifyType : '-';
+  return notifyType ? (labels[notifyType] ?? notifyType) : '-';
 }
 
 // 담당자 안내 문자 발송 상태(SUCCESS/FAIL) 한글 라벨 + chip 클래스
@@ -157,7 +157,7 @@ function staffSmsStatusLabel(sendStatus?: string) {
     SUCCESS: '발송 성공',
     FAIL: '발송 실패',
   };
-  return sendStatus ? labels[sendStatus] ?? sendStatus : '-';
+  return sendStatus ? (labels[sendStatus] ?? sendStatus) : '-';
 }
 
 function staffSmsStatusClass(sendStatus?: string) {
@@ -291,7 +291,9 @@ export default function RoundDetailPage() {
 
   // 대표 역할(roleConfig.role) 1개만 보면 다중 역할 계정(예: ADMIN+COUNSELOR)에서
   // 대표 역할이 우연히 COUNSELOR로 뽑힐 경우 ADMIN 권한이 무시된다 → 전체 역할 배열로 판단
-  const canEdit = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(r));
+  const canEdit = roleConfig.roles.some((r) =>
+    ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER'].includes(r),
+  );
   const canDelete = roleConfig.roles.includes('ADMIN');
   const canChangeStatus = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE'].includes(r));
 
@@ -411,7 +413,7 @@ export default function RoundDetailPage() {
   const childrenOf = (parentId: number) => regions.filter((r) => r.parentRegionId === parentId);
   const selectedRegion = regions.find((r) => String(r.regionId) === editForm.regionId);
   const selectedRegionParentName = selectedRegion?.parentRegionId
-    ? regions.find((r) => r.regionId === selectedRegion.parentRegionId)?.regionName ?? null
+    ? (regions.find((r) => r.regionId === selectedRegion.parentRegionId)?.regionName ?? null)
     : null;
 
   const updateEditForm = (key: keyof EditFormState, value: string) => {
@@ -423,7 +425,9 @@ export default function RoundDetailPage() {
   };
 
   // 휴게시간 시/분 각각 변경 시, 나머지 값은 유지한 채 총 분(breakMinutes)으로 재계산해 저장
-  const { hour: editBreakHour, minute: editBreakMinute } = minutesToParts(Number(editForm.breakMinutes) || 0);
+  const { hour: editBreakHour, minute: editBreakMinute } = minutesToParts(
+    Number(editForm.breakMinutes) || 0,
+  );
   const handleEditBreakHourChange = (hour: string) => {
     updateEditForm('breakMinutes', String(partsToMinutes(hour, editBreakMinute)));
   };
@@ -472,10 +476,7 @@ export default function RoundDetailPage() {
 
   // updateCourse 공통 실행: 저장 성공 시 onSuccess, 409 충돌 시 확인 모달로 재전송 컨텍스트 보관.
   // 교육일 이동이 배정 인력의 타 회차/근무불가일과 겹치면 BE가 409(ASSIGN_CONFLICT)로 충돌 목록을 반환한다.
-  const runUpdateCourse = async (
-    payload: CourseUpdateRequest,
-    onSuccess: () => Promise<void>,
-  ) => {
+  const runUpdateCourse = async (payload: CourseUpdateRequest, onSuccess: () => Promise<void>) => {
     if (!course) return;
     try {
       await updateCourse(course.courseId, payload);
@@ -618,14 +619,12 @@ export default function RoundDetailPage() {
     );
   }
 
-  const capacityPercent =
-    course.capacity
-      ? Math.min(
-        100,
-        Math.round((course.currentParticipants / course.capacity) * 100)
-      )
-      : 0;
-  const minPercent = course.capacity ? Math.min(100, Math.round((course.minimumCapacity / course.capacity) * 100)) : 0;
+  const capacityPercent = course.capacity
+    ? Math.min(100, Math.round((course.currentParticipants / course.capacity) * 100))
+    : 0;
+  const minPercent = course.capacity
+    ? Math.min(100, Math.round((course.minimumCapacity / course.capacity) * 100))
+    : 0;
 
   // 강좌 담당자 표: 교육일(일차) 컬럼 × 역할 행. 배정이 하나라도 있는 역할만 표시.
   const eduDates = courseEducationDates(course);
@@ -659,7 +658,10 @@ export default function RoundDetailPage() {
             <span>
               교육장 <b>{course.location}</b>
             </span>
-            <span className={`chip ${statusChipClass(course.status)}`} style={{ marginTop: '-2px' }}>
+            <span
+              className={`chip ${statusChipClass(course.status)}`}
+              style={{ marginTop: '-2px' }}
+            >
               {statusLabel(course.status)}
             </span>
           </div>
@@ -667,20 +669,34 @@ export default function RoundDetailPage() {
         <div className="actions">
           {canChangeStatus && (
             <>
-              <select className="select" value={statusForm} onChange={(event) => setStatusForm(event.target.value)}>
+              <select
+                className="select"
+                value={statusForm}
+                onChange={(event) => setStatusForm(event.target.value)}
+              >
                 {STATUS_OPTIONS.map((item) => (
                   <option key={item} value={item}>
                     {statusLabel(item)}
                   </option>
                 ))}
               </select>
-              <button className="btn" type="button" onClick={handleStatusChange} disabled={isSubmitting}>
+              <button
+                className="btn"
+                type="button"
+                onClick={handleStatusChange}
+                disabled={isSubmitting}
+              >
                 상태 변경
               </button>
             </>
           )}
           {canEdit && (
-            <button className="btn primary" id="btn-edit-round" type="button" onClick={() => setIsEditOpen((prev) => !prev)}>
+            <button
+              className="btn primary"
+              id="btn-edit-round"
+              type="button"
+              onClick={() => setIsEditOpen((prev) => !prev)}
+            >
               강좌 수정
             </button>
           )}
@@ -701,10 +717,14 @@ export default function RoundDetailPage() {
             <div className="field full">
               <label>지역</label>
               {regionsLoading ? (
-                <span className="muted" style={{ fontSize: '12.5px' }}>지역 목록 불러오는 중...</span>
+                <span className="muted" style={{ fontSize: '12.5px' }}>
+                  지역 목록 불러오는 중...
+                </span>
               ) : (
                 <>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                  <div
+                    style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}
+                  >
                     {level1Regions.map((region) => (
                       <button
                         key={region.regionId}
@@ -743,40 +763,63 @@ export default function RoundDetailPage() {
 
             <div className="field">
               <label>전체회차 번호</label>
-              <input type="number" value={editForm.courseNumber} onChange={(event) => updateEditForm('courseNumber', event.target.value)} />
+              <input
+                type="number"
+                value={editForm.courseNumber}
+                onChange={(event) => updateEditForm('courseNumber', event.target.value)}
+              />
             </div>
             <div className="field">
               <label>지역회차 번호</label>
-              <input type="number" value={editForm.localCourseNumber} onChange={(event) => updateEditForm('localCourseNumber', event.target.value)} />
+              <input
+                type="number"
+                value={editForm.localCourseNumber}
+                onChange={(event) => updateEditForm('localCourseNumber', event.target.value)}
+              />
             </div>
 
             <div className="field full">
               <label>강좌명</label>
-              <input value={editForm.courseName} onChange={(event) => updateEditForm('courseName', event.target.value)} />
+              <input
+                value={editForm.courseName}
+                onChange={(event) => updateEditForm('courseName', event.target.value)}
+              />
             </div>
 
             <div className="field">
               <label>모집 시작일</label>
-              <input type="date" value={editForm.recruitStart} onChange={(event) => updateEditForm('recruitStart', event.target.value)} />
+              <input
+                type="date"
+                value={editForm.recruitStart}
+                onChange={(event) => updateEditForm('recruitStart', event.target.value)}
+              />
             </div>
             <div className="field">
               <label>모집 종료일</label>
-              <input type="date" value={editForm.recruitEnd} onChange={(event) => updateEditForm('recruitEnd', event.target.value)} />
+              <input
+                type="date"
+                value={editForm.recruitEnd}
+                onChange={(event) => updateEditForm('recruitEnd', event.target.value)}
+              />
             </div>
 
             {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
             <div className="field full">
               <label>교육 일정 (1~5일차)</label>
               <div className="rd-day-grid">
-                {([
-                  ['day1Date', '1일차'],
-                  ['day2Date', '2일차'],
-                  ['day3Date', '3일차'],
-                  ['day4Date', '4일차'],
-                  ['day5Date', '5일차'],
-                ] as const).map(([key, label]) => (
+                {(
+                  [
+                    ['day1Date', '1일차'],
+                    ['day2Date', '2일차'],
+                    ['day3Date', '3일차'],
+                    ['day4Date', '4일차'],
+                    ['day5Date', '5일차'],
+                  ] as const
+                ).map(([key, label]) => (
                   <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>{label}</label>
+                    <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
+                      {label}
+                    </label>
                     <input
                       type="date"
                       value={editForm[key]}
@@ -790,23 +833,37 @@ export default function RoundDetailPage() {
 
             <div className="field">
               <label>교육 시작시간</label>
-              <input type="time" value={editForm.educationStartTime} onChange={(event) => updateEditForm('educationStartTime', event.target.value)} />
+              <input
+                type="time"
+                value={editForm.educationStartTime}
+                onChange={(event) => updateEditForm('educationStartTime', event.target.value)}
+              />
             </div>
             <div className="field">
               <label>교육 종료시간</label>
-              <input type="time" value={editForm.educationEndTime} onChange={(event) => updateEditForm('educationEndTime', event.target.value)} />
+              <input
+                type="time"
+                value={editForm.educationEndTime}
+                onChange={(event) => updateEditForm('educationEndTime', event.target.value)}
+              />
             </div>
             <div className="field">
               <label>휴게시간</label>
               <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <select value={editBreakHour} onChange={(event) => handleEditBreakHourChange(event.target.value)}>
+                <select
+                  value={editBreakHour}
+                  onChange={(event) => handleEditBreakHourChange(event.target.value)}
+                >
                   {BREAK_HOUR_OPTIONS.map((h) => (
                     <option key={h} value={h}>
                       {h}시간
                     </option>
                   ))}
                 </select>
-                <select value={editBreakMinute} onChange={(event) => handleEditBreakMinuteChange(event.target.value)}>
+                <select
+                  value={editBreakMinute}
+                  onChange={(event) => handleEditBreakMinuteChange(event.target.value)}
+                >
                   {BREAK_MINUTE_OPTIONS.map((m) => (
                     <option key={m} value={m}>
                       {m}분
@@ -818,22 +875,39 @@ export default function RoundDetailPage() {
 
             <div className="field">
               <label>정원</label>
-              <input type="number" value={editForm.capacity} onChange={(event) => updateEditForm('capacity', event.target.value)} />
+              <input
+                type="number"
+                value={editForm.capacity}
+                onChange={(event) => updateEditForm('capacity', event.target.value)}
+              />
             </div>
             <div className="field">
               <label>최소 정원</label>
-              <input type="number" value={editForm.minimumCapacity} onChange={(event) => updateEditForm('minimumCapacity', event.target.value)} />
+              <input
+                type="number"
+                value={editForm.minimumCapacity}
+                onChange={(event) => updateEditForm('minimumCapacity', event.target.value)}
+              />
             </div>
             <div className="field">
               <label>수행계획서 제출일</label>
-              <input type="date" value={editForm.planSubmitDate} onChange={(event) => updateEditForm('planSubmitDate', event.target.value)} />
+              <input
+                type="date"
+                value={editForm.planSubmitDate}
+                onChange={(event) => updateEditForm('planSubmitDate', event.target.value)}
+              />
             </div>
             <div className="field full">
               <label>교육장</label>
-              <input value={editForm.location} onChange={(event) => updateEditForm('location', event.target.value)} />
+              <input
+                value={editForm.location}
+                onChange={(event) => updateEditForm('location', event.target.value)}
+              />
             </div>
 
-            <p className="note" style={{ margin: '4px 0 0' }}>※ 값을 비워두면 해당 항목은 수정되지 않고 기존 값이 유지됩니다.</p>
+            <p className="note" style={{ margin: '4px 0 0' }}>
+              ※ 값을 비워두면 해당 항목은 수정되지 않고 기존 값이 유지됩니다.
+            </p>
 
             <div className="field full" style={{ alignItems: 'flex-end' }}>
               <button className="btn primary" type="submit" disabled={isSubmitting}>
@@ -856,20 +930,32 @@ export default function RoundDetailPage() {
             </div>
             <div className="kv">
               <span className="k">지역</span>
-              <span className="v tnum">{course.regionName} ({course.regionId})</span>
+              <span className="v tnum">
+                {course.regionName} ({course.regionId})
+              </span>
             </div>
             <div className="kv">
               <span className="k">전체회차 / 지역회차</span>
-              <span className="v tnum">{course.courseNumber}기 / {course.localCourseNumber}회차</span>
+              <span className="v tnum">
+                {course.courseNumber}기 / {course.localCourseNumber}회차
+              </span>
             </div>
             <div className="kv">
               <span className="k">모집 기간</span>
-              <span className="v tnum">{course.recruitStart ?? '-'} ~ {course.recruitEnd ?? '-'}</span>
+              <span className="v tnum">
+                {course.recruitStart ?? '-'} ~ {course.recruitEnd ?? '-'}
+              </span>
             </div>
             <div className="kv">
               <span className="k">교육 일정</span>
               <span className="v tnum">
-                {[course.day1Date, course.day2Date, course.day3Date, course.day4Date, course.day5Date]
+                {[
+                  course.day1Date,
+                  course.day2Date,
+                  course.day3Date,
+                  course.day4Date,
+                  course.day5Date,
+                ]
                   .filter(Boolean)
                   .join(', ') || '-'}
               </span>
@@ -894,8 +980,12 @@ export default function RoundDetailPage() {
         <div className="card">
           <div className="card-h">
             <span className="section-title">모집 인원</span>
-            <span className={`chip ${course.currentParticipants >= course.minimumCapacity ? 'ok' : 'warn'}`}>
-              {course.currentParticipants >= course.minimumCapacity ? '최소 정원 충족' : '모집 보강 필요'}
+            <span
+              className={`chip ${course.currentParticipants >= course.minimumCapacity ? 'ok' : 'warn'}`}
+            >
+              {course.currentParticipants >= course.minimumCapacity
+                ? '최소 정원 충족'
+                : '모집 보강 필요'}
             </span>
           </div>
           <div className="card-b">
@@ -909,9 +999,19 @@ export default function RoundDetailPage() {
                   <span style={{ width: `${capacityPercent}%` }}></span>
                   <div className="thr" style={{ left: `${minPercent}%` }}></div>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    fontSize: '11px',
+                    color: 'var(--muted)',
+                    fontWeight: 600,
+                  }}
+                >
                   <span>현재 참여자 {course.currentParticipants}명</span>
-                  <span style={{ color: 'var(--danger)' }}>최소 정원 {course.minimumCapacity}명</span>
+                  <span style={{ color: 'var(--danger)' }}>
+                    최소 정원 {course.minimumCapacity}명
+                  </span>
                 </div>
               </div>
             </div>
@@ -933,7 +1033,13 @@ export default function RoundDetailPage() {
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="card-h">
           <span className="section-title">강좌 담당자</span>
-          <button className="btn" type="button" onClick={loadStaffs} disabled={isStaffsLoading} style={{ marginLeft: 'auto' }}>
+          <button
+            className="btn"
+            type="button"
+            onClick={loadStaffs}
+            disabled={isStaffsLoading}
+            style={{ marginLeft: 'auto' }}
+          >
             {isStaffsLoading ? '조회 중...' : '담당자 조회'}
           </button>
         </div>
@@ -1004,7 +1110,9 @@ export default function RoundDetailPage() {
                 <tr key={row.courseStaffSmsId}>
                   <td className="pname">{row.userName ?? `담당자 #${row.userId}`}</td>
                   <td>{staffSmsNotifyTypeLabel(row.notifyType)}</td>
-                  <td style={{ whiteSpace: 'pre-line', maxWidth: '320px' }}>{row.content ?? '-'}</td>
+                  <td style={{ whiteSpace: 'pre-line', maxWidth: '320px' }}>
+                    {row.content ?? '-'}
+                  </td>
                   <td>{row.sentByName ?? (row.sentBy ? `#${row.sentBy}` : '시스템')}</td>
                   <td className="tnum">{row.sentAt ?? '-'}</td>
                   <td>
@@ -1016,7 +1124,10 @@ export default function RoundDetailPage() {
               ))}
               {staffSmsHistory.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}>
+                  <td
+                    colSpan={6}
+                    style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}
+                  >
                     발송 이력이 없습니다.
                   </td>
                 </tr>
@@ -1043,9 +1154,19 @@ export default function RoundDetailPage() {
               value={participantStatus}
               onChange={(event) => setParticipantStatus(event.target.value)}
               placeholder="상태"
-              style={{ padding: '7px 10px', border: '1px solid var(--line)', borderRadius: '8px', width: '96px' }}
+              style={{
+                padding: '7px 10px',
+                border: '1px solid var(--line)',
+                borderRadius: '8px',
+                width: '96px',
+              }}
             />
-            <button className="btn" type="button" onClick={loadParticipants} disabled={isParticipantsLoading}>
+            <button
+              className="btn"
+              type="button"
+              onClick={loadParticipants}
+              disabled={isParticipantsLoading}
+            >
               {isParticipantsLoading ? '조회 중...' : '조회'}
             </button>
           </div>
@@ -1064,7 +1185,9 @@ export default function RoundDetailPage() {
             <tbody>
               {participants.map((participant, index) => (
                 <tr key={participant.courseParticipantId ?? index}>
-                  <td className="pname">{participant.participantName ?? participant.name ?? '-'}</td>
+                  <td className="pname">
+                    {participant.participantName ?? participant.name ?? '-'}
+                  </td>
                   <td className="tnum">{participant.courseParticipantId}</td>
                   <td className="tnum">{participant.checkInTime ?? '-'}</td>
                   <td className="tnum">{participant.checkOutTime ?? '-'}</td>
@@ -1075,7 +1198,10 @@ export default function RoundDetailPage() {
               ))}
               {participants.length === 0 && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}>
+                  <td
+                    colSpan={5}
+                    style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}
+                  >
                     조회된 참여자가 없습니다.
                   </td>
                 </tr>

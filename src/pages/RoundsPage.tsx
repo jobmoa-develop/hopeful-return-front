@@ -178,10 +178,10 @@ export default function RoundsPage() {
       list.map((c) =>
         c.courseId
           ? getCourseStaffs(c.courseId)
-            .then(({ data: res }) =>
-              (res.data.staffs ?? []).some((s) => Number(s.userId) === Number(user.userId)),
-            )
-            .catch(() => false)
+              .then(({ data: res }) =>
+                (res.data.staffs ?? []).some((s) => Number(s.userId) === Number(user.userId)),
+              )
+              .catch(() => false)
           : Promise.resolve(false),
       ),
     );
@@ -553,19 +553,29 @@ export default function RoundsPage() {
             {/* 1~5일차 교육일을 한 행에 나란히 배치 */}
             <div className="field full">
               <label>교육 일정 (1~5일차)</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: '8px' }}>
-                {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map((key, index) => (
-                  <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>{index + 1}일차</label>
-                    <input
-                      type="date"
-                      value={form[key]}
-                      onChange={(event) => updateForm(key, event.target.value)}
-                      required
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                ))}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+                  gap: '8px',
+                }}
+              >
+                {(['day1Date', 'day2Date', 'day3Date', 'day4Date', 'day5Date'] as const).map(
+                  (key, index) => (
+                    <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
+                        {index + 1}일차
+                      </label>
+                      <input
+                        type="date"
+                        value={form[key]}
+                        onChange={(event) => updateForm(key, event.target.value)}
+                        required
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  ),
+                )}
               </div>
             </div>
 
@@ -688,9 +698,13 @@ export default function RoundsPage() {
                       navigate(`/rounds/${course.courseId}`, { state: { from: '/rounds' } });
                   }}
                 >
-                  <td className="pname" data-label="강좌명">{course.courseName ?? `강좌 #${course.courseId}`}</td>
+                  <td className="pname" data-label="강좌명">
+                    {course.courseName ?? `강좌 #${course.courseId}`}
+                  </td>
                   <td data-label="지역">{course.regionName ?? course.regionId ?? '-'}</td>
-                  <td className="tnum" data-label="전체회차">{course.courseNumber ? `${course.courseNumber}기` : '-'}</td>
+                  <td className="tnum" data-label="전체회차">
+                    {course.courseNumber ? `${course.courseNumber}기` : '-'}
+                  </td>
                   <td className="tnum" data-label="지역회차">
                     {course.localCourseNumber ? `${course.localCourseNumber}회차` : '-'}
                   </td>
@@ -704,8 +718,12 @@ export default function RoundsPage() {
                       {statusLabel(course.status)}
                     </span>
                   </td>
-                  <td className="tnum" data-label="개강일정">{formatCourseSchedule(course)}</td>
-                  <td className="tnum" data-label="계획서 제출일">{course.planSubmitDate ?? '-'}</td>
+                  <td className="tnum" data-label="개강일정">
+                    {formatCourseSchedule(course)}
+                  </td>
+                  <td className="tnum" data-label="계획서 제출일">
+                    {course.planSubmitDate ?? '-'}
+                  </td>
                   <td className="cell-actions" data-label="QR">
                     <button
                       className="btn"
