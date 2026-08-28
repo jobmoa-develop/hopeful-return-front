@@ -647,9 +647,9 @@ export default function CourseCalendarPage() {
                 <span
                   className="chip"
                   style={{ fontSize: 11 }}
-                  title="이 날짜에 인력으로 배정되어 있습니다"
+                  title="이 날짜에 인력으로 배정된 회차입니다"
                 >
-                  배정됨
+                  📌 {s.courseName ?? '회차 배정'}
                 </span>
               )}
               {s.courseStaffId != null && s.courseStatus && (
