@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
 import { isAxiosError } from 'axios';
+import { statusChipClass } from '../utils/courseStatus';
 import {
   deleteCourse,
   getCourse,
@@ -131,14 +132,6 @@ function statusLabel(status?: string) {
     CANCELED: '폐강',
   };
   return status ? labels[status] ?? status : '-';
-}
-
-function statusClass(status?: string) {
-  if (status === 'OPEN' || status === 'IN_PROGRESS') return 'info';
-  if (status === 'COMPLETED') return 'ok';
-  if (status === 'CANCELED') return 'danger';
-  if (status === 'CLOSED') return 'warn';
-  return 'neutral';
 }
 
 function getErrorMessage(error: unknown) {
@@ -666,7 +659,7 @@ export default function RoundDetailPage() {
             <span>
               교육장 <b>{course.location}</b>
             </span>
-            <span className={`chip ${statusClass(course.status)}`} style={{ marginTop: '-2px' }}>
+            <span className={`chip ${statusChipClass(course.status)}`} style={{ marginTop: '-2px' }}>
               {statusLabel(course.status)}
             </span>
           </div>

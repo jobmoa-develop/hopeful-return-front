@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { ApiResponse, PageData } from './courses';
+import type { ApiResponse, CourseStatus, PageData } from './courses';
 
 export type SessionType = 'AM' | 'PM' | 'FULL';
 
@@ -18,6 +18,8 @@ export type StaffScheduleItem = {
   courseStaffId?: number | null;
   // 배정된 회차명(지역+회차, 예: "서울 3회차"). 미배정이면 null.
   courseName?: string | null;
+  // 배정된 회차 상태(CANCELED/OPEN/IN_PROGRESS 등). 미배정이면 null. 상세 뷰 상태 배지에 사용.
+  courseStatus?: CourseStatus | null;
   // 단건 조회/등록/수정(StaffScheduleResponse)에만 존재
   createdAt?: string;
   updatedAt?: string;
@@ -34,7 +36,9 @@ export type StaffScheduleListParams = {
 
 // 권한: ADMIN, OPERATOR, HEAD_OFFICE, REGIONAL_MANAGER (타인 포함 목록/범위 조회)
 export function getStaffSchedules(params: StaffScheduleListParams) {
-  return apiClient.get<ApiResponse<PageData<StaffScheduleItem>>>('/api/staff-schedules', { params });
+  return apiClient.get<ApiResponse<PageData<StaffScheduleItem>>>('/api/staff-schedules', {
+    params,
+  });
 }
 
 // 인증 사용자 본인 일정만 반환.
@@ -71,14 +75,20 @@ export type UpdateStaffScheduleRequest = {
 };
 
 export function updateStaffSchedule(staffScheduleId: number, payload: UpdateStaffScheduleRequest) {
-  return apiClient.put<ApiResponse<StaffScheduleItem>>(`/api/staff-schedules/${staffScheduleId}`, payload);
+  return apiClient.put<ApiResponse<StaffScheduleItem>>(
+    `/api/staff-schedules/${staffScheduleId}`,
+    payload,
+  );
 }
 
 // reason: 배정된 날짜(course_staff) 삭제 시 관리자 알림 메일 본문에 포함될 사유. 미배정 삭제는 생략.
 export function deleteStaffSchedule(staffScheduleId: number, reason?: string) {
-  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(`/api/staff-schedules/${staffScheduleId}`, {
-    params: reason ? { reason } : undefined,
-  });
+  return apiClient.delete<ApiResponse<{ deleted: boolean }>>(
+    `/api/staff-schedules/${staffScheduleId}`,
+    {
+      params: reason ? { reason } : undefined,
+    },
+  );
 }
 
 // BulkStaffScheduleRequest 와 1:1 매칭
@@ -103,7 +113,10 @@ export type BulkCreateStaffScheduleResult = {
 };
 
 export function createStaffSchedulesBulk(payload: BulkCreateStaffScheduleRequest) {
-  return apiClient.post<ApiResponse<BulkCreateStaffScheduleResult>>('/api/staff-schedules/bulk', payload);
+  return apiClient.post<ApiResponse<BulkCreateStaffScheduleResult>>(
+    '/api/staff-schedules/bulk',
+    payload,
+  );
 }
 
 export const SESSION_TYPE_LABELS: Record<SessionType, string> = {

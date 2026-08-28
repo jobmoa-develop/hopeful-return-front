@@ -7,6 +7,7 @@ import { createCourse, getCourses, getCourseStaffs } from '../api/courses';
 import type { CourseCreateRequest, CourseStatus, CourseSummary } from '../api/courses';
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
+import { statusChipClass } from '../utils/courseStatus';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import QrModal from '../components/QrModal';
@@ -71,14 +72,6 @@ function statusLabel(status?: CourseStatus) {
     CANCELED: '폐강',
   };
   return status ? (labels[status] ?? status) : '-';
-}
-
-function statusClass(status?: CourseStatus) {
-  if (status === 'OPEN' || status === 'IN_PROGRESS') return 'info';
-  if (status === 'COMPLETED') return 'ok';
-  if (status === 'CANCELED') return 'danger';
-  if (status === 'CLOSED') return 'warn';
-  return 'neutral';
 }
 
 // day1~day5 중 실제 값이 있는 날짜로 개강일정(시작~종료) 문자열 생성
@@ -707,7 +700,7 @@ export default function RoundsPage() {
                   </td>
                   <td data-label="교육장">{course.location ?? '-'}</td>
                   <td data-label="상태">
-                    <span className={`chip ${statusClass(course.status)}`}>
+                    <span className={`chip ${statusChipClass(course.status)}`}>
                       {statusLabel(course.status)}
                     </span>
                   </td>

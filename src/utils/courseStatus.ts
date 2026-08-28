@@ -25,6 +25,16 @@ export function statusLabel(status?: CourseStatus): string {
   return status ? (STATUS_LABELS[status] ?? status) : '-';
 }
 
+// 회차 상태 → chip 색상 클래스. RoundsPage/RoundDetailPage 의 중복 로직을 공용화.
+// OPEN·IN_PROGRESS=진행(info), COMPLETED=완료(ok), CANCELED=취소(danger), CLOSED=마감(warn), 그 외 neutral.
+export function statusChipClass(status?: CourseStatus): string {
+  if (status === 'OPEN' || status === 'IN_PROGRESS') return 'info';
+  if (status === 'COMPLETED') return 'ok';
+  if (status === 'CANCELED') return 'danger';
+  if (status === 'CLOSED') return 'warn';
+  return 'neutral';
+}
+
 export function statusOrder(status?: CourseStatus): number {
   return status ? (STATUS_ORDER[status] ?? UNKNOWN_ORDER) : UNKNOWN_ORDER;
 }
