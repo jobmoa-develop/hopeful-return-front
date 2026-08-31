@@ -4,6 +4,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { getCourses, getCourseStaffs } from '../api/courses';
 import type { CourseSummary } from '../api/courses';
 import { statusLabel, statusChipClass } from '../utils/courseStatus';
+import { STAFF_ROLE_LABELS } from '../utils/staffRole';
 import { getCourseDailyStaff } from '../api/courseDailyStaff';
 import type { CourseDailyStaffItem, SessionTypeValue } from '../api/courseDailyStaff';
 import { useAuth } from '../context/AuthContext';
@@ -34,22 +35,14 @@ const SCHEDULE_MANAGE_ROLES = ['ADMIN', 'OPERATOR'];
 // (요청 4번: 진행자·행정인력·PL·강사. 상담사(COUNSELOR)는 기존처럼 회차 전체 기간을 유지한다.)
 const DAY_FILTER_STAFF_ROLES = new Set(['LECTURER', 'STAFF', 'ADMIN_STAFF', 'PROJECT_LEADER']);
 
-// course_staff.staffRole → 화면 표시용 라벨
-const STAFF_ROLE_LABELS: Record<string, string> = {
-  LECTURER: '강사',
-  COUNSELOR: '상담사',
-  STAFF: '진행요원',
-  PROJECT_MANAGER: 'PM',
-  PROJECT_LEADER: 'PL',
-  ADMIN_STAFF: '행정',
-};
-
 // AM/PM/FULL 배지 색상
 // 세션 배지 색상은 api/staffSchedules 의 공용 SESSION_BADGE_COLORS 를 재사용한다(색상 통일·DRY).
 
+// 배정 역할 라벨은 공용 STAFF_ROLE_LABELS(utils/staffRole) 사용. 여기선 미배정 시 null 을 반환해
+// 호출부의 `roleLabel && (...)` 조건부 렌더를 유지한다(공용 staffRoleLabel 은 '-' 반환이라 미사용).
 function staffRoleLabel(role?: string | null) {
   if (!role) return null;
-  return STAFF_ROLE_LABELS[role] ?? role;
+  return STAFF_ROLE_LABELS[role as keyof typeof STAFF_ROLE_LABELS] ?? role;
 }
 
 // 지역명 -> 고유 색상은 컴포넌트 내 regionColorMap(HSL 균등 분배)에서 계산한다(겹침 방지).
