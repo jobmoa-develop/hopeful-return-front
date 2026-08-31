@@ -20,6 +20,9 @@ export type StaffScheduleItem = {
   courseName?: string | null;
   // 배정된 회차 상태(CANCELED/OPEN/IN_PROGRESS 등). 미배정이면 null. 상세 뷰 상태 배지에 사용.
   courseStatus?: CourseStatus | null;
+  // 배정 역할(course_staff.staff_role enum명: LECTURER/COUNSELOR/STAFF/PROJECT_MANAGER/
+  // PROJECT_LEADER/ADMIN_STAFF). 미배정이면 null. staffRoleLabel 로 한글 라벨 변환해 표시.
+  courseStaffRole?: string | null;
   // 단건 조회/등록/수정(StaffScheduleResponse)에만 존재
   createdAt?: string;
   updatedAt?: string;

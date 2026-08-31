@@ -21,24 +21,15 @@ import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
 import { getCourseDailyStaff } from '../api/courseDailyStaff';
-import type { AssignConflict, CourseDailyStaffItem, StaffRoleValue } from '../api/courseDailyStaff';
+import type { AssignConflict, CourseDailyStaffItem } from '../api/courseDailyStaff';
 import { ASSIGN_ROLES, formatDateCol } from './assign/roles';
 import { ParticipantEnrollModal } from '../components/ParticipantModals';
 import { notifyCourseScheduleChange } from '../api/courses';
 import { CourseChangeNotifyModal } from '../components/CourseChangeNotifyModal';
 import { ConflictModal } from '../components/ConflictModal';
+import { STAFF_ROLE_LABELS } from '../utils/staffRole';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
-
-// 배정 역할(enum) → 표시 라벨. 강사는 AM/PM 구분 없이 '강사'로 표기(충돌 표에는 세부 세션이 별도 노출).
-const STAFF_ROLE_LABELS: Record<StaffRoleValue, string> = {
-  LECTURER: '강사',
-  COUNSELOR: '상담사',
-  STAFF: '진행자',
-  PROJECT_MANAGER: 'PM',
-  PROJECT_LEADER: 'PL',
-  ADMIN_STAFF: '행정인력',
-};
 
 // 휴게시간 입력용 시간/분 드롭다운 옵션 (실제 저장/전송 값은 이 둘을 합산한 총 분(breakMinutes))
 const BREAK_HOUR_OPTIONS = ['0', '1', '2', '3', '4'];

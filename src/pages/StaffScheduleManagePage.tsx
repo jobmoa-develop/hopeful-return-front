@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { getCourses } from '../api/courses';
 import type { CourseSummary, CourseStatus } from '../api/courses';
 import { statusLabel, statusChipClass } from '../utils/courseStatus';
+import { staffRoleLabel } from '../utils/staffRole';
 import { getUserRoles, buildUserRoleMap } from '../api/userRoles';
 import type { UserRoleItem } from '../api/userRoles';
 import {
@@ -65,6 +66,7 @@ type DayStaffSummary = {
   assigned: boolean; // 이 날 회차에 배정됨(course_staff_id 有)
   courseName: string | null; // 배정된 회차명(지역+회차)
   courseStatus: CourseStatus | null; // 배정된 회차 상태(상세 뷰 배지)
+  courseStaffRole: string | null; // 배정 역할(enum명, 상세 뷰 역할 배지)
   entries: StaffScheduleItem[];
 };
 
@@ -133,6 +135,12 @@ export default function StaffScheduleManagePage() {
   const [isAvailable, setIsAvailable] = useState(true);
   const [memo, setMemo] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // 가능→불가 전환 확인 모달 대상(null이면 닫힘) + 사유 + 처리 중 플래그.
+  // 불가→가능은 확인 없이 즉시 처리하고, 가능→불가일 때만 이 모달을 띄운다.
+  const [unavailableTarget, setUnavailableTarget] = useState<StaffScheduleItem | null>(null);
+  const [unavailableReason, setUnavailableReason] = useState('');
+  const [isUpdatingUnavail, setIsUpdatingUnavail] = useState(false);
 
   // 일괄 등록 패널
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -258,6 +266,7 @@ export default function StaffScheduleManagePage() {
           existing.assigned = true;
           existing.courseName = existing.courseName ?? s.courseName ?? null;
           existing.courseStatus = existing.courseStatus ?? s.courseStatus ?? null;
+          existing.courseStaffRole = existing.courseStaffRole ?? s.courseStaffRole ?? null;
         }
       } else {
         dayMap.set(s.userId, {
@@ -267,6 +276,7 @@ export default function StaffScheduleManagePage() {
           assigned: isAssigned,
           courseName: isAssigned ? (s.courseName ?? null) : null,
           courseStatus: isAssigned ? (s.courseStatus ?? null) : null,
+          courseStaffRole: isAssigned ? (s.courseStaffRole ?? null) : null,
           entries: [s],
         });
       }
@@ -362,13 +372,50 @@ export default function StaffScheduleManagePage() {
 
   const handleToggleAvailable = async (s: StaffScheduleItem) => {
     if (s.staffScheduleId == null) return;
+    // 가능→불가: 실수 방지 + (배정행이면) 빈 사유 알림 방지를 위해 확인 모달을 띄운다.
+    if (s.isAvailable) {
+      setUnavailableTarget(s);
+      setUnavailableReason(s.memo ?? '');
+      return;
+    }
+    // 불가→가능: 종전대로 즉시 전환.
     const staffScheduleId = s.staffScheduleId;
     try {
-      await updateStaffSchedule(staffScheduleId, { isAvailable: !s.isAvailable });
+      await updateStaffSchedule(staffScheduleId, { isAvailable: true });
       loadMySchedules();
       loadAllSchedules();
     } catch {
       alert('수정에 실패했습니다.');
+    }
+  };
+
+  const closeUnavailableModal = () => {
+    setUnavailableTarget(null);
+    setUnavailableReason('');
+  };
+
+  const confirmSetUnavailable = async () => {
+    if (!unavailableTarget || unavailableTarget.staffScheduleId == null) return;
+    const staffScheduleId = unavailableTarget.staffScheduleId;
+    const reason = unavailableReason.trim();
+    // 배정된 날짜를 불가로 바꾸면 관리자에게 사유 포함 알림이 발송되므로 사유를 필수로 받는다.
+    if (unavailableTarget.courseStaffId != null && !reason) {
+      alert('배정된 회차입니다. 불가 사유를 입력해주세요.');
+      return;
+    }
+    setIsUpdatingUnavail(true);
+    try {
+      await updateStaffSchedule(staffScheduleId, {
+        isAvailable: false,
+        memo: reason || undefined,
+      });
+      closeUnavailableModal();
+      loadMySchedules();
+      loadAllSchedules();
+    } catch {
+      alert('변경에 실패했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsUpdatingUnavail(false);
     }
   };
 
@@ -783,7 +830,9 @@ export default function StaffScheduleManagePage() {
                             : {}),
                         }}
                         title={
-                          s.assigned ? `${s.userName} · ${s.courseName ?? '배정'} 배정` : s.userName
+                          s.assigned
+                            ? `${s.userName}${s.courseStaffRole ? ` · ${staffRoleLabel(s.courseStaffRole)}` : ''} · ${s.courseName ?? '배정'} 배정`
+                            : s.userName
                         }
                       >
                         {s.assigned ? `📌${s.userName}` : s.userName}
@@ -904,6 +953,11 @@ export default function StaffScheduleManagePage() {
                         📌 {s.courseName ?? '회차 배정'}
                       </span>
                     )}
+                    {s.assigned && s.courseStaffRole && (
+                      <span className="chip neutral" style={{ fontSize: 11 }}>
+                        {staffRoleLabel(s.courseStaffRole)}
+                      </span>
+                    )}
                     {s.assigned && s.courseStatus && (
                       <span
                         className={`chip ${statusChipClass(s.courseStatus)}`}
@@ -982,6 +1036,11 @@ export default function StaffScheduleManagePage() {
                               }}
                             >
                               📌 {s.courseName ?? '회차 배정'}
+                            </span>
+                          )}
+                          {s.courseStaffId != null && s.courseStaffRole && (
+                            <span className="chip neutral" style={{ fontSize: 11 }}>
+                              {staffRoleLabel(s.courseStaffRole)}
                             </span>
                           )}
                           {s.courseStaffId != null && s.courseStatus && (
@@ -1064,6 +1123,92 @@ export default function StaffScheduleManagePage() {
                   등록/수정할 수 있습니다.
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* '가능' → '불가' 변경 확인 모달 (경고·사유 입력 포함) */}
+      {unavailableTarget && (
+        <div
+          className="modal-overlay open"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isUpdatingUnavail) closeUnavailableModal();
+          }}
+        >
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-h">
+              <h3>⚠ 근무 불가로 변경</h3>
+              <button
+                className="x"
+                type="button"
+                onClick={closeUnavailableModal}
+                disabled={isUpdatingUnavail}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-b">
+              <p style={{ margin: '0 0 12px' }}>
+                <strong>{unavailableTarget.userName}</strong> · {unavailableTarget.scheduleDate} (
+                {SESSION_TYPE_LABELS[unavailableTarget.sessionType]})을 <strong>'불가'</strong>로
+                변경합니다.
+              </p>
+              {unavailableTarget.courseStaffId != null ? (
+                <p
+                  className="chip danger"
+                  style={{
+                    display: 'block',
+                    whiteSpace: 'normal',
+                    lineHeight: 1.5,
+                    padding: '10px 12px',
+                    borderRadius: 8,
+                  }}
+                >
+                  ❗ 이 날짜는 배정된 회차입니다. 변경 시 배정 관리자에게 알림(사유 포함)이
+                  발송됩니다.
+                </p>
+              ) : (
+                <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+                  · 미배정 일정이라 별도 알림은 발송되지 않습니다.
+                </p>
+              )}
+              <div className="field full" style={{ marginTop: 14 }}>
+                <label>
+                  불가 사유
+                  {unavailableTarget.courseStaffId != null && <span className="req"> *</span>}
+                </label>
+                <textarea
+                  value={unavailableReason}
+                  onChange={(e) => setUnavailableReason(e.target.value)}
+                  placeholder="예: 개인 사정, 병원 예약 등"
+                  maxLength={255}
+                  rows={3}
+                  disabled={isUpdatingUnavail}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-f">
+              <button
+                className="btn"
+                type="button"
+                onClick={closeUnavailableModal}
+                disabled={isUpdatingUnavail}
+              >
+                취소
+              </button>
+              <button
+                className="btn primary"
+                type="button"
+                onClick={confirmSetUnavailable}
+                disabled={
+                  isUpdatingUnavail ||
+                  (unavailableTarget.courseStaffId != null && !unavailableReason.trim())
+                }
+              >
+                {isUpdatingUnavail ? '변경 중...' : '불가로 변경'}
+              </button>
             </div>
           </div>
         </div>
