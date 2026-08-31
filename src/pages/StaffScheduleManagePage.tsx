@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { DateInput } from '../components/DateInput';
 import { useNavigate } from 'react-router';
 import { getCourses } from '../api/courses';
 import type { CourseSummary, CourseStatus } from '../api/courses';
@@ -513,11 +514,11 @@ export default function StaffScheduleManagePage() {
           >
             <div className="field">
               <label>시작일</label>
-              <input type="date" value={bulkFrom} onChange={(e) => setBulkFrom(e.target.value)} />
+              <DateInput value={bulkFrom} onChange={(e) => setBulkFrom(e.target.value)} />
             </div>
             <div className="field">
               <label>종료일</label>
-              <input type="date" value={bulkTo} onChange={(e) => setBulkTo(e.target.value)} />
+              <DateInput value={bulkTo} onChange={(e) => setBulkTo(e.target.value)} />
             </div>
             <div className="field">
               <label>시간대</label>

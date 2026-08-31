@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DateInput } from './DateInput';
 import { useRole } from '../context/RoleContext';
 import { createFollowUp, updateFollowUp, NATIONAL_PROGRAM_BRANCHES } from '../api/followUps';
 import type { FollowUpListItem } from '../api/followUps';
@@ -207,8 +208,7 @@ export function FollowUpDetailModal({ item, canEdit, onClose, onSaved }: FollowU
             <div className="form-section">사후관리 정보</div>
             <div className="field">
               <label>취업일</label>
-              <input
-                type="date"
+              <DateInput
                 value={employmentDate}
                 disabled={!canEdit}
                 onChange={(e) => setEmploymentDate(e.target.value)}
@@ -216,8 +216,7 @@ export function FollowUpDetailModal({ item, canEdit, onClose, onSaved }: FollowU
             </div>
             <div className="field">
               <label>숲체험 방문(예정)일</label>
-              <input
-                type="date"
+              <DateInput
                 value={forestProgramDate}
                 disabled={!canEdit}
                 onChange={(e) => setForestProgramDate(e.target.value)}
@@ -225,8 +224,7 @@ export function FollowUpDetailModal({ item, canEdit, onClose, onSaved }: FollowU
             </div>
             <div className="field">
               <label>국취 연계일</label>
-              <input
-                type="date"
+              <DateInput
                 value={nationalProgramDate}
                 disabled={!canEdit}
                 onChange={(e) => setNationalProgramDate(e.target.value)}
@@ -283,8 +281,7 @@ export function FollowUpDetailModal({ item, canEdit, onClose, onSaved }: FollowU
                     <tr key={c.followUpCounselId}>
                       <td>{c.counselNumber ?? '—'}</td>
                       <td>
-                        <input
-                          type="date"
+                        <DateInput
                           value={editDate}
                           onChange={(e) => setEditDate(e.target.value)}
                           style={{ fontSize: '12px' }}
@@ -376,8 +373,7 @@ export function FollowUpDetailModal({ item, canEdit, onClose, onSaved }: FollowU
                 새 상담 등록 (회차 {nextCounselNumber})
               </div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                <input
-                  type="date"
+                <DateInput
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
                   style={{ fontSize: '12px' }}

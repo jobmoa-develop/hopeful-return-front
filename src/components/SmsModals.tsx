@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DateInput } from './DateInput';
 import type { ChangeEvent } from 'react';
 import type { ParticipantListItem } from '../api/participants';
 import { apiErrorMessage } from '../api/apiError';
@@ -438,8 +439,7 @@ export function SmsSendModal({ isOpen, onClose, recipients, currentUserId, onSen
                 </label>
                 {reserveEnabled && (
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
-                      type="date"
+                    <DateInput
                       value={reserveDate}
                       onChange={(e) => setReserveDate(e.target.value)}
                     />

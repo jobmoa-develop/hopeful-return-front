@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DateInput } from '../components/DateInput';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
@@ -421,8 +422,7 @@ export default function ParticipantsPage() {
           </div>
           <div className="select" title="전산 등록일 기준">
             <span className="ico">등록일</span>
-            <input
-              type="date"
+            <DateInput
               value={registerDateFrom}
               onChange={(e) => {
                 setRegisterDateFrom(e.target.value);
@@ -432,8 +432,7 @@ export default function ParticipantsPage() {
             <span className="muted" style={{ fontSize: '12px' }}>
               ~
             </span>
-            <input
-              type="date"
+            <DateInput
               value={registerDateTo}
               onChange={(e) => {
                 setRegisterDateTo(e.target.value);
