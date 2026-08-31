@@ -29,6 +29,7 @@ import { notifyCourseScheduleChange } from '../api/courses';
 import { CourseChangeNotifyModal } from '../components/CourseChangeNotifyModal';
 import { ConflictModal } from '../components/ConflictModal';
 import { STAFF_ROLE_LABELS } from '../utils/staffRole';
+import { WorkRecordPrint } from '../components/WorkRecordPrint';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
 
@@ -248,6 +249,8 @@ export default function RoundDetailPage() {
   const { roleConfig } = useRole();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [dailyStaff, setDailyStaff] = useState<CourseDailyStaffItem[]>([]);
+  // 근무기록표 인쇄 대상. null=닫힘, {}=전체 교육일, { iso }=특정 교육일 1장
+  const [printTarget, setPrintTarget] = useState<{ iso?: string } | null>(null);
 
   const [participants, setParticipants] = useState<CourseParticipant[]>([]);
   const [participantKeyword, setParticipantKeyword] = useState('');
@@ -1021,15 +1024,21 @@ export default function RoundDetailPage() {
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="card-h">
           <span className="section-title">강좌 담당자</span>
-          <button
-            className="btn"
-            type="button"
-            onClick={loadStaffs}
-            disabled={isStaffsLoading}
-            style={{ marginLeft: 'auto' }}
-          >
-            {isStaffsLoading ? '조회 중...' : '담당자 조회'}
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+            {eduDates.length > 0 && (
+              <button
+                className="btn"
+                type="button"
+                onClick={() => setPrintTarget({})}
+                title="교육일자별 근무기록표를 인쇄합니다(배정 인력이 없으면 빈 양식으로 출력)"
+              >
+                근무기록표 인쇄
+              </button>
+            )}
+            <button className="btn" type="button" onClick={loadStaffs} disabled={isStaffsLoading}>
+              {isStaffsLoading ? '조회 중...' : '담당자 조회'}
+            </button>
+          </div>
         </div>
         <div className="card-b">
           {eduDates.length === 0 || staffRows.length === 0 ? (
@@ -1046,6 +1055,20 @@ export default function RoundDetailPage() {
                         <div className="muted" style={{ fontWeight: 400 }}>
                           {formatDateCol(d.iso)}
                         </div>
+                        <button
+                          className="btn"
+                          type="button"
+                          onClick={() => setPrintTarget({ iso: d.iso })}
+                          style={{
+                            marginTop: '4px',
+                            fontWeight: 400,
+                            padding: '2px 8px',
+                            fontSize: '12px',
+                          }}
+                          title="이 교육일의 근무기록표만 인쇄합니다"
+                        >
+                          인쇄
+                        </button>
                       </th>
                     ))}
                   </tr>
@@ -1236,6 +1259,15 @@ export default function RoundDetailPage() {
             },
             { label: '그래도 변경', primary: true, onClick: confirmDateChange },
           ]}
+        />
+      )}
+
+      {printTarget && course && (
+        <WorkRecordPrint
+          course={course}
+          dailyStaff={dailyStaff}
+          targetIso={printTarget.iso}
+          onClose={() => setPrintTarget(null)}
         />
       )}
     </section>
