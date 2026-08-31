@@ -16,6 +16,7 @@ export type CourseDailyStaffItem = {
   userId: number;
   name?: string;
   phone?: string; // 배정 변경 안내 문자용
+  position?: string; // 직책(근무기록표 인쇄용)
 };
 
 export type CourseDailyStaffList = {
