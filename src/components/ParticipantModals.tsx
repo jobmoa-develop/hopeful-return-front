@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { DateInput } from './DateInput';
 import type { ReactNode } from 'react';
 import { useRole } from '../context/RoleContext';
 import { getRegions, groupRegionsByParent } from '../api/regions';
@@ -436,15 +437,14 @@ export function ParticipantRegisterModal({
             </div>
             <div className="field">
               <label>접수일</label>
-              <input
-                type="date"
+              <DateInput
                 value={receptionDate}
                 onChange={(e) => setReceptionDate(e.target.value)}
               />
             </div>
             <div className="field">
               <label>신청일</label>
-              <input type="date" value={applyDate} onChange={(e) => setApplyDate(e.target.value)} />
+              <DateInput value={applyDate} onChange={(e) => setApplyDate(e.target.value)} />
             </div>
 
             <div className="form-section">상담사 배정 (슬롯당 1명)</div>
@@ -715,8 +715,7 @@ export function CounselingSessionModal({
         </div>
         <div className="field">
           <label>상담 시작 일시</label>
-          <input
-            type="datetime-local"
+          <DateInput type="datetime-local"
             value={startedAt}
             onChange={(e) => setStartedAt(e.target.value)}
             disabled={!canEditCurrent}
@@ -724,8 +723,7 @@ export function CounselingSessionModal({
         </div>
         <div className="field">
           <label>상담 종료 일시</label>
-          <input
-            type="datetime-local"
+          <DateInput type="datetime-local"
             value={endedAt}
             onChange={(e) => setEndedAt(e.target.value)}
             disabled={!canEditCurrent}
@@ -1025,8 +1023,7 @@ export function BulkCompletionModal({
             <label>
               수료일<span className="req">*</span>
             </label>
-            <input
-              type="date"
+            <DateInput
               value={completionDate}
               onChange={(e) => setCompletionDate(e.target.value)}
             />
@@ -1275,8 +1272,7 @@ export function StatusChangeModal({
               <label>
                 수료일<span className="req">*</span>
               </label>
-              <input
-                type="date"
+              <DateInput
                 value={completionDate}
                 onChange={(e) => setCompletionDate(e.target.value)}
               />
@@ -2074,12 +2070,11 @@ export function ParticipantEditModal({
         </div>
         <div className="field">
           <label>신청일</label>
-          <input type="date" value={applyDate} onChange={(e) => setApplyDate(e.target.value)} />
+          <DateInput value={applyDate} onChange={(e) => setApplyDate(e.target.value)} />
         </div>
         <div className="field">
           <label>접수일</label>
-          <input
-            type="date"
+          <DateInput
             value={receptionDate}
             onChange={(e) => setReceptionDate(e.target.value)}
           />
@@ -2522,8 +2517,7 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
                                             />
                                           </td>
                                           <td>
-                                            <input
-                                              type="date"
+                                            <DateInput
                                               value={r.applyDate ?? ''}
                                               onChange={(e) =>
                                                 updateRow(
@@ -2537,8 +2531,7 @@ export function BulkImportModal({ isOpen, onClose, onSaved }: BulkImportModalPro
                                             />
                                           </td>
                                           <td>
-                                            <input
-                                              type="date"
+                                            <DateInput
                                               value={r.receptionDate ?? ''}
                                               onChange={(e) =>
                                                 updateRow(

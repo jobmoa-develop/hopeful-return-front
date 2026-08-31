@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { DateInput } from '../components/DateInput';
 import type { FormEvent } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
 import { isAxiosError } from 'axios';
@@ -779,16 +780,14 @@ export default function RoundDetailPage() {
 
             <div className="field">
               <label>모집 시작일</label>
-              <input
-                type="date"
+              <DateInput
                 value={editForm.recruitStart}
                 onChange={(event) => updateEditForm('recruitStart', event.target.value)}
               />
             </div>
             <div className="field">
               <label>모집 종료일</label>
-              <input
-                type="date"
+              <DateInput
                 value={editForm.recruitEnd}
                 onChange={(event) => updateEditForm('recruitEnd', event.target.value)}
               />
@@ -811,8 +810,7 @@ export default function RoundDetailPage() {
                     <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
                       {label}
                     </label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={editForm[key]}
                       onChange={(event) => updateEditForm(key, event.target.value)}
                       style={{ width: '100%' }}
@@ -882,8 +880,7 @@ export default function RoundDetailPage() {
             </div>
             <div className="field">
               <label>수행계획서 제출일</label>
-              <input
-                type="date"
+              <DateInput
                 value={editForm.planSubmitDate}
                 onChange={(event) => updateEditForm('planSubmitDate', event.target.value)}
               />

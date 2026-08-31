@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { DateInput } from '../components/DateInput';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
@@ -533,8 +534,7 @@ export default function RoundsPage() {
             </div>
             <div className="field">
               <label>모집 시작일</label>
-              <input
-                type="date"
+              <DateInput
                 value={form.recruitStart}
                 onChange={(event) => updateForm('recruitStart', event.target.value)}
                 required
@@ -542,8 +542,7 @@ export default function RoundsPage() {
             </div>
             <div className="field">
               <label>모집 종료일</label>
-              <input
-                type="date"
+              <DateInput
                 value={form.recruitEnd}
                 onChange={(event) => updateForm('recruitEnd', event.target.value)}
                 required
@@ -566,8 +565,7 @@ export default function RoundsPage() {
                       <label style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>
                         {index + 1}일차
                       </label>
-                      <input
-                        type="date"
+                      <DateInput
                         value={form[key]}
                         onChange={(event) => updateForm(key, event.target.value)}
                         required
@@ -642,8 +640,7 @@ export default function RoundsPage() {
             </div>
             <div className="field">
               <label>수행계획서 제출일</label>
-              <input
-                type="date"
+              <DateInput
                 value={form.planSubmitDate}
                 onChange={(event) => updateForm('planSubmitDate', event.target.value)}
                 required

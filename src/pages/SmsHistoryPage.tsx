@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DateInput } from '../components/DateInput';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useRole } from '../context/RoleContext';
 import { getRegions, groupRegionsByParent } from '../api/regions';
@@ -418,8 +419,7 @@ function ParticipantSmsHistorySection() {
           </div>
           <div className="select" title="발송일 기준">
             <span className="ico">발송일</span>
-            <input
-              type="date"
+            <DateInput
               value={dateFrom}
               onChange={(e) => {
                 setDateFrom(e.target.value);
@@ -429,8 +429,7 @@ function ParticipantSmsHistorySection() {
             <span className="muted" style={{ fontSize: '12px' }}>
               ~
             </span>
-            <input
-              type="date"
+            <DateInput
               value={dateTo}
               onChange={(e) => {
                 setDateTo(e.target.value);
@@ -896,8 +895,7 @@ function StaffSmsHistorySection() {
           </div>
           <div className="select" title="발송일 기준">
             <span className="ico">발송일</span>
-            <input
-              type="date"
+            <DateInput
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
@@ -905,8 +903,7 @@ function StaffSmsHistorySection() {
             <span className="muted" style={{ fontSize: '12px' }}>
               ~
             </span>
-            <input
-              type="date"
+            <DateInput
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '12px' }}
