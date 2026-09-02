@@ -13,6 +13,12 @@ import { statusChipClass } from '../utils/courseStatus';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import QrModal from '../components/QrModal';
+import { useTableSort } from '../hooks/useTableSort';
+import type { SortOrder } from '../hooks/useTableSort';
+import { SortableTh } from '../components/SortableTh';
+import { useLatestRequest } from '../hooks/useLatestRequest';
+import { buildRoundParams, roundInputPlaceholder } from '../utils/roundFilter';
+import type { RegionFilterValue } from '../components/RegionSelect';
 import {
   readListState,
   useShouldRestoreListState,
@@ -29,6 +35,9 @@ type RoundsListSnapshot = {
   filterParentRegionId: string;
   regionId: string;
   status: string;
+  courseNumberInput: string;
+  sortBy: string;
+  sortOrder: SortOrder;
   page: number;
 };
 
@@ -134,6 +143,11 @@ export default function RoundsPage() {
   const [status, setStatus] = useState(restored?.status ?? '');
   const keywordInput = useDebounceSearch(restored?.searchInput ?? '', 300);
   const keyword = keywordInput.debouncedValue.trim();
+  // 회차번호 검색: 지역 미선택이면 전체회차, 지역(상위/하위) 선택이면 지역회차로 검색(검색 버튼/Enter로 적용).
+  const [courseNumberInput, setCourseNumberInput] = useState(restored?.courseNumberInput ?? '');
+  const sort = useTableSort(restored?.sortBy ?? '', restored?.sortOrder ?? 'asc');
+  // 느린 이전 응답이 최신 검색 결과를 덮어쓰지 않도록 최신 응답 우선 가드.
+  const { next: nextRequest, isStale } = useLatestRequest();
   const [page, setPage] = useState(restored?.page ?? 0);
   const [size] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
@@ -155,9 +169,21 @@ export default function RoundsPage() {
       filterParentRegionId,
       regionId,
       status,
+      courseNumberInput,
+      sortBy: sort.sortBy,
+      sortOrder: sort.sortOrder,
       page,
     }),
-    [keywordInput.inputValue, filterParentRegionId, regionId, status, page],
+    [
+      keywordInput.inputValue,
+      filterParentRegionId,
+      regionId,
+      status,
+      courseNumberInput,
+      sort.sortBy,
+      sort.sortOrder,
+      page,
+    ],
   );
   usePersistListState(LIST_STATE_KEY, listSnapshot);
 
@@ -190,7 +216,14 @@ export default function RoundsPage() {
     return list.filter((_, idx) => flags[idx]);
   };
 
+  // 상위지역/지역 선택 상태 → 회차번호 검색 파라미터(전체회차/지역회차) 분기용 값.
+  const regionFilterValue: RegionFilterValue = {
+    regionId: regionId ? Number(regionId) : undefined,
+    parentRegionId: filterParentRegionId ? Number(filterParentRegionId) : undefined,
+  };
+
   const loadCourses = async () => {
+    const token = nextRequest();
     setIsLoading(true);
     setErrorMessage('');
     try {
@@ -201,6 +234,8 @@ export default function RoundsPage() {
           !regionId && filterParentRegionId ? Number(filterParentRegionId) : undefined,
         status: status || undefined,
         keyword: keyword || undefined,
+        ...buildRoundParams(regionFilterValue, courseNumberInput),
+        ...sort.params,
       };
 
       if (isRestricted) {
@@ -208,21 +243,24 @@ export default function RoundsPage() {
         const { data: response } = await getCourses({ ...commonParams, page: 0, size: 1000 });
         const myList = await filterToMyCourses(response.data.content ?? []);
 
+        if (isStale(token)) return; // 낡은 응답이면 최신 결과를 덮어쓰지 않는다.
         setTotalElements(myList.length);
         setTotalPages(Math.max(1, Math.ceil(myList.length / size)));
         setCourses(myList.slice(page * size, page * size + size));
       } else {
         // 그 외 역할: 기존 서버 사이드 페이지네이션 그대로
         const { data: response } = await getCourses({ ...commonParams, page, size });
+        if (isStale(token)) return;
         setCourses(response.data.content ?? []);
         setTotalPages(response.data.totalPages ?? 0);
         setTotalElements(response.data.totalElements ?? 0);
       }
     } catch (error) {
+      if (isStale(token)) return;
       setCourses([]);
       setErrorMessage(getErrorMessage(error));
     } finally {
-      setIsLoading(false);
+      if (!isStale(token)) setIsLoading(false);
     }
   };
 
@@ -288,6 +326,21 @@ export default function RoundsPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyword]);
+
+  // 컬럼 헤더 클릭 정렬 변경 시 재조회(마운트 시점은 위 초기 effect가 이미 처리하므로 스킵).
+  const sortDidMountRef = useRef(false);
+  useEffect(() => {
+    if (!sortDidMountRef.current) {
+      sortDidMountRef.current = true;
+      return;
+    }
+    if (page === 0) {
+      void loadCourses();
+    } else {
+      setPage(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sort.sortBy, sort.sortOrder]);
 
   const updateForm = (key: keyof CourseCreateRequest, value: string) => {
     const numericKeys: Array<keyof CourseCreateRequest> = [
@@ -417,7 +470,24 @@ export default function RoundsPage() {
             <input
               {...keywordInput.inputProps}
               placeholder="강좌명 검색"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') handleSearch();
+              }}
               style={{ border: 'none', background: 'transparent', outline: 'none', width: '140px' }}
+            />
+          </div>
+          <div className="select" style={{ width: '120px' }}>
+            <span className="ico">회차</span>
+            <input
+              type="number"
+              min={1}
+              value={courseNumberInput}
+              onChange={(event) => setCourseNumberInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') handleSearch();
+              }}
+              placeholder={roundInputPlaceholder(regionFilterValue)}
+              style={{ border: 'none', background: 'transparent', outline: 'none', width: '70px' }}
             />
           </div>
           <button className="btn" type="button" onClick={handleSearch} disabled={isLoading}>
@@ -675,15 +745,71 @@ export default function RoundsPage() {
           <table className="data cards">
             <thead>
               <tr>
-                <th>강좌명</th>
-                <th>지역</th>
-                <th>전체회차</th>
-                <th>지역회차</th>
-                <th>정원</th>
+                <SortableTh
+                  column="courseName"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  강좌명
+                </SortableTh>
+                <SortableTh
+                  column="regionName"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  지역
+                </SortableTh>
+                <SortableTh
+                  column="courseNumber"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  전체회차
+                </SortableTh>
+                <SortableTh
+                  column="localCourseNumber"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  지역회차
+                </SortableTh>
+                <SortableTh
+                  column="capacity"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  정원
+                </SortableTh>
                 <th>교육장</th>
-                <th>상태</th>
-                <th>개강일정</th>
-                <th>계획서 제출일</th>
+                <SortableTh
+                  column="status"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  상태
+                </SortableTh>
+                <SortableTh
+                  column="day1Date"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  개강일정
+                </SortableTh>
+                <SortableTh
+                  column="planSubmitDate"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
+                  계획서 제출일
+                </SortableTh>
                 <th>QR</th>
               </tr>
             </thead>
