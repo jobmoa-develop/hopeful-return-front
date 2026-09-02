@@ -16,6 +16,8 @@ export type StaffScheduleItem = {
   // 배정 연결 ID(course_staff). null/미포함이면 미배정 일정.
   // 목록·본인 조회(StaffScheduleListResponse.Item), 단건/등록/수정(StaffScheduleResponse) 모두 포함.
   courseStaffId?: number | null;
+  // 배정된 회차 ID(course). 미배정이면 null. 출결 현장의 당일 배정 회차 자동선택에 사용.
+  courseId?: number | null;
   // 배정된 회차명(지역+회차, 예: "서울 3회차"). 미배정이면 null.
   courseName?: string | null;
   // 배정된 회차 상태(CANCELED/OPEN/IN_PROGRESS 등). 미배정이면 null. 상세 뷰 상태 배지에 사용.
