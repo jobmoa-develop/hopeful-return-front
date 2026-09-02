@@ -1338,6 +1338,9 @@ export function AttendanceApiModal({
   const [checkInTime, setCheckInTime] = useState('');
   const [checkOutTime, setCheckOutTime] = useState('');
   const [currentStatus, setCurrentStatus] = useState('');
+  // 수기 결석 처리 — 체크 시 입·퇴실 시각 무시하고 결석(ABSENT)으로 저장, 사유 기록
+  const [absent, setAbsent] = useState(false);
+  const [absenceReason, setAbsenceReason] = useState('');
 
   // 탭 상태
   const [activeTab, setActiveTab] = useState<'ATTEND' | 'LEAVE'>('ATTEND');
@@ -1365,6 +1368,8 @@ export function AttendanceApiModal({
           setCheckInTime(data.checkInTime || '');
           setCheckOutTime(data.checkOutTime || '');
           setCurrentStatus(data.status || '');
+          setAbsent(data.status === 'ABSENT');
+          setAbsenceReason(data.absenceReason || '');
           setLeaves(
             (data.leaves ?? []).map((lv) => ({
               attendanceLeaveId: lv.attendanceLeaveId,
@@ -1388,6 +1393,8 @@ export function AttendanceApiModal({
     setCheckInTime('');
     setCheckOutTime('');
     setCurrentStatus('');
+    setAbsent(false);
+    setAbsenceReason('');
     setLeaves([]);
     setAddingNew(false);
     setNewLeave({ leaveTime: '', returnTime: '', reason: '' });
@@ -1401,12 +1408,20 @@ export function AttendanceApiModal({
   // 출결 저장
   const handleSaveAttendance = async () => {
     if (!canEdit) return;
+    if (absent && !absenceReason.trim()) {
+      alert('결석 사유를 입력해주세요.');
+      return;
+    }
     setSaving(true);
     try {
-      const payload = {
-        checkInTime: checkInTime || undefined,
-        checkOutTime: checkOutTime || undefined,
-      };
+      // 결석 처리 시 입·퇴실 시각은 보내지 않고 absent/사유만 전송한다(BE에서 시각 클리어 + ABSENT).
+      const payload = absent
+        ? { absent: true, absenceReason: absenceReason.trim() }
+        : {
+            absent: false,
+            checkInTime: checkInTime || undefined,
+            checkOutTime: checkOutTime || undefined,
+          };
       if (attendanceId) {
         await updateAttendance(attendanceId, payload);
       } else {
@@ -1566,7 +1581,7 @@ export function AttendanceApiModal({
               step="1"
               value={checkInTime}
               onChange={(e) => setCheckInTime(e.target.value)}
-              disabled={!canEdit}
+              disabled={!canEdit || absent}
             />
           </div>
           <div className="field">
@@ -1576,8 +1591,42 @@ export function AttendanceApiModal({
               step="1"
               value={checkOutTime}
               onChange={(e) => setCheckOutTime(e.target.value)}
-              disabled={!canEdit}
+              disabled={!canEdit || absent}
             />
+          </div>
+          {/* 결석 처리 — 입실 시간 아래. 체크 시 입·퇴실 시각을 비우고 결석 사유를 입력받는다. */}
+          <div className="field full">
+            <label
+              style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: canEdit ? 'pointer' : 'default' }}
+            >
+              <input
+                type="checkbox"
+                checked={absent}
+                disabled={!canEdit}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setAbsent(checked);
+                  if (checked) {
+                    setCheckInTime('');
+                    setCheckOutTime('');
+                  } else {
+                    setAbsenceReason('');
+                  }
+                }}
+                style={{ width: 'auto', margin: 0 }}
+              />
+              결석 처리
+            </label>
+            {absent && (
+              <input
+                value={absenceReason}
+                onChange={(e) => setAbsenceReason(e.target.value)}
+                placeholder="결석 사유 (필수)"
+                maxLength={255}
+                disabled={!canEdit}
+                style={{ marginTop: '8px' }}
+              />
+            )}
           </div>
           {isAdmin && attendanceId && (
             <div className="field full" style={{ marginTop: '16px', textAlign: 'right' }}>

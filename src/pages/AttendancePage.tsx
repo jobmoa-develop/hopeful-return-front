@@ -1,9 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
 import { getCourses, getCourseParticipants } from '../api/courses';
 import type { CourseSummary, CourseParticipant } from '../api/courses';
 import { getAttendances, getCompletionRisk } from '../api/attendances';
 import type { AttendanceListItem, CompletionRiskItem, RiskStatus } from '../api/attendances';
+import { getCourseParticipant } from '../api/courseParticipants';
+import type { CourseParticipantDetail } from '../api/courseParticipants';
+import { getMyStaffSchedules } from '../api/staffSchedules';
 import { AttendanceApiModal, BulkAttendanceModal } from '../components/ParticipantModals';
 import { statusLabel, compareCourseStatusOngoingFirst } from '../utils/courseStatus';
 
@@ -12,6 +16,14 @@ const STATUS_TO_KOR: Record<string, string> = {
   LATE: '지각',
   ABSENT: '결석',
 };
+
+// 오늘 날짜(로컬 기준) "YYYY-MM-DD" — 진행자/PL 당일 배정 회차 자동선택에 사용.
+function todayIso(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 
 // 회차 드롭다운 표시 라벨 — 지역 + 전체회차(기수) + 지역회차를 함께 보여준다.
 // 예: "서울 양천 전체3기 · 2회차 (교육중)"
@@ -27,12 +39,31 @@ function courseOptionLabel(c: CourseSummary): string {
 
 export default function AttendancePage() {
   const { roleConfig } = useRole();
+  const navigate = useNavigate();
 
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourseNo, setSelectedCourseNo] = useState<string>('');
   const [courseParticipants, setCourseParticipants] = useState<CourseParticipant[]>([]);
   const [attendancesMap, setAttendancesMap] = useState<Record<string, AttendanceListItem>>({});
   const [riskMap, setRiskMap] = useState<Record<number, CompletionRiskItem>>({});
+
+  // 참여자 간단정보 모달 상태
+  const [infoTargetId, setInfoTargetId] = useState<number | null>(null);
+  const [infoDetail, setInfoDetail] = useState<CourseParticipantDetail | null>(null);
+  const [infoLoading, setInfoLoading] = useState(false);
+
+  // 진행자/PL 당일 배정 회차 자동선택은 최초 1회만 수행(이후 수동 선택을 덮어쓰지 않음)
+  const autoSelectedRef = useRef(false);
+
+  const openParticipantInfo = (courseParticipantId: number) => {
+    setInfoTargetId(courseParticipantId);
+    setInfoDetail(null);
+    setInfoLoading(true);
+    getCourseParticipant(courseParticipantId)
+      .then((res) => setInfoDetail(res.data?.data ?? null))
+      .catch((err) => console.error('참여자 정보 조회 실패:', err))
+      .finally(() => setInfoLoading(false));
+  };
 
   // 모달 상태 (개별 셀 상세)
   const [selectedCell, setSelectedCell] = useState<{
@@ -67,6 +98,34 @@ export default function AttendancePage() {
       .catch((err) => console.error('회차 목록 조회 실패:', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 진행자(STAFF)/PL(PROJECT_LEADER)은 당일 인력배정된 회차가 있으면 그 회차로 selectbox 자동 전환.
+  // 최초 회차 목록 로드 후 1회만 시도하고, 이후 사용자의 수동 선택은 덮어쓰지 않는다.
+  useEffect(() => {
+    if (autoSelectedRef.current || courses.length === 0) return;
+    const isFieldStaff = roleConfig.roles.some(
+      (r) => r === 'STAFF' || r === 'PROJECT_LEADER',
+    );
+    if (!isFieldStaff) return;
+    autoSelectedRef.current = true;
+    const today = todayIso();
+    getMyStaffSchedules(today, today)
+      .then((res) => {
+        const items = res.data?.data?.content ?? [];
+        // 당일·배정(courseStaffId!=null)·courseId 존재 + 현재 회차 목록에 포함된 첫 배정 회차.
+        const assigned = items.find(
+          (it) =>
+            it.scheduleDate === today &&
+            it.courseStaffId != null &&
+            it.courseId != null &&
+            courses.some((c) => c.courseId === it.courseId),
+        );
+        if (assigned?.courseId != null) {
+          setSelectedCourseNo(String(assigned.courseId));
+        }
+      })
+      .catch((err) => console.error('당일 배정 회차 조회 실패:', err));
+  }, [courses, roleConfig.roles]);
 
   const loadDataForCourse = useCallback((courseId: number) => {
     // 참여자 목록 조회
@@ -270,8 +329,20 @@ export default function AttendancePage() {
           </>
         )}
 
+        <button
+          className="btn"
+          style={{ fontSize: '13px' }}
+          onClick={() => {
+            if (matchedCourse) loadDataForCourse(matchedCourse.courseId);
+          }}
+          disabled={!matchedCourse}
+          title="출결·수료 데이터를 다시 불러옵니다"
+        >
+          ↻ 출결 데이터 새로고침
+        </button>
+
         <span className="muted" style={{ fontSize: '12.5px' }}>
-          · 외출·조퇴는 시간까지 기록 · 셀 클릭 시 상세 조회/등록 가능
+          · 외출·조퇴는 시간까지 기록 · 셀 클릭 시 상세 조회/등록 가능 · 이름 클릭 시 참여자 정보
         </span>
       </div>
 
@@ -302,7 +373,24 @@ export default function AttendancePage() {
                   return (
                     <tr key={cp.courseParticipantId}>
                       <td className="nm-col">
-                        <div className="pname">{displayName}</div>
+                        <button
+                          type="button"
+                          className="pname"
+                          onClick={() => openParticipantInfo(cp.courseParticipantId)}
+                          title="참여자 정보 보기"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: 0,
+                            font: 'inherit',
+                            color: 'var(--primary, #2563eb)',
+                            textDecoration: 'underline',
+                            textUnderlineOffset: '2px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {displayName}
+                        </button>
                       </td>
                       {[1, 2, 3, 4, 5].map((d, dIdx) => {
                         const att = daysData[dIdx];
@@ -374,6 +462,62 @@ export default function AttendancePage() {
       <p className="note">
         ※ 진행자가 당일 출결을 입력 · QR 먹통 시 수기 대체 입력 · 누적 미달 시 수료 위험 경고
       </p>
+
+      {/* 참여자 간단정보 모달 */}
+      {infoTargetId != null && (
+        <div
+          className="modal-overlay open"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setInfoTargetId(null);
+          }}
+        >
+          <div className="modal" style={{ maxWidth: '420px' }}>
+            <div className="modal-h">
+              <h3>참여자 정보</h3>
+              <button className="x" onClick={() => setInfoTargetId(null)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-b">
+              {infoLoading ? (
+                <div>불러오는 중...</div>
+              ) : infoDetail ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div>
+                    <span className="muted">이름</span> <b>{infoDetail.participantName}</b>
+                  </div>
+                  <div>
+                    <span className="muted">참여자ID</span>{' '}
+                    <b>
+                      {infoDetail.participantId}
+                      {infoDetail.matchKey ? ` (${infoDetail.matchKey})` : ''}
+                    </b>
+                  </div>
+                  <div>
+                    <span className="muted">생년</span> <b>{infoDetail.birthYear ?? '—'}</b>
+                  </div>
+                  <div>
+                    <span className="muted">연락처</span> <b>{infoDetail.phone ?? '—'}</b>
+                  </div>
+                </div>
+              ) : (
+                <div>정보를 불러오지 못했습니다.</div>
+              )}
+            </div>
+            <div className="modal-f">
+              <button className="btn" onClick={() => setInfoTargetId(null)}>
+                닫기
+              </button>
+              <button
+                className="btn primary"
+                onClick={() => navigate(`/participants/${infoTargetId}`)}
+              >
+                상세정보 보기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 개별 셀 상세 모달 */}
       {selectedCell && (

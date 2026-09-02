@@ -26,6 +26,7 @@ export type AttendanceListItem = {
   checkInTime: string | null; // "HH:mm:ss"
   checkOutTime: string | null;
   status: AttendanceStatus | string | null;
+  absenceReason: string | null; // 수기 결석 사유(결석이 아니면 null)
   leaves: AttendanceLeaveItem[];
 };
 
@@ -51,6 +52,8 @@ export type CreateAttendanceRequest = {
   dayNo: number;
   checkInTime?: string;
   checkOutTime?: string;
+  absent?: boolean; // true면 입·퇴실 무시하고 결석(ABSENT) 처리
+  absenceReason?: string; // 결석 사유(absent=true일 때만)
 };
 
 export function createAttendance(payload: CreateAttendanceRequest) {
@@ -60,6 +63,8 @@ export function createAttendance(payload: CreateAttendanceRequest) {
 export type UpdateAttendanceRequest = {
   checkInTime?: string;
   checkOutTime?: string;
+  absent?: boolean; // true면 입·퇴실 시각 clear + 결석(ABSENT), false면 결석 사유 해제
+  absenceReason?: string; // 결석 사유(absent=true일 때만)
 };
 
 export function updateAttendance(attendanceId: number, payload: UpdateAttendanceRequest) {
