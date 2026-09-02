@@ -9,6 +9,7 @@ import { getCourseParticipant } from '../api/courseParticipants';
 import type { CourseParticipantDetail } from '../api/courseParticipants';
 import { getMyStaffSchedules } from '../api/staffSchedules';
 import { AttendanceApiModal, BulkAttendanceModal } from '../components/ParticipantModals';
+import { PhoneLink } from '../components/PhoneLink';
 import { statusLabel, compareCourseStatusOngoingFirst } from '../utils/courseStatus';
 
 const STATUS_TO_KOR: Record<string, string> = {
@@ -497,7 +498,7 @@ export default function AttendancePage() {
                     <span className="muted">생년</span> <b>{infoDetail.birthYear ?? '—'}</b>
                   </div>
                   <div>
-                    <span className="muted">연락처</span> <b>{infoDetail.phone ?? '—'}</b>
+                    <span className="muted">연락처</span> <b><PhoneLink phone={infoDetail.phone} /></b>
                   </div>
                 </div>
               ) : (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PhoneLink } from '../components/PhoneLink';
 import { DateInput } from '../components/DateInput';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useNavigate } from 'react-router';
@@ -575,13 +576,13 @@ export default function ParticipantsPage() {
                             〃
                           </div>
                           <div className="cell-sub" style={{ opacity: 0.4 }}>
-                            {p.matchKey ?? p.phone}
+                            {p.matchKey ?? (p.phone ? <PhoneLink phone={p.phone} /> : '—')}
                           </div>
                         </>
                       ) : (
                         <>
                           <div className="pname">{p.name}</div>
-                          <div className="cell-sub">{p.matchKey ?? p.phone}</div>
+                          <div className="cell-sub">{p.matchKey ?? (p.phone ? <PhoneLink phone={p.phone} /> : '—')}</div>
                         </>
                       )}
                     </td>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { PhoneLink } from '../components/PhoneLink';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import { useNavigate } from 'react-router';
 import { useRole } from '../context/RoleContext';
@@ -273,7 +274,9 @@ export default function ConsultingPage() {
                   >
                     <td data-label="참여자">
                       <div className="pname">{p.participantName}</div>
-                      <div className="cell-sub">{p.matchKey ?? p.phone}</div>
+                      <div className="cell-sub">
+                        {p.matchKey ?? (p.phone ? <PhoneLink phone={p.phone} /> : '—')}
+                      </div>
                     </td>
                     <td data-label="지역 / 회차">{roundText(p)}</td>
                     <td data-label="진행상태">

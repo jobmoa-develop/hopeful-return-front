@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DateInput } from '../components/DateInput';
+import { MapLink } from '../components/MapLink';
 import { useDebounceSearch } from '../hooks/useDebounceSearch';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router';
@@ -709,7 +710,9 @@ export default function RoundsPage() {
                     {course.currentParticipants ?? 0}
                     <span className="muted"> / {course.capacity ?? '-'}</span>
                   </td>
-                  <td data-label="교육장">{course.location ?? '-'}</td>
+                  <td data-label="교육장">
+                    <MapLink address={course.location} fallback="-" />
+                  </td>
                   <td data-label="상태">
                     <span className={`chip ${statusChipClass(course.status)}`}>
                       {statusLabel(course.status)}
