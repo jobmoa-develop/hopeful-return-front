@@ -11,8 +11,9 @@ export const COUNSELING_TYPE_LABELS: Record<CounselingType, string> = {
 };
 
 // 진행상태 enum (BE CourseParticipantStatus와 동일)
+// COURSE_CANCELED(폐강)은 회차가 폐강될 때 BE가 자동으로 세팅한다(수동 변경 대상 아님).
 export type CourseParticipantStatus =
-  'APPLIED' | 'CONFIRMED' | 'CANCELED' | 'COMPLETED' | 'INCOMPLETE';
+  'APPLIED' | 'CONFIRMED' | 'CANCELED' | 'COMPLETED' | 'INCOMPLETE' | 'COURSE_CANCELED';
 
 export const CP_STATUS_LABELS: Record<CourseParticipantStatus, string> = {
   APPLIED: '접수',
@@ -20,6 +21,7 @@ export const CP_STATUS_LABELS: Record<CourseParticipantStatus, string> = {
   CANCELED: '취소',
   COMPLETED: '수료',
   INCOMPLETE: '미수료',
+  COURSE_CANCELED: '폐강',
 };
 
 // 진행상태 → 칩 색상 클래스
@@ -29,6 +31,7 @@ export const CP_STATUS_CHIP: Record<CourseParticipantStatus, string> = {
   CANCELED: 'neutral',
   COMPLETED: 'ok',
   INCOMPLETE: 'danger',
+  COURSE_CANCELED: 'danger',
 };
 
 // 상담사 배정 요약 (CounselorSummary와 동일)
@@ -249,6 +252,7 @@ export type CourseParticipantListParams = {
   sortOrder?: 'asc' | 'desc'; // 정렬 방향(기본 asc)
   page?: number;
   size?: number;
+  excludeCanceledCourse?: boolean; // 폐강(course.status=CANCELED) 회차 참여자 제외 — 상담관리에서 true
 };
 
 // 수강생 목록 조회 — COUNSELOR는 본인 배정건만(서버측 스코프), 지역/회차/상태/검색어 필터
