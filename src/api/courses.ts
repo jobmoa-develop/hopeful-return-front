@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 
-export type CourseStatus = 'PLANNED' | 'OPEN' | 'CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED' | string;
+export type CourseStatus =
+  'PLANNED' | 'OPEN' | 'CLOSED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED' | string;
 
 export type CourseSummary = {
   courseId: number;
@@ -49,6 +50,8 @@ export type CourseListParams = {
   parentRegionId?: number;
   status?: string;
   keyword?: string;
+  courseNumber?: number; // 전체회차(기수) 검색 — 지역 미선택 시 사용
+  localCourseNumber?: number; // 지역회차 검색 — 지역 선택 시 사용
   sortBy?: string; // 정렬 키(courseName/regionName/courseNumber/localCourseNumber/capacity/status/day1Date/planSubmitDate)
   sortOrder?: 'asc' | 'desc'; // 정렬 방향(기본 asc)
   page?: number;
@@ -134,7 +137,7 @@ export type CourseStaff = {
   courseStaffId?: number;
   userId?: number;
   name?: string;
-  staffRole?: string;      // 'LECTURER' | 'COUNSELOR' | 'STAFF' | ...
+  staffRole?: string; // 'LECTURER' | 'COUNSELOR' | 'STAFF' | ...
   sessionType?: string;
   checkInTime?: string;
   checkOutTime?: string;
@@ -153,7 +156,9 @@ export function createCourse(payload: CourseCreateRequest) {
 }
 
 export function updateCourse(courseId: number, payload: CourseUpdateRequest) {
-  return apiClient.put<ApiResponse<{ courseId: number; localCourseNumber: number; updated: boolean }>>(`/api/courses/${courseId}`, payload);
+  return apiClient.put<
+    ApiResponse<{ courseId: number; localCourseNumber: number; updated: boolean }>
+  >(`/api/courses/${courseId}`, payload);
 }
 
 export function deleteCourse(courseId: number) {
@@ -161,15 +166,24 @@ export function deleteCourse(courseId: number) {
 }
 
 export function updateCourseStatus(courseId: number, payload: CourseStatusRequest) {
-  return apiClient.patch<ApiResponse<{ courseId: number; status: string }>>(`/api/courses/${courseId}/status`, payload);
+  return apiClient.patch<ApiResponse<{ courseId: number; status: string }>>(
+    `/api/courses/${courseId}/status`,
+    payload,
+  );
 }
 
 export function getCourseStaffs(courseId: number) {
   return apiClient.get<ApiResponse<{ staffs: CourseStaff[] }>>(`/api/courses/${courseId}/staffs`);
 }
 
-export function getCourseParticipants(courseId: number, params?: { status?: string; keyword?: string; page?: number; size?: number }) {
-  return apiClient.get<ApiResponse<PageData<CourseParticipant>>>(`/api/courses/${courseId}/participants`, { params });
+export function getCourseParticipants(
+  courseId: number,
+  params?: { status?: string; keyword?: string; page?: number; size?: number },
+) {
+  return apiClient.get<ApiResponse<PageData<CourseParticipant>>>(
+    `/api/courses/${courseId}/participants`,
+    { params },
+  );
 }
 
 export type NotifyCourseChangeRequest = {

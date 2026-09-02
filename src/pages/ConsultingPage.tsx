@@ -19,6 +19,7 @@ import { CounselingSessionModal, SlotCounselorAssignModal } from '../components/
 import { apiErrorMessage } from '../api/apiError';
 import { useTableSort } from '../hooks/useTableSort';
 import type { SortOrder } from '../hooks/useTableSort';
+import { useLatestRequest } from '../hooks/useLatestRequest';
 import {
   readListState,
   useShouldRestoreListState,
@@ -76,6 +77,8 @@ export default function ConsultingPage() {
   const [courseNumber, setCourseNumber] = useState(restored?.courseNumber ?? '');
   const [status, setStatus] = useState(restored?.status ?? '');
   const sort = useTableSort(restored?.sortBy ?? '', restored?.sortOrder ?? 'asc');
+  // 회차번호 등 빠른 연속 검색 시, 느린 이전 요청 응답이 최신 결과를 덮어쓰지 않도록 최신 응답 우선 가드.
+  const { next: nextRequest, isStale } = useLatestRequest();
 
   // 현재 검색/필터/페이지를 스냅샷으로 저장 → 상세 왕복 시 뒤로가기로 복원된다.
   const listSnapshot = useMemo<ConsultingListSnapshot>(
@@ -88,7 +91,15 @@ export default function ConsultingPage() {
       sortOrder: sort.sortOrder,
       page,
     }),
-    [searchNameInput.inputValue, regionFilter, courseNumber, status, sort.sortBy, sort.sortOrder, page],
+    [
+      searchNameInput.inputValue,
+      regionFilter,
+      courseNumber,
+      status,
+      sort.sortBy,
+      sort.sortOrder,
+      page,
+    ],
   );
   usePersistListState(LIST_STATE_KEY, listSnapshot);
 
@@ -105,9 +116,8 @@ export default function ConsultingPage() {
       .catch(() => setRegions([]));
   }, [canFilterRegion]);
 
-
-
   const fetchList = useCallback(() => {
+    const token = nextRequest();
     setLoading(true);
     setError(null);
     getCourseParticipants({
@@ -123,14 +133,31 @@ export default function ConsultingPage() {
       size: PAGE_SIZE,
     })
       .then((res) => {
+        if (isStale(token)) return; // 낡은(이전) 요청 응답이면 최신 결과를 덮어쓰지 않는다.
         const data = res.data.data;
         setItems(data?.content ?? []);
         setTotalElements(data?.totalElements ?? 0);
         setTotalPages(data?.totalPages ?? 0);
       })
-      .catch((err) => setError(apiErrorMessage(err, '상담 대상 목록을 불러오지 못했습니다.')))
-      .finally(() => setLoading(false));
-  }, [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status, sort.sortBy, sort.sortOrder, page]);
+      .catch((err) => {
+        if (isStale(token)) return;
+        setError(apiErrorMessage(err, '상담 대상 목록을 불러오지 못했습니다.'));
+      })
+      .finally(() => {
+        if (!isStale(token)) setLoading(false);
+      });
+  }, [
+    searchName,
+    regionFilter.regionId,
+    regionFilter.parentRegionId,
+    courseNumber,
+    status,
+    sort.sortBy,
+    sort.sortOrder,
+    page,
+    nextRequest,
+    isStale,
+  ]);
 
   // 페이지를 리셋시켜야 하는 필터들을 하나의 키로 묶어서, 필터 변경 시
   // page 리셋 + fetch가 각각 별도 effect로 실행되며 API가 2번 호출되는 것을 방지한다.
@@ -145,7 +172,15 @@ export default function ConsultingPage() {
         sort.sortBy,
         sort.sortOrder,
       ]),
-    [searchName, regionFilter.regionId, regionFilter.parentRegionId, courseNumber, status, sort.sortBy, sort.sortOrder],
+    [
+      searchName,
+      regionFilter.regionId,
+      regionFilter.parentRegionId,
+      courseNumber,
+      status,
+      sort.sortBy,
+      sort.sortOrder,
+    ],
   );
   const prevFilterKeyRef = useRef(filterKey);
 
@@ -245,13 +280,28 @@ export default function ConsultingPage() {
           <table className="data cards">
             <thead>
               <tr>
-                <SortableTh column="participantName" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                <SortableTh
+                  column="participantName"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
                   참여자
                 </SortableTh>
-                <SortableTh column="region" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                <SortableTh
+                  column="region"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
                   지역 / 회차
                 </SortableTh>
-                <SortableTh column="status" sortBy={sort.sortBy} sortOrder={sort.sortOrder} onSort={sort.toggle}>
+                <SortableTh
+                  column="status"
+                  sortBy={sort.sortBy}
+                  sortOrder={sort.sortOrder}
+                  onSort={sort.toggle}
+                >
                   진행상태
                 </SortableTh>
                 <th>사전상담</th>
@@ -303,7 +353,11 @@ export default function ConsultingPage() {
                         </td>
                       );
                     })}
-                    <td className="cell-actions" data-label="조치" onClick={(ev) => ev.stopPropagation()}>
+                    <td
+                      className="cell-actions"
+                      data-label="조치"
+                      onClick={(ev) => ev.stopPropagation()}
+                    >
                       {canConsult ? (
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                           <button
@@ -349,14 +403,26 @@ export default function ConsultingPage() {
       </div>
 
       {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '12px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '10px',
+            marginTop: '12px',
+          }}
+        >
           <button className="btn" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
             이전
           </button>
           <span className="muted" style={{ fontSize: '12px' }}>
             {page + 1} / {totalPages}
           </span>
-          <button className="btn" disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          <button
+            className="btn"
+            disabled={page + 1 >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
             다음
           </button>
         </div>
