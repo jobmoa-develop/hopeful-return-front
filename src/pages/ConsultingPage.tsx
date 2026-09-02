@@ -115,6 +115,8 @@ export default function ConsultingPage() {
       parentRegionId: regionFilter.parentRegionId,
       ...buildRoundParams(regionFilter, courseNumber),
       status: status || undefined,
+      // 상담관리에서는 폐강(course.status=CANCELED) 회차 참여자를 제외한다.
+      excludeCanceledCourse: true,
       ...sort.params,
       page,
       size: PAGE_SIZE,

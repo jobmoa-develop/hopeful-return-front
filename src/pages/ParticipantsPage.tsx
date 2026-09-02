@@ -16,7 +16,7 @@ import {
   COUNSELING_TYPE_LABELS,
   CP_STATUS_CHIP,
   CP_STATUS_LABELS,
-  deleteCourseParticipant,
+  cancelCourseParticipant,
 } from '../api/courseParticipants';
 import type { CounselingType, CourseParticipantStatus } from '../api/courseParticipants';
 import {
@@ -282,12 +282,12 @@ export default function ParticipantsPage() {
     if (cpId == null) return;
     if (
       !window.confirm(
-        `${p.name} 님의 최신 회차 등록을 취소(삭제)할까요?\n참여자 정보와 다른 회차 이력은 유지됩니다.`,
+        `${p.name} 님의 최신 회차 등록을 취소 처리할까요?\n진행상태가 '취소'로 변경되며, 참여자 정보와 이력은 유지됩니다.`,
       )
     )
       return;
     try {
-      await deleteCourseParticipant(cpId);
+      await cancelCourseParticipant(cpId);
       fetchList();
     } catch (err) {
       alert(apiErrorMessage(err, '회차 등록 취소에 실패했습니다.'));
