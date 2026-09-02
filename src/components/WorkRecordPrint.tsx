@@ -69,6 +69,8 @@ export function WorkRecordPrint({ course, dailyStaff, targetIso, onClose }: Prop
 
   const allDates = educationDates(course);
   const dates = targetIso ? allDates.filter((d) => d.iso === targetIso) : allDates;
+  // 단일 교육일(1장) 인쇄 시 정확히 1페이지로 고정하기 위한 플래그.
+  const singlePage = Boolean(targetIso);
 
   const regionLabel = course.regionName ?? '';
   const roundLabel = course.localCourseNumber != null ? `${course.localCourseNumber}회차` : '';
@@ -77,7 +79,8 @@ export function WorkRecordPrint({ course, dailyStaff, targetIso, onClose }: Prop
     <div className="wr-overlay" role="dialog" aria-modal="true" aria-label="근무기록표 인쇄">
       <div className="wr-toolbar">
         <span className="wr-toolbar-title">
-          근무기록표 미리보기 · {regionLabel} {roundLabel} ({dates.length}장)
+          근무기록표 미리보기 · {regionLabel} {roundLabel} ({dates.length}장) · 표 내용을 클릭해
+          수정한 뒤 인쇄하세요
         </span>
         <button type="button" className="btn primary" onClick={() => window.print()}>
           인쇄
@@ -95,7 +98,7 @@ export function WorkRecordPrint({ course, dailyStaff, targetIso, onClose }: Prop
             const rows = sortAssignments(dailyStaff.filter((it) => it.scheduleDate === d.iso));
             const emptyCount = Math.max(0, MIN_ROWS - rows.length);
             return (
-              <section className="wr-page" key={d.iso}>
+              <section className={`wr-page${singlePage ? ' wr-single' : ''}`} key={d.iso}>
                 <div className="wr-attach">[붙임]</div>
                 <h1 className="wr-title">근 무 기 록 표</h1>
                 <table className="wr-table">
@@ -132,13 +135,31 @@ export function WorkRecordPrint({ course, dailyStaff, targetIso, onClose }: Prop
                       );
                       return (
                         <tr key={`${it.userId}-${it.staffRole}-${it.sessionType}`}>
-                          <td>{workRecordRoleLabel(it.staffRole)}</td>
-                          <td>{it.name ?? ''}</td>
-                          <td>{it.position ?? ''}</td>
-                          <td>{formatWorkDate(d.iso)}</td>
-                          <td>{times.in}</td>
-                          <td>{times.out}</td>
-                          <td className="wr-desc">{workDescForRole(it.staffRole)}</td>
+                          <td className="wr-edit" contentEditable suppressContentEditableWarning>
+                            {workRecordRoleLabel(it.staffRole)}
+                          </td>
+                          <td className="wr-edit" contentEditable suppressContentEditableWarning>
+                            {it.name ?? ''}
+                          </td>
+                          <td className="wr-edit" contentEditable suppressContentEditableWarning>
+                            {it.position ?? ''}
+                          </td>
+                          <td className="wr-edit" contentEditable suppressContentEditableWarning>
+                            {formatWorkDate(d.iso)}
+                          </td>
+                          <td className="wr-edit" contentEditable suppressContentEditableWarning>
+                            {times.in}
+                          </td>
+                          <td className="wr-edit" contentEditable suppressContentEditableWarning>
+                            {times.out}
+                          </td>
+                          <td
+                            className="wr-desc wr-edit"
+                            contentEditable
+                            suppressContentEditableWarning
+                          >
+                            {workDescForRole(it.staffRole)}
+                          </td>
                           <td />
                           <td />
                         </tr>
@@ -146,13 +167,15 @@ export function WorkRecordPrint({ course, dailyStaff, targetIso, onClose }: Prop
                     })}
                     {Array.from({ length: emptyCount }).map((_, i) => (
                       <tr key={`empty-${i}`} className="wr-empty-row">
-                        <td>&nbsp;</td>
-                        <td />
-                        <td />
-                        <td />
-                        <td />
-                        <td />
-                        <td />
+                        <td className="wr-edit" contentEditable suppressContentEditableWarning>
+                          &nbsp;
+                        </td>
+                        <td className="wr-edit" contentEditable suppressContentEditableWarning />
+                        <td className="wr-edit" contentEditable suppressContentEditableWarning />
+                        <td className="wr-edit" contentEditable suppressContentEditableWarning />
+                        <td className="wr-edit" contentEditable suppressContentEditableWarning />
+                        <td className="wr-edit" contentEditable suppressContentEditableWarning />
+                        <td className="wr-edit" contentEditable suppressContentEditableWarning />
                         <td />
                         <td />
                       </tr>

@@ -21,6 +21,11 @@ import type {
 import { getRegions } from '../api/regions';
 import type { RegionSummary } from '../api/regions';
 import { useRole } from '../context/RoleContext';
+import { useAuth } from '../context/AuthContext';
+import { cancelCourseParticipant, CP_STATUS_LABELS, CP_STATUS_CHIP } from '../api/courseParticipants';
+import type { CourseParticipantStatus } from '../api/courseParticipants';
+import { getAttendances } from '../api/attendances';
+import type { AttendanceListItem } from '../api/attendances';
 import { getCourseDailyStaff } from '../api/courseDailyStaff';
 import type { AssignConflict, CourseDailyStaffItem } from '../api/courseDailyStaff';
 import { ASSIGN_ROLES, formatDateCol } from './assign/roles';
@@ -247,6 +252,7 @@ export default function RoundDetailPage() {
     navigate(from, { state: { restoreList: true } });
   };
   const { roleConfig } = useRole();
+  const { user } = useAuth();
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [dailyStaff, setDailyStaff] = useState<CourseDailyStaffItem[]>([]);
   // 근무기록표 인쇄 대상. null=닫힘, {}=전체 교육일, { iso }=특정 교육일 1장
@@ -284,6 +290,10 @@ export default function RoundDetailPage() {
   const [staffSmsHistory, setStaffSmsHistory] = useState<CourseStaffSmsHistoryItem[]>([]);
   const [isStaffSmsHistoryLoading, setIsStaffSmsHistoryLoading] = useState(false);
 
+  // 강좌 참여자 일차별 입실/퇴실 조회(읽기 전용). null=미선택(참여자 기본값 표시)
+  const [attDayNo, setAttDayNo] = useState<number | null>(null);
+  const [dayAttendanceMap, setDayAttendanceMap] = useState<Record<number, AttendanceListItem>>({});
+
   // 대표 역할(roleConfig.role) 1개만 보면 다중 역할 계정(예: ADMIN+COUNSELOR)에서
   // 대표 역할이 우연히 COUNSELOR로 뽑힐 경우 ADMIN 권한이 무시된다 → 전체 역할 배열로 판단
   const canEdit = roleConfig.roles.some((r) =>
@@ -291,6 +301,15 @@ export default function RoundDetailPage() {
   );
   const canDelete = roleConfig.roles.includes('ADMIN');
   const canChangeStatus = roleConfig.roles.some((r) => ['ADMIN', 'HEAD_OFFICE'].includes(r));
+
+  // 담당자 안내 문자 발송 이력은 관리자(ADMIN) 또는 문자 발송 권한 보유자에게만 노출한다.
+  const canSendSms = user?.canSendSms ?? false;
+  const canViewStaffSms = roleConfig.roles.includes('ADMIN') || canSendSms;
+
+  // 회차 제외(소프트 취소) 가능 역할 — cancel 엔드포인트 허용 롤과 동일.
+  const canExcludeParticipant = roleConfig.roles.some((r) =>
+    ['ADMIN', 'HEAD_OFFICE', 'REGIONAL_MANAGER', 'PROJECT_MANAGER', 'PROJECT_LEADER', 'OPERATOR'].includes(r),
+  );
 
   const loadCourse = async () => {
     if (!Number.isFinite(courseId)) return;
@@ -379,12 +398,58 @@ export default function RoundDetailPage() {
     }
   };
 
+  // 일차별 입실/퇴실 조회(읽기 전용) — 선택 일차의 출결을 참여자ID로 매핑.
+  const loadDayAttendances = async (dayNo: number) => {
+    if (!Number.isFinite(courseId)) return;
+    try {
+      const { data: response } = await getAttendances({ courseId, dayNo, size: 1000 });
+      const map: Record<number, AttendanceListItem> = {};
+      (response.data?.content ?? []).forEach((att) => {
+        if (att.courseParticipantId != null) map[att.courseParticipantId] = att;
+      });
+      setDayAttendanceMap(map);
+    } catch {
+      setDayAttendanceMap({});
+    }
+  };
+
+  // 참여자를 회차에서 제외(소프트 취소, status=CANCELED) — 하드 삭제가 아니라 participant_sms FK 충돌이 없다.
+  const handleExcludeParticipant = async (cpId: number, name: string) => {
+    if (
+      !window.confirm(
+        `'${name}' 참여자를 이 회차에서 제외(취소)하시겠습니까?\n발송된 문자 이력은 그대로 보존됩니다.`,
+      )
+    )
+      return;
+    try {
+      await cancelCourseParticipant(cpId, '회차 제외');
+      await loadParticipants();
+      if (attDayNo != null) await loadDayAttendances(attDayNo);
+    } catch (err) {
+      const msg = isAxiosError(err)
+        ? (err.response?.data?.message ?? '회차 제외에 실패했습니다.')
+        : '회차 제외에 실패했습니다.';
+      alert(msg);
+    }
+  };
+
   useEffect(() => {
     void loadCourse();
     void loadStaffs();
     void loadParticipants();
-    void loadStaffSmsHistory();
-  }, [courseId]);
+    if (canViewStaffSms) void loadStaffSmsHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, canViewStaffSms]);
+
+  // 일차별 조회 selectbox 변경 시 해당 일차 출결 로드(미선택이면 초기화).
+  useEffect(() => {
+    if (attDayNo == null) {
+      setDayAttendanceMap({});
+      return;
+    }
+    void loadDayAttendances(attDayNo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attDayNo, courseId]);
 
   useEffect(() => {
     let active = true;
@@ -1093,63 +1158,6 @@ export default function RoundDetailPage() {
 
       <div className="card" style={{ marginTop: '18px' }}>
         <div className="card-h">
-          <span className="section-title">담당자 안내 문자 발송 이력</span>
-          <button
-            className="btn"
-            type="button"
-            onClick={loadStaffSmsHistory}
-            disabled={isStaffSmsHistoryLoading}
-            style={{ marginLeft: 'auto' }}
-          >
-            {isStaffSmsHistoryLoading ? '조회 중...' : '새로고침'}
-          </button>
-        </div>
-        <div className="tbl-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>수신 담당자</th>
-                <th>종류</th>
-                <th>내용</th>
-                <th>발송자</th>
-                <th>발송 시각</th>
-                <th>상태</th>
-              </tr>
-            </thead>
-            <tbody>
-              {staffSmsHistory.map((row) => (
-                <tr key={row.courseStaffSmsId}>
-                  <td className="pname">{row.userName ?? `담당자 #${row.userId}`}</td>
-                  <td>{staffSmsNotifyTypeLabel(row.notifyType)}</td>
-                  <td style={{ whiteSpace: 'pre-line', maxWidth: '320px' }}>
-                    {row.content ?? '-'}
-                  </td>
-                  <td>{row.sentByName ?? (row.sentBy ? `#${row.sentBy}` : '시스템')}</td>
-                  <td className="tnum">{row.sentAt ?? '-'}</td>
-                  <td>
-                    <span className={`chip ${staffSmsStatusClass(row.sendStatus)}`}>
-                      {staffSmsStatusLabel(row.sendStatus)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {staffSmsHistory.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={6}
-                    style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}
-                  >
-                    발송 이력이 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginTop: '18px' }}>
-        <div className="card-h">
           <span className="section-title">강좌 참여자</span>
           <div className="rd-enroll-tools">
             <button className="btn primary" type="button" onClick={() => setIsEnrollOpen(true)}>
@@ -1180,6 +1188,27 @@ export default function RoundDetailPage() {
             >
               {isParticipantsLoading ? '조회 중...' : '조회'}
             </button>
+            {/* 일차별 입실/퇴실 조회(읽기 전용). 선택 시 입실·퇴실 컬럼이 해당 일차 출결로 바뀐다. */}
+            <select
+              value={attDayNo ?? ''}
+              onChange={(event) =>
+                setAttDayNo(event.target.value ? Number(event.target.value) : null)
+              }
+              title="일차별 입실/퇴실 조회"
+              style={{
+                padding: '7px 10px',
+                border: '1px solid var(--line)',
+                borderRadius: '8px',
+              }}
+            >
+              <option value="">일차별 조회</option>
+              {course &&
+                courseEducationDates(course).map((d) => (
+                  <option key={d.day} value={d.day}>
+                    {d.day}일차 ({formatDateCol(d.iso)})
+                  </option>
+                ))}
+            </select>
           </div>
         </div>
         <div className="tbl-wrap">
@@ -1188,29 +1217,75 @@ export default function RoundDetailPage() {
               <tr>
                 <th>참여자</th>
                 <th>참여 ID</th>
-                <th>입실</th>
-                <th>퇴실</th>
+                <th>입실{attDayNo != null ? ` (${attDayNo}일차)` : ''}</th>
+                <th>퇴실{attDayNo != null ? ` (${attDayNo}일차)` : ''}</th>
                 <th>상태</th>
+                <th>관리</th>
               </tr>
             </thead>
             <tbody>
-              {participants.map((participant, index) => (
-                <tr key={participant.courseParticipantId ?? index}>
-                  <td className="pname">
-                    {participant.participantName ?? participant.name ?? '-'}
-                  </td>
-                  <td className="tnum">{participant.courseParticipantId}</td>
-                  <td className="tnum">{participant.checkInTime ?? '-'}</td>
-                  <td className="tnum">{participant.checkOutTime ?? '-'}</td>
-                  <td>
-                    <span className="chip neutral">{participant.status ?? '-'}</span>
-                  </td>
-                </tr>
-              ))}
+              {participants.map((participant, index) => {
+                const cpId = participant.courseParticipantId;
+                const dayAtt = cpId != null ? dayAttendanceMap[cpId] : undefined;
+                const checkIn =
+                  attDayNo != null
+                    ? (dayAtt?.checkInTime ?? '-')
+                    : (participant.checkInTime ?? '-');
+                const checkOut =
+                  attDayNo != null
+                    ? (dayAtt?.checkOutTime ?? '-')
+                    : (participant.checkOutTime ?? '-');
+                const statusVal = participant.status as CourseParticipantStatus | undefined;
+                const cpStatusLabel =
+                  statusVal && CP_STATUS_LABELS[statusVal]
+                    ? CP_STATUS_LABELS[statusVal]
+                    : (participant.status ?? '-');
+                const cpStatusChip =
+                  statusVal && CP_STATUS_CHIP[statusVal] ? CP_STATUS_CHIP[statusVal] : 'neutral';
+                const alreadyExcluded =
+                  participant.status === 'CANCELED' || participant.status === 'COURSE_CANCELED';
+                return (
+                  <tr
+                    key={cpId ?? index}
+                    onClick={() => {
+                      if (cpId != null) navigate(`/participants/${cpId}`);
+                    }}
+                    style={{ cursor: cpId != null ? 'pointer' : 'default' }}
+                    title="참여자 상세 보기"
+                  >
+                    <td className="pname">
+                      {participant.participantName ?? participant.name ?? '-'}
+                    </td>
+                    <td className="tnum">{cpId}</td>
+                    <td className="tnum">{checkIn}</td>
+                    <td className="tnum">{checkOut}</td>
+                    <td>
+                      <span className={`chip ${cpStatusChip}`}>{cpStatusLabel}</span>
+                    </td>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      {canExcludeParticipant && cpId != null && !alreadyExcluded && (
+                        <button
+                          className="btn danger"
+                          type="button"
+                          style={{ padding: '3px 10px', fontSize: '12px' }}
+                          onClick={() =>
+                            handleExcludeParticipant(
+                              cpId,
+                              participant.participantName ?? participant.name ?? '참여자',
+                            )
+                          }
+                        >
+                          회차 제외
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
               {participants.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}
                   >
                     조회된 참여자가 없습니다.
@@ -1221,6 +1296,66 @@ export default function RoundDetailPage() {
           </table>
         </div>
       </div>
+      {/* 담당자 안내 문자 발송 이력 — 강좌 참여자 아래. 관리자/발송권한자에게만 노출. */}
+      {canViewStaffSms && (
+        <div className="card" style={{ marginTop: '18px' }}>
+          <div className="card-h">
+            <span className="section-title">담당자 안내 문자 발송 이력</span>
+            <button
+              className="btn"
+              type="button"
+              onClick={loadStaffSmsHistory}
+              disabled={isStaffSmsHistoryLoading}
+              style={{ marginLeft: 'auto' }}
+            >
+              {isStaffSmsHistoryLoading ? '조회 중...' : '새로고침'}
+            </button>
+          </div>
+          <div className="tbl-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>수신 담당자</th>
+                  <th>종류</th>
+                  <th>내용</th>
+                  <th>발송자</th>
+                  <th>발송 시각</th>
+                  <th>상태</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staffSmsHistory.map((row) => (
+                  <tr key={row.courseStaffSmsId}>
+                    <td className="pname">{row.userName ?? `담당자 #${row.userId}`}</td>
+                    <td>{staffSmsNotifyTypeLabel(row.notifyType)}</td>
+                    <td style={{ whiteSpace: 'pre-line', maxWidth: '320px' }}>
+                      {row.content ?? '-'}
+                    </td>
+                    <td>{row.sentByName ?? (row.sentBy ? `#${row.sentBy}` : '시스템')}</td>
+                    <td className="tnum">{row.sentAt ?? '-'}</td>
+                    <td>
+                      <span className={`chip ${staffSmsStatusClass(row.sendStatus)}`}>
+                        {staffSmsStatusLabel(row.sendStatus)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {staffSmsHistory.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}
+                    >
+                      발송 이력이 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       <ParticipantEnrollModal
         isOpen={isEnrollOpen}
         onClose={() => setIsEnrollOpen(false)}
