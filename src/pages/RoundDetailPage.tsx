@@ -35,6 +35,7 @@ import { CourseChangeNotifyModal } from '../components/CourseChangeNotifyModal';
 import { ConflictModal } from '../components/ConflictModal';
 import { STAFF_ROLE_LABELS } from '../utils/staffRole';
 import { WorkRecordPrint } from '../components/WorkRecordPrint';
+import { MapLink } from '../components/MapLink';
 
 const STATUS_OPTIONS = ['PLANNED', 'OPEN', 'CLOSED', 'IN_PROGRESS', 'COMPLETED', 'CANCELED'];
 
@@ -716,7 +717,7 @@ export default function RoundDetailPage() {
               지역 <b>{course.regionName}</b>
             </span>
             <span>
-              교육장 <b>{course.location}</b>
+              교육장 <b><MapLink address={course.location} /></b>
             </span>
             <span
               className={`chip ${statusChipClass(course.status)}`}

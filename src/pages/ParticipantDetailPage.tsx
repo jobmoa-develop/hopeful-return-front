@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router';
+import { PhoneLink } from '../components/PhoneLink';
 import { useRole } from '../context/RoleContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -263,7 +264,7 @@ export default function ParticipantDetailPage() {
               출생연도 <b>{detail.birthYear ?? '—'}</b>
             </span>
             <span>
-              연락처 <b>{detail.phone ?? '—'}</b>
+              연락처 <b><PhoneLink phone={detail.phone} /></b>
             </span>
             <span>
               유입 <b>{detail.inflowType ?? '—'}</b>
