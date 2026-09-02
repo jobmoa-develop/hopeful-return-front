@@ -94,7 +94,32 @@
   color: #333;
 }
 
+/* 인쇄 전 표 내용 직접 수정 — 화면에서 편집 가능함을 드러낸다. */
+.wr-edit {
+  cursor: text;
+}
+.wr-edit:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: -2px;
+  background: #f0f7ff;
+}
+
 @media print {
+  /* 편집 강조(파란 테두리·배경)는 인쇄물에 나오지 않게 한다. */
+  .wr-edit,
+  .wr-edit:focus {
+    outline: none;
+    background: transparent;
+  }
+  /* 단일 교육일(1장) 인쇄는 정확히 1페이지로 고정 — 페이지 분할/뒤 개행 방지 + 여백행 축소. */
+  .wr-page.wr-single {
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+  .wr-page.wr-single .wr-empty-row td {
+    height: 26px;
+  }
+
   /* 인쇄 시 오버레이(근무기록표)만 보이도록 그 외 모든 요소 숨김 */
   body * {
     visibility: hidden;
