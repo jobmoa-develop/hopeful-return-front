@@ -20,6 +20,8 @@
     --danger-bg: #fbe9e7;
     --info: #2c5a86;
     --info-bg: #e9f0f7;
+    --progress: #d9730d;
+    --progress-bg: #ffe7cc;
     --radius: 11px;
     --radius-sm: 7px;
     --shadow: 0 1px 2px rgba(20, 42, 64, .04), 0 4px 16px rgba(20, 42, 64, .05);
@@ -431,6 +433,11 @@ button {
 .chip.info {
     background: var(--info-bg);
     color: var(--info)
+}
+
+.chip.progress {
+    background: var(--progress-bg);
+    color: var(--progress)
 }
 
 .chip.neutral {
